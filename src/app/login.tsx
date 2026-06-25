@@ -1,9 +1,15 @@
+import * as AppleAuthentication from 'expo-apple-authentication';
+import * as Google from 'expo-auth-session/providers/google';
+import Constants from 'expo-constants';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import * as WebBrowser from 'expo-web-browser';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Alert,
   Linking,
+  Platform,
   Pressable,
   StatusBar,
   StyleSheet,
@@ -20,8 +26,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Haptic, IOSFont, IOSText } from '@/constants/ios';
 import { SPLASH_IMAGES } from '@/constants/splashImages';
+import { ApiError } from '@/lib/api';
+import { useAuth } from '@/state/auth';
 
-type Provider = 'apple' | 'google';
+WebBrowser.maybeCompleteAuthSession();
+
+const GOOGLE_CLIENT_ID =
+  (Constants.expoConfig?.extra?.googleClientId as string | undefined) ?? '';
 
 const SLIDE_INTERVAL_MS = 3500;
 const FADE_MS = 900;
@@ -101,20 +112,99 @@ function BackgroundSlideshow() {
 }
 
 export default function LoginScreen() {
-  const handleContinue = (_provider: Provider) => {
-    Haptic.medium();
-    // TODO: real OAuth — Apple Sign-in (expo-apple-authentication), Google.
+  const { signIn } = useAuth();
+  const [busy, setBusy] = useState<'apple' | 'google' | null>(null);
+
+  const [, googleResponse, promptGoogle] = Google.useAuthRequest({
+    iosClientId: GOOGLE_CLIENT_ID,
+    webClientId: GOOGLE_CLIENT_ID,
+  });
+
+  const handleSignInSuccess = useCallback(() => {
     router.replace('/home');
-  };
+  }, []);
+
+  const handleSignInError = useCallback((err: unknown) => {
+    if (err instanceof ApiError) {
+      Alert.alert('로그인 실패', err.detail);
+    } else {
+      Alert.alert('로그인 실패', '잠시 후 다시 시도해주세요.');
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!googleResponse) return;
+    if (googleResponse.type !== 'success') {
+      setBusy(null);
+      return;
+    }
+    const idToken = googleResponse.authentication?.idToken;
+    if (!idToken) {
+      setBusy(null);
+      Alert.alert('로그인 실패', 'Google id_token을 받지 못했어요.');
+      return;
+    }
+    (async () => {
+      try {
+        await signIn({ provider: 'google', id_token: idToken });
+        handleSignInSuccess();
+      } catch (err) {
+        handleSignInError(err);
+      } finally {
+        setBusy(null);
+      }
+    })();
+  }, [googleResponse, signIn, handleSignInSuccess, handleSignInError]);
+
+  const onApple = useCallback(async () => {
+    Haptic.medium();
+    if (Platform.OS !== 'ios') {
+      Alert.alert('Apple 로그인', 'iOS에서만 사용할 수 있어요.');
+      return;
+    }
+    setBusy('apple');
+    try {
+      const credential = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+      });
+      if (!credential.identityToken) {
+        throw new Error('No identity token from Apple');
+      }
+      await signIn({ provider: 'apple', id_token: credential.identityToken });
+      handleSignInSuccess();
+    } catch (err) {
+      const code = (err as { code?: string } | null)?.code;
+      if (code === 'ERR_REQUEST_CANCELED') return;
+      handleSignInError(err);
+    } finally {
+      setBusy(null);
+    }
+  }, [signIn, handleSignInSuccess, handleSignInError]);
+
+  const onGoogle = useCallback(async () => {
+    Haptic.medium();
+    if (!GOOGLE_CLIENT_ID) {
+      Alert.alert('Google 로그인', 'Google Client ID가 설정되어 있지 않아요.');
+      return;
+    }
+    setBusy('google');
+    try {
+      await promptGoogle();
+    } catch (err) {
+      setBusy(null);
+      handleSignInError(err);
+    }
+  }, [promptGoogle, handleSignInError]);
 
   return (
     <View style={styles.root}>
       <StatusBar barStyle="light-content" />
 
-      {/* Background: real product photo crossfade slideshow + dark veil */}
       <BackgroundSlideshow />
 
-      {/* Recording indicator */}
       <SafeAreaView edges={['top']} style={styles.recWrap} pointerEvents="none">
         <View style={styles.recPill}>
           <View style={styles.recDot} />
@@ -134,8 +224,13 @@ export default function LoginScreen() {
           <View style={styles.btnRow}>
             <Pressable
               accessibilityLabel="Apple로 계속하기"
-              style={({ pressed }) => [styles.circ, pressed && styles.circPressed]}
-              onPress={() => handleContinue('apple')}
+              disabled={busy !== null}
+              style={({ pressed }) => [
+                styles.circ,
+                pressed && styles.circPressed,
+                busy === 'apple' && styles.circBusy,
+              ]}
+              onPress={onApple}
             >
               <SymbolView
                 name="applelogo"
@@ -147,8 +242,13 @@ export default function LoginScreen() {
 
             <Pressable
               accessibilityLabel="Google로 계속하기"
-              style={({ pressed }) => [styles.circ, pressed && styles.circPressed]}
-              onPress={() => handleContinue('google')}
+              disabled={busy !== null}
+              style={({ pressed }) => [
+                styles.circ,
+                pressed && styles.circPressed,
+                busy === 'google' && styles.circBusy,
+              ]}
+              onPress={onGoogle}
             >
               <Text style={styles.googleG}>G</Text>
             </Pressable>
@@ -185,9 +285,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#0B0B0C',
   },
 
-  // Background
   bg: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
     overflow: 'hidden',
     backgroundColor: '#0B0B0C',
   },
@@ -196,7 +299,11 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   veil: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
   },
   veilTop: {
     backgroundColor: 'rgba(0,0,0,0.42)',
@@ -210,7 +317,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.55)',
   },
 
-  // Recording pill
   recWrap: {
     position: 'absolute',
     top: 0,
@@ -241,7 +347,6 @@ const styles = StyleSheet.create({
     fontFamily: IOSFont.rounded,
   },
 
-  // Foreground layout
   safe: {
     flex: 1,
     paddingHorizontal: 24,
@@ -270,7 +375,6 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
 
-  // Bottom actions
   actions: {
     alignItems: 'center',
     paddingBottom: 8,
@@ -292,6 +396,9 @@ const styles = StyleSheet.create({
   },
   circPressed: {
     backgroundColor: 'rgba(255,255,255,0.16)',
+  },
+  circBusy: {
+    opacity: 0.5,
   },
   googleG: {
     fontSize: 26,
