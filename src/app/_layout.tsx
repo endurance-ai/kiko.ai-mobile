@@ -24,6 +24,7 @@ export default function RootLayout() {
                   <Stack.Screen name="list" />
                   <Stack.Screen name="wishlist" />
                   <Stack.Screen name="product/[id]" />
+                  <Stack.Screen name="chat/[id]" />
                   <Stack.Screen
                     name="filter"
                     options={{
