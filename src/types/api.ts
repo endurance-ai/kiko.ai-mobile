@@ -63,3 +63,35 @@ export interface ChatRequest {
 export interface ApiErrorBody {
   detail: string;
 }
+
+export type UserGender = 'male' | 'female' | 'other';
+
+export type UserTier = 'free' | 'basic' | 'pro' | 'premium';
+
+export interface UserProfile {
+  user_id: string;
+  provider: string;
+  email: string | null;
+  display_name: string | null;
+  avatar_url: string | null;
+  gender: UserGender | null;
+  tier: UserTier;
+  tier_expires_at: string | null;
+  created_at: string;
+}
+
+export interface UserPatchRequest {
+  display_name?: string | null;
+  gender?: UserGender | null;
+}
+
+export interface UserPatchResponse {
+  user_id: string;
+  display_name: string | null;
+  gender: UserGender | null;
+}
+
+export interface DeleteMeRequest {
+  confirm: boolean;
+  reason?: string;
+}

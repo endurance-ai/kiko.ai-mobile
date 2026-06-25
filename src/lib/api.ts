@@ -133,7 +133,10 @@ export const api = {
     request<T>(path, { method: 'GET', query, auth }),
   post: <T>(path: string, body?: unknown, auth = true) =>
     request<T>(path, { method: 'POST', body, auth }),
-  delete: <T>(path: string, auth = true) => request<T>(path, { method: 'DELETE', auth }),
+  patch: <T>(path: string, body?: unknown, auth = true) =>
+    request<T>(path, { method: 'PATCH', body, auth }),
+  delete: <T>(path: string, body?: unknown, auth = true) =>
+    request<T>(path, { method: 'DELETE', body, auth }),
 };
 
 export { BASE_URL };
