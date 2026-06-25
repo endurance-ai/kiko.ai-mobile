@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { StatusBar, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   Easing,
@@ -10,6 +10,7 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { Haptic, IOSFont } from '@/constants/ios';
+import { useAuth } from '@/state/auth';
 
 const LETTERS = ['k', 'i', 'k', 'o'] as const;
 // 4 letters × 100ms stagger + 400ms rise → last letter lands at ~700ms.
@@ -43,13 +44,21 @@ function Letter({ char, delay }: { char: string; delay: number }) {
 }
 
 export default function SplashScreen() {
+  const { status } = useAuth();
+  const [animationDone, setAnimationDone] = useState(false);
+  const navigatedRef = useRef(false);
+
   useEffect(() => {
     const total = LETTERS.length * STAGGER_MS + RISE_MS + HOLD_MS + EXIT_MS;
-    const timer = setTimeout(() => {
-      router.replace('/login');
-    }, total);
+    const timer = setTimeout(() => setAnimationDone(true), total);
     return () => clearTimeout(timer);
   }, []);
+
+  useEffect(() => {
+    if (!animationDone || status === 'loading' || navigatedRef.current) return;
+    navigatedRef.current = true;
+    router.replace(status === 'authenticated' ? '/home' : '/login');
+  }, [animationDone, status]);
 
   return (
     <View style={styles.root}>
