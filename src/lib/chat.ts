@@ -6,6 +6,10 @@ import type {
   SessionSummary,
 } from '@/types/api';
 
+interface SessionRenameRequest {
+  title: string;
+}
+
 export function listSessions(): Promise<SessionSummary[]> {
   return api.get<SessionSummary[]>('/chat/sessions');
 }
@@ -34,4 +38,19 @@ export function sendMessage(
     `/chat/sessions/${encodeURIComponent(sessionId)}/messages`,
     body,
   );
+}
+
+export function renameSession(
+  sessionId: string,
+  title: string,
+): Promise<SessionSummary> {
+  const body: SessionRenameRequest = { title };
+  return api.patch<SessionSummary>(
+    `/chat/sessions/${encodeURIComponent(sessionId)}`,
+    body,
+  );
+}
+
+export function deleteSession(sessionId: string): Promise<void> {
+  return api.delete<void>(`/chat/sessions/${encodeURIComponent(sessionId)}`);
 }
