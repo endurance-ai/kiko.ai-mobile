@@ -10,7 +10,17 @@
     "ios": {
       "bundleIdentifier": "com.kikoai.app",
       "icon": "./assets/expo.icon",
-      "usesAppleSignIn": true
+      "usesAppleSignIn": true,
+      "infoPlist": {
+        "CFBundleURLTypes": [
+          {
+            "CFBundleURLSchemes": [
+              "kikoaimobile",
+              "com.googleusercontent.apps.205071192266-4cq6itbajkhcothilspdlcg2tqevmdpd"
+            ]
+          }
+        ]
+      }
     },
     "android": {
       "package": "com.kikoai.app",
