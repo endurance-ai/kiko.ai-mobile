@@ -9,7 +9,8 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "bundleIdentifier": "com.kikoai.app",
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/expo.icon",
+      "usesAppleSignIn": true
     },
     "android": {
       "package": "com.kikoai.app",
@@ -43,14 +44,16 @@
           }
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-apple-authentication"
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
     },
     "extra": {
-      "apiBaseUrl": "https://dev-ai.kikoai.me"
+      "apiBaseUrl": "https://dev-ai.kikoai.me",
+      "googleClientId": "205071192266-4cq6itbajkhcothilspdlcg2tqevmdpd.apps.googleusercontent.com"
     }
   }
 }
