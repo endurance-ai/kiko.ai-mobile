@@ -1,8 +1,11 @@
 import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
+  ActionSheetIOS,
   ActivityIndicator,
+  Alert,
   Dimensions,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -14,7 +17,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FLOATING_HEADER_OFFSET, FloatingHeader } from '@/components/floating-header';
 import { Haptic, IOSColors, IOSFont, IOSText } from '@/constants/ios';
-import { listSessions } from '@/lib/chat';
+import { ApiError } from '@/lib/api';
+import { deleteSession, listSessions, renameSession } from '@/lib/chat';
 import type { SessionSummary } from '@/types/api';
 
 const SCREEN_W = Dimensions.get('window').width;
@@ -80,6 +84,114 @@ export default function HistoryScreen() {
     router.push(`/chat/${sessionId}` as never);
   };
 
+  const promptRename = useCallback((session: SessionSummary) => {
+    const current = session.title || '';
+    Alert.prompt(
+      '제목 변경',
+      undefined,
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '저장',
+          onPress: async (input?: string) => {
+            const next = (input ?? '').trim();
+            if (!next || next === current) return;
+            // Optimistic local update
+            setSessions((prev) =>
+              prev
+                ? prev.map((s) =>
+                    s.session_id === session.session_id ? { ...s, title: next } : s,
+                  )
+                : prev,
+            );
+            try {
+              await renameSession(session.session_id, next);
+              Haptic.success();
+            } catch (e) {
+              // Roll back
+              setSessions((prev) =>
+                prev
+                  ? prev.map((s) =>
+                      s.session_id === session.session_id
+                        ? { ...s, title: session.title }
+                        : s,
+                    )
+                  : prev,
+              );
+              Haptic.error();
+              Alert.alert(
+                '이름 변경 실패',
+                e instanceof ApiError ? e.detail : '잠시 후 다시 시도해주세요.',
+              );
+            }
+          },
+        },
+      ],
+      'plain-text',
+      current,
+    );
+  }, []);
+
+  const confirmDelete = useCallback((session: SessionSummary) => {
+    Haptic.warning();
+    Alert.alert(
+      '대화 삭제',
+      '이 대화와 모든 메시지가 영구히 지워져요.',
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '삭제',
+          style: 'destructive',
+          onPress: async () => {
+            // Optimistic remove
+            const snapshot = sessions;
+            setSessions((prev) =>
+              prev ? prev.filter((s) => s.session_id !== session.session_id) : prev,
+            );
+            try {
+              await deleteSession(session.session_id);
+              Haptic.success();
+            } catch (e) {
+              setSessions(snapshot);
+              Haptic.error();
+              Alert.alert(
+                '삭제 실패',
+                e instanceof ApiError ? e.detail : '잠시 후 다시 시도해주세요.',
+              );
+            }
+          },
+        },
+      ],
+    );
+  }, [sessions]);
+
+  const openActions = useCallback(
+    (session: SessionSummary) => {
+      Haptic.medium();
+      if (Platform.OS === 'ios') {
+        ActionSheetIOS.showActionSheetWithOptions(
+          {
+            title: session.title || '제목 없음',
+            options: ['취소', '제목 변경', '삭제'],
+            destructiveButtonIndex: 2,
+            cancelButtonIndex: 0,
+          },
+          (idx) => {
+            if (idx === 1) promptRename(session);
+            else if (idx === 2) confirmDelete(session);
+          },
+        );
+      } else {
+        Alert.alert(session.title || '제목 없음', undefined, [
+          { text: '취소', style: 'cancel' },
+          { text: '제목 변경', onPress: () => promptRename(session) },
+          { text: '삭제', style: 'destructive', onPress: () => confirmDelete(session) },
+        ]);
+      }
+    },
+    [promptRename, confirmDelete],
+  );
+
   const isLoading = sessions === null && !error;
   const isEmpty = sessions !== null && sessions.length === 0 && !error;
 
@@ -121,7 +233,13 @@ export default function HistoryScreen() {
         )}
 
         {sessions?.map((s) => (
-          <Pressable key={s.session_id} onPress={() => go(s.session_id)} style={styles.row}>
+          <Pressable
+            key={s.session_id}
+            onPress={() => go(s.session_id)}
+            onLongPress={() => openActions(s)}
+            delayLongPress={350}
+            style={styles.row}
+          >
             <View style={styles.thumbStrip}>
               <View style={[styles.thumb, { backgroundColor: colorFor(s.session_id, 0) }]} />
               <View style={[styles.thumb, { backgroundColor: colorFor(s.session_id, 1) }]} />
