@@ -1,9 +1,10 @@
 import { GlassView } from 'expo-glass-effect';
 import { router } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { Haptic, IOSColors, IOSFont, IOSText } from '@/constants/ios';
+import { useAuth } from '@/state/auth';
 
 type Row = {
   id: string;
@@ -15,7 +16,23 @@ type Row = {
 };
 
 export default function SettingsScreen() {
+  const { signOut } = useAuth();
   const close = () => router.dismiss();
+
+  const confirmLogout = () => {
+    Alert.alert('로그아웃', '정말 로그아웃하시겠어요?', [
+      { text: '취소', style: 'cancel' },
+      {
+        text: '로그아웃',
+        style: 'destructive',
+        onPress: async () => {
+          await signOut();
+          router.dismiss();
+          router.replace('/login');
+        },
+      },
+    ]);
+  };
 
   const sections: Row[][] = [
     [
@@ -64,10 +81,7 @@ export default function SettingsScreen() {
         icon: 'rectangle.portrait.and.arrow.right',
         title: '로그아웃',
         destructive: true,
-        onPress: () => {
-          router.dismiss();
-          router.replace('/');
-        },
+        onPress: confirmLogout,
       },
     ],
   ];
