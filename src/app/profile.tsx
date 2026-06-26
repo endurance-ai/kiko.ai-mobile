@@ -20,16 +20,10 @@ import { Haptic, IOSColors, IOSFont, IOSText } from '@/constants/ios';
 import { ApiError } from '@/lib/api';
 import { deleteMe, getMe, updateMe } from '@/lib/me';
 import { useAuth } from '@/state/auth';
-import type { UserGender, UserProfile } from '@/types/api';
+import type { UserProfile } from '@/types/api';
 
 const DELETE_NOTICE =
-  '삭제 시 찜 · 히스토리 · 취향 데이터가 모두 지워져요.\n구독 중이라면 App Store 구독은 별도로 해지해 주세요.';
-
-const GENDER_OPTIONS: { value: UserGender; label: string }[] = [
-  { value: 'female', label: '여성' },
-  { value: 'male', label: '남성' },
-  { value: 'other', label: '기타' },
-];
+  '삭제 시 찜·히스토리·취향 데이터가 모두 지워져요. 구독 중이라면 App Store 구독은 별도로 해지해 주세요.';
 
 const PROVIDER_LABEL: Record<string, string> = {
   apple: 'Apple ID',
@@ -48,7 +42,6 @@ export default function ProfileScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [name, setName] = useState('');
-  const [gender, setGender] = useState<UserGender | null>(null);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -59,7 +52,6 @@ export default function ProfileScreen() {
       const me = await getMe();
       setProfile(me);
       setName(me.display_name ?? '');
-      setGender(me.gender);
     } catch (e) {
       setError(e instanceof ApiError ? e.detail : '프로필을 불러오지 못했어요.');
     } finally {
@@ -71,29 +63,23 @@ export default function ProfileScreen() {
     void load();
   }, [load]);
 
-  const isDirty =
-    profile !== null &&
-    (name.trim() !== (profile.display_name ?? '') || gender !== profile.gender);
-
-  const handleSave = useCallback(async () => {
-    if (!profile || !isDirty || saving) return;
-    Haptic.medium();
+  const handleNameBlur = useCallback(async () => {
+    if (!profile) return;
+    const trimmed = name.trim();
+    if (trimmed === (profile.display_name ?? '')) return;
     setSaving(true);
     try {
-      const patch: { display_name?: string; gender?: UserGender | null } = {};
-      const trimmed = name.trim();
-      if (trimmed !== (profile.display_name ?? '')) patch.display_name = trimmed;
-      if (gender !== profile.gender) patch.gender = gender;
-      const res = await updateMe(patch);
-      setProfile({ ...profile, display_name: res.display_name, gender: res.gender });
+      const res = await updateMe({ display_name: trimmed });
+      setProfile({ ...profile, display_name: res.display_name });
       Haptic.success();
     } catch (e) {
       Haptic.error();
       Alert.alert('저장 실패', e instanceof ApiError ? e.detail : '잠시 후 다시 시도해주세요.');
+      setName(profile.display_name ?? '');
     } finally {
       setSaving(false);
     }
-  }, [profile, isDirty, saving, name, gender]);
+  }, [profile, name]);
 
   const confirmDelete = useCallback(() => {
     Haptic.warning();
@@ -159,51 +145,22 @@ export default function ProfileScreen() {
 
           {profile && !loading && (
             <>
-              <View style={styles.avatarWrap}>
-                <View style={styles.avatar}>
-                  <Text style={styles.avatarText}>
-                    {(name.trim().charAt(0) || profile.provider.charAt(0)).toUpperCase()}
-                  </Text>
-                </View>
+              <View style={styles.labelRow}>
+                <Text style={styles.label}>성명</Text>
+                {saving && (
+                  <ActivityIndicator size="small" color={IOSColors.secondaryLabel} />
+                )}
               </View>
-
-              <Text style={styles.label}>성명</Text>
               <TextInput
                 value={name}
                 onChangeText={setName}
+                onBlur={() => void handleNameBlur()}
                 style={styles.input}
                 placeholder="표시할 이름"
                 placeholderTextColor={IOSColors.placeholderText}
                 returnKeyType="done"
                 editable={!saving && !deleting}
               />
-
-              <Text style={styles.label}>성별</Text>
-              <View style={styles.genderRow}>
-                {GENDER_OPTIONS.map((opt) => {
-                  const active = gender === opt.value;
-                  return (
-                    <Pressable
-                      key={opt.value}
-                      onPress={() => {
-                        Haptic.light();
-                        setGender(active ? null : opt.value);
-                      }}
-                      style={[styles.genderBtn, active && styles.genderBtnActive]}
-                      disabled={saving || deleting}
-                    >
-                      <Text
-                        style={[
-                          styles.genderText,
-                          active && styles.genderTextActive,
-                        ]}
-                      >
-                        {opt.label}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
 
               <Text style={styles.label}>로그인 계정</Text>
               <View style={[styles.input, styles.inputReadonly]}>
@@ -213,47 +170,21 @@ export default function ProfileScreen() {
               </View>
 
               <Pressable
-                onPress={handleSave}
-                disabled={!isDirty || saving || deleting}
-                style={[
-                  styles.saveBtn,
-                  (!isDirty || saving) && styles.saveBtnDisabled,
-                ]}
-              >
-                {saving ? (
-                  <ActivityIndicator size="small" color={IOSColors.systemBackground} />
-                ) : (
-                  <Text style={styles.saveBtnText}>저장</Text>
-                )}
-              </Pressable>
-
-              <Pressable
                 onPress={confirmDelete}
                 disabled={deleting}
                 style={[styles.deleteCard, deleting && { opacity: 0.5 }]}
               >
-                <View style={styles.deleteIconBox}>
-                  {deleting ? (
-                    <ActivityIndicator size="small" color={IOSColors.systemRed} />
-                  ) : (
-                    <SymbolView
-                      name="trash"
-                      size={20}
-                      tintColor={IOSColors.systemRed}
-                      weight="medium"
-                    />
-                  )}
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.deleteTitle}>계정 삭제</Text>
-                  <Text style={styles.deleteSubtitle}>탈퇴 · 데이터 완전 삭제</Text>
-                </View>
-                <SymbolView
-                  name="chevron.right"
-                  size={13}
-                  tintColor={IOSColors.systemRed}
-                  weight="semibold"
-                />
+                <Text style={styles.deleteTitle}>계정 삭제</Text>
+                {deleting ? (
+                  <ActivityIndicator size="small" color={IOSColors.systemRed} />
+                ) : (
+                  <SymbolView
+                    name="chevron.right"
+                    size={13}
+                    tintColor={IOSColors.systemRed}
+                    weight="semibold"
+                  />
+                )}
               </Pressable>
 
               <Text style={styles.footerNote}>{DELETE_NOTICE}</Text>
@@ -266,8 +197,6 @@ export default function ProfileScreen() {
     </View>
   );
 }
-
-const AVATAR_SIZE = 96;
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: IOSColors.secondarySystemBackground },
@@ -298,30 +227,16 @@ const styles = StyleSheet.create({
     color: IOSColors.label,
     fontFamily: IOSFont.rounded,
   },
-  avatarWrap: {
-    alignItems: 'center',
-    marginTop: 14,
-    marginBottom: 30,
-  },
-  avatar: {
-    width: AVATAR_SIZE,
-    height: AVATAR_SIZE,
-    borderRadius: AVATAR_SIZE / 2,
-    backgroundColor: IOSColors.label,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  avatarText: {
-    fontSize: 40,
-    fontWeight: '700',
-    color: IOSColors.systemBackground,
-    fontFamily: IOSFont.rounded,
-  },
 
+  labelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
   label: {
     ...IOSText.subhead,
     color: IOSColors.secondaryLabel,
-    marginBottom: 8,
     fontFamily: IOSFont.rounded,
   },
   input: {
@@ -331,8 +246,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderRadius: 14,
     backgroundColor: IOSColors.systemBackground,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: IOSColors.separator,
     marginBottom: 20,
     fontFamily: IOSFont.rounded,
   },
@@ -345,71 +258,15 @@ const styles = StyleSheet.create({
     fontFamily: IOSFont.rounded,
   },
 
-  genderRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 20,
-  },
-  genderBtn: {
-    flex: 1,
-    height: 44,
-    borderRadius: 14,
-    backgroundColor: IOSColors.systemBackground,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: IOSColors.separator,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  genderBtnActive: {
-    backgroundColor: IOSColors.label,
-    borderColor: IOSColors.label,
-  },
-  genderText: {
-    ...IOSText.subhead,
-    fontWeight: '600',
-    color: IOSColors.label,
-    fontFamily: IOSFont.rounded,
-  },
-  genderTextActive: {
-    color: IOSColors.systemBackground,
-  },
-
-  saveBtn: {
-    height: 52,
-    borderRadius: 14,
-    backgroundColor: IOSColors.label,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  saveBtnDisabled: {
-    opacity: 0.35,
-  },
-  saveBtnText: {
-    ...IOSText.body,
-    fontWeight: '700',
-    color: IOSColors.systemBackground,
-    fontFamily: IOSFont.rounded,
-  },
-
   deleteCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
-    padding: 14,
-    borderRadius: 16,
+    justifyContent: 'space-between',
+    height: 52,
+    paddingHorizontal: 16,
+    borderRadius: 14,
     backgroundColor: IOSColors.systemBackground,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: IOSColors.separator,
     marginTop: 4,
-  },
-  deleteIconBox: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255,59,48,0.10)',
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   deleteTitle: {
     ...IOSText.body,
@@ -417,19 +274,13 @@ const styles = StyleSheet.create({
     color: IOSColors.systemRed,
     fontFamily: IOSFont.rounded,
   },
-  deleteSubtitle: {
-    ...IOSText.footnote,
-    color: IOSColors.systemRed,
-    opacity: 0.7,
-    marginTop: 2,
-    fontFamily: IOSFont.rounded,
-  },
 
   footerNote: {
     ...IOSText.footnote,
     color: IOSColors.tertiaryLabel,
-    marginTop: 18,
+    marginTop: 14,
     lineHeight: 18,
+    paddingHorizontal: 4,
     fontFamily: IOSFont.rounded,
   },
 });
