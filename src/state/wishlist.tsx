@@ -1,35 +1,99 @@
-import { createContext, ReactNode, useCallback, useContext, useMemo, useState } from 'react';
+import {
+  createContext,
+  ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 
-import { findProduct, MOCK_PRODUCTS, type Product } from '@/state/products';
+import { addSave, listSaves, removeSave } from '@/lib/saves';
+import type { SaveListItem } from '@/types/api';
 
-type Ctx = {
-  items: Product[];
-  isSaved: (id: string) => boolean;
-  toggle: (id: string) => void;
-};
+type WishlistStatus = 'idle' | 'loading' | 'ready' | 'error';
+
+interface Ctx {
+  items: SaveListItem[];
+  status: WishlistStatus;
+  error: string | null;
+  isSaved: (productId: string) => boolean;
+  toggle: (productId: string) => Promise<void>;
+  refresh: () => Promise<void>;
+}
 
 const WishlistCtx = createContext<Ctx | null>(null);
 
-// Pre-seed with a few saved items so the screen has content on first run.
-const SEED_IDS = ['p1', 'p7', 'p9', 'p11', 'p6'];
-
 export function WishlistProvider({ children }: { children: ReactNode }) {
-  const [ids, setIds] = useState<string[]>(SEED_IDS);
+  const [items, setItems] = useState<SaveListItem[]>([]);
+  const [status, setStatus] = useState<WishlistStatus>('idle');
+  const [error, setError] = useState<string | null>(null);
+  const inFlight = useRef(new Set<string>());
 
-  const isSaved = useCallback((id: string) => ids.includes(id), [ids]);
-
-  const toggle = useCallback((id: string) => {
-    setIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [id, ...prev],
-    );
+  const refresh = useCallback(async () => {
+    setStatus('loading');
+    setError(null);
+    try {
+      const res = await listSaves({ limit: 100 });
+      setItems(res.items);
+      setStatus('ready');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '찜 목록을 불러오지 못했어요.');
+      setStatus('error');
+    }
   }, []);
 
-  const items = useMemo(
-    () => ids.map((id) => findProduct(id)),
-    [ids],
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  const isSaved = useCallback(
+    (productId: string) => items.some((it) => it.product?.id?.toString() === productId
+      || it.save_id === productId),
+    [items],
   );
 
-  const ctx = useMemo(() => ({ items, isSaved, toggle }), [items, isSaved, toggle]);
+  const toggle = useCallback(
+    async (productId: string) => {
+      if (inFlight.current.has(productId)) return;
+      inFlight.current.add(productId);
+      const existing = items.find(
+        (it) => it.product?.id?.toString() === productId,
+      );
+
+      if (existing) {
+        // Optimistic remove
+        const snapshot = items;
+        setItems((prev) => prev.filter((it) => it.save_id !== existing.save_id));
+        try {
+          await removeSave(productId);
+        } catch {
+          setItems(snapshot);
+        } finally {
+          inFlight.current.delete(productId);
+        }
+        return;
+      }
+
+      // Optimistic add — refetch after success to pull product details
+      try {
+        await addSave(productId);
+        await refresh();
+      } catch {
+        // no local change to roll back
+      } finally {
+        inFlight.current.delete(productId);
+      }
+    },
+    [items, refresh],
+  );
+
+  const ctx = useMemo(
+    () => ({ items, status, error, isSaved, toggle, refresh }),
+    [items, status, error, isSaved, toggle, refresh],
+  );
+
   return <WishlistCtx.Provider value={ctx}>{children}</WishlistCtx.Provider>;
 }
 
@@ -38,6 +102,3 @@ export function useWishlist(): Ctx {
   if (!ctx) throw new Error('useWishlist must be inside <WishlistProvider>');
   return ctx;
 }
-
-// Mock seed exposed for demo/debug
-export { MOCK_PRODUCTS };
