@@ -95,3 +95,34 @@ export interface DeleteMeRequest {
   confirm: boolean;
   reason?: string;
 }
+
+export interface SavedProduct {
+  id: number;
+  brand: string | null;
+  name: string | null;
+  price: number | null;
+  image_url: string | null;
+  in_stock: boolean | null;
+}
+
+export interface SaveItem {
+  save_id: string;
+  product_id: string;
+  created_at: string;
+}
+
+export interface SaveListItem {
+  save_id: string;
+  product: SavedProduct | null;
+  created_at: string;
+}
+
+export interface SaveListResponse {
+  items: SaveListItem[];
+  next_cursor: string | null;
+  total: number;
+}
+
+export interface AddSaveRequest {
+  product_id: string;
+}
