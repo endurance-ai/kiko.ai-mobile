@@ -45,17 +45,7 @@ export default function RootLayout() {
                       contentStyle: { backgroundColor: 'transparent' },
                     }}
                   />
-                  <Stack.Screen
-                    name="settings"
-                    options={{
-                      presentation: 'formSheet',
-                      sheetAllowedDetents: [1.0],
-                      sheetGrabberVisible: true,
-                      sheetCornerRadius: 28,
-                      gestureEnabled: true,
-                      animation: 'slide_from_bottom',
-                    }}
-                  />
+                  <Stack.Screen name="settings" />
                   <Stack.Screen
                     name="feedback"
                     options={{

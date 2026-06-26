@@ -1,10 +1,12 @@
-import { GlassView } from 'expo-glass-effect';
 import { router } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { FLOATING_HEADER_OFFSET, FloatingHeader } from '@/components/floating-header';
 import { Haptic, IOSColors, IOSFont, IOSText } from '@/constants/ios';
 import { useAuth } from '@/state/auth';
+import { useSubscription } from '@/state/subscription';
 
 type Row = {
   id: string;
@@ -16,8 +18,9 @@ type Row = {
 };
 
 export default function SettingsScreen() {
+  const insets = useSafeAreaInsets();
   const { signOut } = useAuth();
-  const close = () => router.dismiss();
+  const { subscription } = useSubscription();
 
   const confirmLogout = () => {
     Alert.alert('로그아웃', '정말 로그아웃하시겠어요?', [
@@ -27,7 +30,6 @@ export default function SettingsScreen() {
         style: 'destructive',
         onPress: async () => {
           await signOut();
-          router.dismiss();
           router.replace('/login');
         },
       },
@@ -41,38 +43,26 @@ export default function SettingsScreen() {
         icon: 'person',
         title: '프로필',
         subtitle: '성명 · 계정 삭제',
-        onPress: () => {
-          router.dismiss();
-          router.push('/profile');
-        },
+        onPress: () => router.push('/profile'),
       },
       {
         id: 'billing',
         icon: 'creditcard',
         title: '결제',
-        subtitle: '구독 관리',
-        onPress: () => {
-          router.dismiss();
-          router.push('/billing');
-        },
+        subtitle: subscription.active ? 'Pro 플랜' : 'Pro 이용하기',
+        onPress: () => router.push('/billing'),
       },
       {
         id: 'notifications',
         icon: 'bell',
         title: '알림',
-        onPress: () => {
-          router.dismiss();
-          router.push('/notifications');
-        },
+        onPress: () => router.push('/notifications'),
       },
       {
         id: 'privacy',
         icon: 'shield',
         title: '개인정보',
-        onPress: () => {
-          router.dismiss();
-          router.push('/privacy');
-        },
+        onPress: () => router.push('/privacy'),
       },
     ],
     [
@@ -88,30 +78,11 @@ export default function SettingsScreen() {
 
   return (
     <View style={styles.root}>
-      <View style={styles.grabSpacer} />
-      <View style={styles.header}>
-        <View style={styles.headerSpacer} />
-        <Text style={styles.headerTitle}>설정</Text>
-        <Pressable
-          hitSlop={8}
-          onPress={() => {
-            Haptic.light();
-            close();
-          }}
-        >
-          <GlassView glassEffectStyle="clear" style={styles.closeBtn}>
-            <SymbolView
-              name="xmark"
-              size={14}
-              tintColor={IOSColors.label}
-              weight="bold"
-            />
-          </GlassView>
-        </Pressable>
-      </View>
-
       <ScrollView
-        contentContainerStyle={styles.body}
+        contentContainerStyle={[
+          styles.body,
+          { paddingTop: insets.top + FLOATING_HEADER_OFFSET },
+        ]}
         showsVerticalScrollIndicator={false}
       >
         {sections.map((rows, idx) => (
@@ -132,7 +103,7 @@ export default function SettingsScreen() {
                   ]}
                 >
                   <SymbolView
-                    name={row.icon as any}
+                    name={row.icon as never}
                     size={20}
                     tintColor={
                       row.destructive ? IOSColors.systemRed : IOSColors.label
@@ -166,6 +137,8 @@ export default function SettingsScreen() {
           </View>
         ))}
       </ScrollView>
+
+      <FloatingHeader title="설정" />
     </View>
   );
 }
@@ -175,35 +148,10 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: IOSColors.secondarySystemBackground,
   },
-  grabSpacer: {
-    height: 22,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingBottom: 18,
-  },
-  headerSpacer: { width: 32 },
-  headerTitle: {
-    ...IOSText.title3,
-    color: IOSColors.label,
-    fontFamily: IOSFont.rounded,
-  },
-  closeBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    overflow: 'hidden',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: IOSColors.separator,
-  },
 
   body: {
     paddingHorizontal: 20,
+    paddingTop: 12,
     paddingBottom: 32,
     gap: 14,
   },
