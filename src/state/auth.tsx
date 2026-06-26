@@ -1,0 +1,141 @@
+import * as SecureStore from 'expo-secure-store';
+import {
+  createContext,
+  ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+
+import { api, registerAuthHooks } from '@/lib/api';
+import type {
+  AccessTokenResponse,
+  SocialLoginRequest,
+  TokenResponse,
+} from '@/types/api';
+
+const REFRESH_TOKEN_KEY = 'kiko.refresh_token';
+const USER_ID_KEY = 'kiko.user_id';
+
+type AuthStatus = 'loading' | 'authenticated' | 'unauthenticated';
+
+interface AuthContextValue {
+  status: AuthStatus;
+  userId: string | null;
+  signIn: (req: SocialLoginRequest) => Promise<void>;
+  signOut: () => Promise<void>;
+}
+
+const AuthCtx = createContext<AuthContextValue | null>(null);
+
+async function readRefreshToken(): Promise<string | null> {
+  return SecureStore.getItemAsync(REFRESH_TOKEN_KEY);
+}
+
+async function writeRefreshToken(token: string): Promise<void> {
+  await SecureStore.setItemAsync(REFRESH_TOKEN_KEY, token);
+}
+
+async function clearRefreshToken(): Promise<void> {
+  await SecureStore.deleteItemAsync(REFRESH_TOKEN_KEY);
+}
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [status, setStatus] = useState<AuthStatus>('loading');
+  const [userId, setUserId] = useState<string | null>(null);
+  const accessTokenRef = useRef<string | null>(null);
+
+  const setSession = useCallback(
+    async (tokens: TokenResponse): Promise<void> => {
+      accessTokenRef.current = tokens.access_token;
+      setUserId(tokens.user_id);
+      await writeRefreshToken(tokens.refresh_token);
+      await SecureStore.setItemAsync(USER_ID_KEY, tokens.user_id);
+      setStatus('authenticated');
+    },
+    [],
+  );
+
+  const clearSession = useCallback(async (): Promise<void> => {
+    accessTokenRef.current = null;
+    setUserId(null);
+    await clearRefreshToken();
+    await SecureStore.deleteItemAsync(USER_ID_KEY);
+    setStatus('unauthenticated');
+  }, []);
+
+  const signIn = useCallback(
+    async (req: SocialLoginRequest): Promise<void> => {
+      const res = await api.post<TokenResponse>('/auth/social', req, false);
+      await setSession(res);
+    },
+    [setSession],
+  );
+
+  const signOut = useCallback(async (): Promise<void> => {
+    const refreshToken = await readRefreshToken();
+    if (refreshToken) {
+      try {
+        await api.post('/auth/revoke', { refresh_token: refreshToken }, false);
+      } catch {
+        // ignore — local cleanup proceeds regardless
+      }
+    }
+    await clearSession();
+  }, [clearSession]);
+
+  useEffect(() => {
+    registerAuthHooks({
+      getAccessToken: () => accessTokenRef.current,
+      setAccessToken: (token) => {
+        accessTokenRef.current = token;
+      },
+      getRefreshToken: readRefreshToken,
+      onUnauthorized: clearSession,
+    });
+  }, [clearSession]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const refreshToken = await readRefreshToken();
+      if (!refreshToken) {
+        if (!cancelled) setStatus('unauthenticated');
+        return;
+      }
+      try {
+        const res = await api.post<AccessTokenResponse>(
+          '/auth/refresh',
+          { refresh_token: refreshToken },
+          false,
+        );
+        if (cancelled) return;
+        accessTokenRef.current = res.access_token;
+        const storedUserId = await SecureStore.getItemAsync(USER_ID_KEY);
+        setUserId(storedUserId);
+        setStatus('authenticated');
+      } catch {
+        if (!cancelled) await clearSession();
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [clearSession]);
+
+  const value = useMemo(
+    () => ({ status, userId, signIn, signOut }),
+    [status, userId, signIn, signOut],
+  );
+
+  return <AuthCtx.Provider value={value}>{children}</AuthCtx.Provider>;
+}
+
+export function useAuth(): AuthContextValue {
+  const ctx = useContext(AuthCtx);
+  if (!ctx) throw new Error('useAuth must be inside <AuthProvider>');
+  return ctx;
+}
