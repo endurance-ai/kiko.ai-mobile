@@ -1,21 +1,39 @@
+import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
-import { Dimensions, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Dimensions,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FLOATING_HEADER_OFFSET, FloatingHeader } from '@/components/floating-header';
 import { Haptic, IOSColors, IOSFont, IOSText } from '@/constants/ios';
-import { formatPrice, type Product } from '@/state/products';
 import { useWishlist } from '@/state/wishlist';
+import type { SaveListItem } from '@/types/api';
 
 const SCREEN_W = Dimensions.get('window').width;
 const GRID_PADDING = 20;
 const GRID_GAP = 10;
 const CARD_W = (SCREEN_W - GRID_PADDING * 2 - GRID_GAP * 2) / 3;
 
+function formatPrice(price: number | null): string {
+  if (price === null || Number.isNaN(price)) return '';
+  return `₩${Math.round(price).toLocaleString('ko-KR')}`;
+}
+
 export default function WishlistScreen() {
   const insets = useSafeAreaInsets();
-  const { items, toggle } = useWishlist();
+  const { items, status, error, toggle, refresh } = useWishlist();
+
+  const isLoading = status === 'loading' && items.length === 0;
+  const isError = status === 'error' && items.length === 0;
 
   return (
     <View style={styles.root}>
@@ -25,10 +43,32 @@ export default function WishlistScreen() {
           { paddingTop: insets.top + FLOATING_HEADER_OFFSET },
         ]}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={status === 'loading' && items.length > 0}
+            onRefresh={() => void refresh()}
+            tintColor="#999"
+          />
+        }
       >
         <Text style={styles.metaText}>{items.length}개 저장됨</Text>
 
-        {items.length === 0 ? (
+        {isLoading && (
+          <View style={styles.center}>
+            <ActivityIndicator />
+          </View>
+        )}
+
+        {isError && (
+          <View style={styles.center}>
+            <Text style={styles.muted}>{error}</Text>
+            <Pressable onPress={() => void refresh()} style={styles.retry}>
+              <Text style={styles.retryText}>다시 시도</Text>
+            </Pressable>
+          </View>
+        )}
+
+        {status === 'ready' && items.length === 0 && (
           <View style={styles.emptyBlock}>
             <SymbolView
               name="heart"
@@ -40,10 +80,19 @@ export default function WishlistScreen() {
               마음에 드는 제품의 ♥ 를 눌러서 저장해봐
             </Text>
           </View>
-        ) : (
+        )}
+
+        {items.length > 0 && (
           <View style={styles.grid}>
-            {items.map((p) => (
-              <WishCard key={p.id} product={p} onUnsave={() => toggle(p.id)} />
+            {items.map((it) => (
+              <WishCard
+                key={it.save_id}
+                item={it}
+                onUnsave={() => {
+                  const pid = it.product?.id?.toString();
+                  if (pid) void toggle(pid);
+                }}
+              />
             ))}
           </View>
         )}
@@ -55,22 +104,40 @@ export default function WishlistScreen() {
 }
 
 function WishCard({
-  product,
+  item,
   onUnsave,
 }: {
-  product: Product;
+  item: SaveListItem;
   onUnsave: () => void;
 }) {
+  const product = item.product;
+  const pid = product?.id?.toString();
+  const stale = product === null;
+
   return (
     <View style={styles.card}>
       <Pressable
         style={styles.cardImageWrap}
         onPress={() => {
+          if (!pid) return;
           Haptic.light();
-          router.push(`/product/${product.id}`);
+          router.push(`/product/${pid}` as never);
         }}
       >
-        <View style={[styles.cardImage, { backgroundColor: product.colorHint }]} />
+        {product?.image_url ? (
+          <Image
+            source={product.image_url}
+            style={styles.cardImage}
+            contentFit="cover"
+          />
+        ) : (
+          <View
+            style={[
+              styles.cardImage,
+              { backgroundColor: IOSColors.tertiarySystemBackground },
+            ]}
+          />
+        )}
         <Pressable
           hitSlop={8}
           style={styles.heartBtn}
@@ -86,12 +153,14 @@ function WishCard({
             weight="medium"
           />
         </Pressable>
-        <View style={styles.priceTag}>
-          <Text style={styles.priceText}>{formatPrice(product.priceWon)}</Text>
-        </View>
+        {product?.price != null && (
+          <View style={styles.priceTag}>
+            <Text style={styles.priceText}>{formatPrice(product.price)}</Text>
+          </View>
+        )}
       </Pressable>
       <Text style={styles.brand} numberOfLines={1}>
-        {product.brand}
+        {stale ? '판매 종료' : product?.brand ?? ''}
       </Text>
     </View>
   );
@@ -109,6 +178,28 @@ const styles = StyleSheet.create({
     ...IOSText.footnote,
     color: IOSColors.secondaryLabel,
     marginBottom: 16,
+    fontFamily: IOSFont.rounded,
+  },
+
+  center: {
+    alignItems: 'center',
+    paddingVertical: 60,
+    gap: 12,
+  },
+  muted: {
+    ...IOSText.body,
+    color: IOSColors.secondaryLabel,
+    fontFamily: IOSFont.rounded,
+  },
+  retry: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: IOSColors.tertiarySystemBackground,
+  },
+  retryText: {
+    ...IOSText.callout,
+    color: IOSColors.label,
     fontFamily: IOSFont.rounded,
   },
 
@@ -160,7 +251,6 @@ const styles = StyleSheet.create({
   priceText: {
     ...IOSText.caption1,
     fontWeight: '700',
-    // Sits on a white pill over the photo; stay dark in both modes.
     color: '#1C1C1E',
     fontFamily: IOSFont.rounded,
   },
