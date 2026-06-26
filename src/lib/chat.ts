@@ -6,8 +6,12 @@ import type {
   SessionSummary,
 } from '@/types/api';
 
+interface SessionRenameRequest {
+  title: string;
+}
+
 export function listSessions(): Promise<SessionSummary[]> {
-  return api.get<SessionSummary[]>('/chat/sessions');
+  return api.get<SessionSummary[]>('/v1/chat/sessions');
 }
 
 export function getMessages(
@@ -15,14 +19,14 @@ export function getMessages(
   opts: { cursor?: string; limit?: number } = {},
 ): Promise<MessageListResponse> {
   return api.get<MessageListResponse>(
-    `/chat/sessions/${encodeURIComponent(sessionId)}/messages`,
+    `/v1/chat/sessions/${encodeURIComponent(sessionId)}/messages`,
     { cursor: opts.cursor, limit: opts.limit },
   );
 }
 
 export function createSession(message: string): Promise<ChatResponse> {
   const body: ChatRequest = { message };
-  return api.post<ChatResponse>('/chat/sessions', body);
+  return api.post<ChatResponse>('/v1/chat/sessions', body);
 }
 
 export function sendMessage(
@@ -31,7 +35,22 @@ export function sendMessage(
 ): Promise<ChatResponse> {
   const body: ChatRequest = { message };
   return api.post<ChatResponse>(
-    `/chat/sessions/${encodeURIComponent(sessionId)}/messages`,
+    `/v1/chat/sessions/${encodeURIComponent(sessionId)}/messages`,
     body,
   );
+}
+
+export function renameSession(
+  sessionId: string,
+  title: string,
+): Promise<SessionSummary> {
+  const body: SessionRenameRequest = { title };
+  return api.patch<SessionSummary>(
+    `/v1/chat/sessions/${encodeURIComponent(sessionId)}`,
+    body,
+  );
+}
+
+export function deleteSession(sessionId: string): Promise<void> {
+  return api.delete<void>(`/v1/chat/sessions/${encodeURIComponent(sessionId)}`);
 }
