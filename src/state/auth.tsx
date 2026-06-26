@@ -69,7 +69,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signIn = useCallback(
     async (req: SocialLoginRequest): Promise<void> => {
-      const res = await api.post<TokenResponse>('/auth/social', req, false);
+      const res = await api.post<TokenResponse>('/v1/auth/social', req, false);
       await setSession(res);
     },
     [setSession],
@@ -79,7 +79,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const refreshToken = await readRefreshToken();
     if (refreshToken) {
       try {
-        await api.post('/auth/revoke', { refresh_token: refreshToken }, false);
+        await api.post('/v1/auth/logout', { refresh_token: refreshToken }, false);
       } catch {
         // ignore — local cleanup proceeds regardless
       }
@@ -108,7 +108,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       try {
         const res = await api.post<AccessTokenResponse>(
-          '/auth/refresh',
+          '/v1/auth/refresh',
           { refresh_token: refreshToken },
           false,
         );
