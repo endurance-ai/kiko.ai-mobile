@@ -22,6 +22,8 @@ import { FeedbackTrigger } from '@/components/feedback-trigger';
 import { PRODUCT_CARD_WIDTH, ProductCard } from '@/components/product-card';
 import { TopBar } from '@/components/top-bar';
 import { Haptic, IOSColors, IOSFont, IOSText } from '@/constants/ios';
+import { ApiError } from '@/lib/api';
+import { createSession } from '@/lib/chat';
 import { buildFilterLabel, PRICE_MAX, useFilter } from '@/state/filter';
 import { MOCK_PRODUCTS, type Product } from '@/state/products';
 
@@ -234,13 +236,34 @@ export default function ChatEntryScreen() {
     updateTurn(turnId, { narrowing: null });
   };
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (!canSend) return;
+    const trimmed = text.trim();
+    const hasImage = pickedImage !== null;
+    const hasVisionLink = containsVisionLink(trimmed);
     Haptic.medium();
-    startTurn({
-      text: text.trim() || undefined,
-      imageUri: pickedImage ?? undefined,
-    });
+
+    // Image / vision-link flows stay on the local mock pipeline until the
+    // server exposes image input on /chat. Text-only messages start a real
+    // session and hand off to the /chat/[id] detail screen.
+    if (hasImage || hasVisionLink || !trimmed) {
+      startTurn({
+        text: trimmed || undefined,
+        imageUri: pickedImage ?? undefined,
+      });
+      return;
+    }
+
+    setText('');
+    try {
+      const res = await createSession(trimmed);
+      router.push(`/chat/${res.session_id}` as never);
+    } catch (e) {
+      const detail = e instanceof ApiError ? e.detail : '메시지 전송에 실패했어요.';
+      Haptic.error();
+      Alert.alert('전송 실패', detail);
+      setText(trimmed);
+    }
   };
 
   const handleSampleMood = (color: string) => {

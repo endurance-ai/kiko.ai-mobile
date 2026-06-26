@@ -1,29 +1,35 @@
+import { GlassView } from 'expo-glass-effect';
 import { Image } from 'expo-image';
 import { useLocalSearchParams } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { SymbolView } from 'expo-symbols';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FLOATING_HEADER_OFFSET, FloatingHeader } from '@/components/floating-header';
-import { IOSColors, IOSFont, IOSText } from '@/constants/ios';
-import { getMessages } from '@/lib/chat';
+import { Haptic, IOSColors, IOSFont, IOSText } from '@/constants/ios';
+import { ApiError } from '@/lib/api';
+import { getMessages, sendMessage } from '@/lib/chat';
 import type { MessageItem, ProductRef } from '@/types/api';
 
 const PAGE_SIZE = 30;
 
-function ProductCard({ ref: product }: { ref: ProductRef }) {
+function ProductCardSmall({ product }: { product: ProductRef }) {
   return (
     <View style={styles.productCard}>
       <Image source={product.image_url} style={styles.productImage} contentFit="cover" />
       <Text style={styles.productCaption} numberOfLines={3}>
-        {/* caption may contain HTML — strip simple tags for now */}
         {product.caption.replace(/<[^>]+>/g, '')}
       </Text>
     </View>
@@ -52,12 +58,22 @@ function MessageRow({ item }: { item: MessageItem }) {
       {item.product_refs && item.product_refs.length > 0 && (
         <View style={styles.productsRow}>
           {item.product_refs.map((p, i) => (
-            <ProductCard key={`${item.message_id}:${i}`} ref={p} />
+            <ProductCardSmall key={`${item.message_id}:${i}`} product={p} />
           ))}
         </View>
       )}
     </View>
   );
+}
+
+function makeLocalMessage(role: 'user' | 'assistant', content: string, productRefs: ProductRef[] | null = null): MessageItem {
+  return {
+    message_id: `local:${role}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`,
+    role,
+    content,
+    product_refs: productRefs,
+    created_at: new Date().toISOString(),
+  };
 }
 
 export default function ChatDetailScreen() {
@@ -67,6 +83,9 @@ export default function ChatDetailScreen() {
   const [error, setError] = useState<string | null>(null);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [text, setText] = useState('');
+  const [sending, setSending] = useState(false);
+  const listRef = useRef<FlatList<MessageItem> | null>(null);
 
   const loadInitial = useCallback(async () => {
     if (!id) return;
@@ -89,7 +108,7 @@ export default function ChatDetailScreen() {
       setMessages((prev) => [...(prev ?? []), ...res.messages]);
       setNextCursor(res.next_cursor);
     } catch {
-      // ignore — user can retry by scrolling again
+      // ignore — pull to refresh would be the recovery
     } finally {
       setLoadingMore(false);
     }
@@ -99,8 +118,42 @@ export default function ChatDetailScreen() {
     void loadInitial();
   }, [loadInitial]);
 
+  const scrollToEnd = useCallback(() => {
+    setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 60);
+  }, []);
+
+  const handleSend = useCallback(async () => {
+    if (!id) return;
+    const trimmed = text.trim();
+    if (!trimmed || sending) return;
+    Haptic.medium();
+    setText('');
+    setSending(true);
+
+    const userMsg = makeLocalMessage('user', trimmed);
+    setMessages((prev) => [...(prev ?? []), userMsg]);
+    scrollToEnd();
+
+    try {
+      const res = await sendMessage(id, trimmed);
+      const assistantMsg = makeLocalMessage('assistant', res.reply_text, res.products ?? null);
+      setMessages((prev) => [...(prev ?? []), assistantMsg]);
+      scrollToEnd();
+    } catch (e) {
+      // Roll back optimistic user message on error
+      setMessages((prev) => (prev ?? []).filter((m) => m.message_id !== userMsg.message_id));
+      const detail = e instanceof ApiError ? e.detail : '메시지 전송에 실패했어요.';
+      Alert.alert('전송 실패', detail);
+    } finally {
+      setSending(false);
+    }
+  }, [id, text, sending, scrollToEnd]);
+
+  const canSend = !sending && text.trim().length > 0;
   const isLoading = messages === null && !error;
   const isEmpty = messages !== null && messages.length === 0 && !error;
+
+  const composerBottom = useMemo(() => insets.bottom + 12, [insets.bottom]);
 
   return (
     <View style={styles.root}>
@@ -119,28 +172,75 @@ export default function ChatDetailScreen() {
         </View>
       )}
 
-      {isEmpty && (
-        <View style={styles.center}>
-          <Text style={styles.muted}>메시지가 없어요</Text>
-        </View>
-      )}
-
-      {messages && messages.length > 0 && (
+      {messages && (
         <FlatList
+          ref={listRef}
           data={messages}
           keyExtractor={(m) => m.message_id}
           renderItem={MessageRow}
           contentContainerStyle={{
             paddingTop: insets.top + FLOATING_HEADER_OFFSET,
-            paddingBottom: insets.bottom + 24,
+            paddingBottom: composerBottom + 80,
           }}
           onEndReached={loadOlder}
           onEndReachedThreshold={0.5}
+          onContentSizeChange={() => {
+            if (messages.length > 0 && !loadingMore) {
+              // best-effort: keep view pinned to bottom when new messages stream in
+              listRef.current?.scrollToEnd({ animated: false });
+            }
+          }}
+          ListEmptyComponent={
+            isEmpty ? (
+              <View style={styles.center}>
+                <Text style={styles.muted}>메시지를 입력해 대화를 시작해보세요</Text>
+              </View>
+            ) : null
+          }
           ListFooterComponent={
             loadingMore ? <ActivityIndicator style={{ paddingVertical: 16 }} /> : null
           }
         />
       )}
+
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.composerFloat}
+        pointerEvents="box-none"
+      >
+        <View style={[styles.composerWrap, { paddingBottom: composerBottom }]}>
+          <GlassView glassEffectStyle="clear" style={styles.composer}>
+            <TextInput
+              value={text}
+              onChangeText={setText}
+              placeholder={sending ? '키코가 답하는 중...' : '메시지를 입력하세요'}
+              placeholderTextColor={IOSColors.placeholderText}
+              style={styles.input}
+              returnKeyType="send"
+              onSubmitEditing={handleSend}
+              editable={!sending}
+              multiline
+            />
+            <Pressable
+              hitSlop={6}
+              disabled={!canSend}
+              style={[styles.sendBtn, !canSend && styles.sendBtnDisabled]}
+              onPress={handleSend}
+            >
+              {sending ? (
+                <ActivityIndicator size="small" color={IOSColors.systemBackground} />
+              ) : (
+                <SymbolView
+                  name="arrow.up"
+                  size={18}
+                  tintColor={IOSColors.systemBackground}
+                  weight="bold"
+                />
+              )}
+            </Pressable>
+          </GlassView>
+        </View>
+      </KeyboardAvoidingView>
 
       <FloatingHeader title="대화" backLabel="히스토리" />
     </View>
@@ -153,6 +253,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingVertical: 80,
     gap: 8,
   },
   muted: {
@@ -189,7 +290,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
   },
   bubbleUser: {
-    backgroundColor: '#0A84FF',
+    backgroundColor: IOSColors.label,
     borderBottomRightRadius: 6,
   },
   bubbleAssistant: {
@@ -202,7 +303,7 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   bubbleTextUser: {
-    color: '#FFFFFF',
+    color: IOSColors.systemBackground,
   },
   bubbleTextAssistant: {
     color: IOSColors.label,
@@ -228,5 +329,46 @@ const styles = StyleSheet.create({
     color: IOSColors.label,
     fontFamily: IOSFont.rounded,
     padding: 8,
+  },
+  composerFloat: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 40,
+  },
+  composerWrap: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+  },
+  composer: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    minHeight: 52,
+    borderRadius: 26,
+    paddingLeft: 16,
+    paddingRight: 6,
+    paddingVertical: 6,
+    overflow: 'hidden',
+  },
+  input: {
+    flex: 1,
+    ...IOSText.body,
+    color: IOSColors.label,
+    fontFamily: IOSFont.rounded,
+    paddingVertical: 8,
+    maxHeight: 120,
+  },
+  sendBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: IOSColors.label,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 6,
+  },
+  sendBtnDisabled: {
+    opacity: 0.35,
   },
 });
