@@ -72,6 +72,8 @@ type Turn = {
   streamText?: string;
   streamProducts?: ProductRef[];
   streamDone?: boolean;
+  /** Placeholder shown while waiting for the first text_delta. */
+  streamPlaceholder?: string;
 };
 
 const SAMPLE_MOODS: { id: string; color: string }[] = [
@@ -107,6 +109,15 @@ const VISION_LINK_RE =
 
 function containsVisionLink(text: string | undefined): boolean {
   return !!text && VISION_LINK_RE.test(text);
+}
+
+// Best-effort heuristic for fashion / shopping intent. Used to pick the
+// transient bot status copy while waiting for the first text_delta. Not a
+// gate on anything else — false negatives just fall back to a generic line.
+const FASHION_KEYWORDS = /옷|셔츠|티셔츠|블라우스|니트|스웨터|가디건|후드|맨투맨|자켓|재킷|코트|아우터|이너|패딩|점퍼|조끼|베스트|원피스|드레스|스커트|치마|바지|팬츠|진|데님|슬랙스|쇼츠|반바지|신발|스니커즈|운동화|구두|로퍼|샌들|부츠|슬리퍼|가방|백|클러치|토트|크로스백|숄더백|모자|캡|비니|버킷햇|선글라스|안경|벨트|시계|악세사리|악세서리|주얼리|목걸이|반지|귀걸이|팔찌|핏|루즈핏|오버핏|슬림핏|와이드|크롭|롱|숏|컬러|색감|색상|브랜드|코디|룩|스타일|무드|빈티지|미니멀|스트릿|캐주얼|포멀|찾아|추천|입을|입고|사고/i;
+
+function looksLikeFashionQuery(text: string): boolean {
+  return FASHION_KEYWORDS.test(text);
 }
 
 export default function ChatEntryScreen() {
@@ -288,6 +299,9 @@ export default function ChatEntryScreen() {
       streamText: '',
       streamProducts: [],
       streamDone: false,
+      streamPlaceholder: looksLikeFashionQuery(trimmed)
+        ? '카탈로그에서 찾는 중…'
+        : '키코가 생각 중…',
     };
     setMessages((prev) => [...prev, turn]);
 
@@ -537,6 +551,11 @@ export default function ChatEntryScreen() {
                             size="small"
                             color={IOSColors.secondaryLabel}
                           />
+                          {turn.streamPlaceholder && (
+                            <Text style={styles.botStatusText}>
+                              {turn.streamPlaceholder}
+                            </Text>
+                          )}
                         </View>
                       )
                     )}
