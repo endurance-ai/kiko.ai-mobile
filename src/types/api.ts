@@ -187,3 +187,31 @@ export interface LinkCheckResponse {
   http_status: number | null;
   alternative_url: string | null;
 }
+
+export type FeedbackRating = 'positive' | 'negative';
+
+export type FeedbackReasonKey =
+  | 'mood_off'
+  | 'fit'
+  | 'color'
+  | 'category_wrong'
+  | 'too_expensive'
+  | 'dead_link'
+  | 'too_similar'
+  | 'mood_match'
+  | 'new_brand'
+  | 'price_good'
+  | 'discovery';
+
+export interface FeedbackRequest {
+  search_id?: string;
+  rating: FeedbackRating;
+  reasons: FeedbackReasonKey[];
+  comment: string;
+  consent?: boolean;
+}
+
+export interface FeedbackResponse {
+  feedback_id: string;
+  exported_to_training: boolean;
+}

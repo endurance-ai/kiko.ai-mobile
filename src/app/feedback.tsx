@@ -1,6 +1,8 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
+  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -11,25 +13,34 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Haptic, IOSColors, IOSFont, IOSText } from '@/constants/ios';
+import { ApiError } from '@/lib/api';
+import { submitFeedback } from '@/lib/feedback';
 import {
   FeedbackRating,
   NEGATIVE_REASONS,
   POSITIVE_REASONS,
   useFeedback,
 } from '@/state/feedback';
+import type { FeedbackReasonKey } from '@/types/api';
 
 const CONSENT_NOTICE =
   '이 보고서를 제출하면 현재 대화 전체가 Endurance AI로 전송되어 향후 모델 개선에 사용됩니다.';
 
 export default function FeedbackScreen() {
-  const params = useLocalSearchParams<{ turn?: string; rating?: string }>();
-  const { submit } = useFeedback();
+  const params = useLocalSearchParams<{
+    turn?: string;
+    rating?: string;
+    search?: string;
+  }>();
+  const { rememberSubmitted } = useFeedback();
   const rating: FeedbackRating = params.rating === 'positive' ? 'positive' : 'negative';
   const turnKey = (params.turn as string) ?? 'unknown';
+  const searchId = (params.search as string) || undefined;
   const reasons = rating === 'positive' ? POSITIVE_REASONS : NEGATIVE_REASONS;
 
-  const [picked, setPicked] = useState<string[]>([]);
+  const [picked, setPicked] = useState<FeedbackReasonKey[]>([]);
   const [note, setNote] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   const title = useMemo(
     () =>
@@ -43,25 +54,40 @@ export default function FeedbackScreen() {
       ? '이 응답의 어떤 점이 좋았나요?'
       : '이 응답의 어떤 점이 아쉬웠나요?';
 
-  const canSubmit = note.trim().length > 0;
+  const canSubmit = note.trim().length > 0 && !submitting;
 
-  const togglePick = (r: string) => {
+  const togglePick = (k: FeedbackReasonKey) => {
     Haptic.selection();
     setPicked((prev) =>
-      prev.includes(r) ? prev.filter((x) => x !== r) : [...prev, r],
+      prev.includes(k) ? prev.filter((x) => x !== k) : [...prev, k],
     );
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!canSubmit) return;
-    Haptic.success();
-    submit({
-      turnKey,
-      rating,
-      reasons: picked,
-      note: note.trim(),
-    });
-    router.dismiss();
+    setSubmitting(true);
+    try {
+      await submitFeedback({
+        search_id: searchId,
+        rating,
+        reasons: picked,
+        comment: note.trim(),
+        // Per design notice: submitting implies the conversation snapshot may
+        // be used for model improvement.
+        consent: true,
+      });
+      rememberSubmitted({ turnKey, rating, reasons: picked, note: note.trim() });
+      Haptic.success();
+      router.dismiss();
+    } catch (e) {
+      Haptic.error();
+      Alert.alert(
+        '제출 실패',
+        e instanceof ApiError ? e.detail : '잠시 후 다시 시도해주세요.',
+      );
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -76,17 +102,18 @@ export default function FeedbackScreen() {
 
         <View style={styles.chipRow}>
           {reasons.map((r) => {
-            const active = picked.includes(r);
+            const active = picked.includes(r.key);
             return (
               <Pressable
-                key={r}
-                onPress={() => togglePick(r)}
+                key={r.key}
+                onPress={() => togglePick(r.key)}
+                disabled={submitting}
                 style={[styles.chip, active && styles.chipActive]}
               >
                 <Text
                   style={[styles.chipText, active && styles.chipTextActive]}
                 >
-                  {r}
+                  {r.label}
                 </Text>
               </Pressable>
             );
@@ -98,6 +125,7 @@ export default function FeedbackScreen() {
           onChangeText={setNote}
           placeholder={placeholder}
           placeholderTextColor={IOSColors.placeholderText}
+          editable={!submitting}
           multiline
           style={styles.noteInput}
         />
@@ -113,7 +141,11 @@ export default function FeedbackScreen() {
           style={[styles.submit, !canSubmit && styles.submitDisabled]}
           onPress={handleSubmit}
         >
-          <Text style={styles.submitText}>제출</Text>
+          {submitting ? (
+            <ActivityIndicator size="small" color={IOSColors.systemBackground} />
+          ) : (
+            <Text style={styles.submitText}>제출</Text>
+          )}
         </Pressable>
       </SafeAreaView>
     </View>
