@@ -18,15 +18,19 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { Image as ExpoImage } from 'expo-image';
+
 import { Banner } from '@/components/banner';
 import { FeedbackTrigger } from '@/components/feedback-trigger';
 import { PRODUCT_CARD_WIDTH, ProductCard } from '@/components/product-card';
 import { TopBar } from '@/components/top-bar';
 import { Haptic, IOSColors, IOSFont, IOSText } from '@/constants/ios';
-import { createSessionStream } from '@/lib/chat';
+import { createSessionStream, sendMessageStream } from '@/lib/chat';
+import type { ChatStreamController } from '@/lib/sse';
 import { useBanner } from '@/state/banner';
 import { buildFilterLabel, PRICE_MAX, useFilter } from '@/state/filter';
 import { MOCK_PRODUCTS, type Product } from '@/state/products';
+import type { ProductRef } from '@/types/api';
 
 type TurnStatus = 'analyzing' | 'picking' | 'searching' | 'results' | 'empty';
 
@@ -62,6 +66,12 @@ type Turn = {
   pickedItem?: VisionItem;
   results?: Product[];
   narrowing?: Narrowing | null;
+  // SSE chat turn (real backend). When `isStream` is true the mock fields
+  // above are ignored and the assistant bubble streams in directly.
+  isStream?: boolean;
+  streamText?: string;
+  streamProducts?: ProductRef[];
+  streamDone?: boolean;
 };
 
 const SAMPLE_MOODS: { id: string; color: string }[] = [
@@ -109,11 +119,18 @@ export default function ChatEntryScreen() {
   const [pinnedId, setPinnedId] = useState<string | null>(null);
   const scrollRef = useRef<ScrollView | null>(null);
   const nextIdRef = useRef(1);
+  const sessionIdRef = useRef<string | null>(null);
+  const streamRef = useRef<ChatStreamController | null>(null);
+
+  useEffect(() => () => streamRef.current?.cancel(), []);
 
   const lastTurn = messages[messages.length - 1] ?? null;
   const lastStatus = lastTurn?.status ?? null;
   const hasConversation = messages.length > 0;
-  const isBusy = lastStatus === 'searching' || lastStatus === 'analyzing';
+  const isStreaming =
+    lastTurn?.isStream === true && lastTurn.streamDone !== true;
+  const isBusy =
+    lastStatus === 'searching' || lastStatus === 'analyzing' || isStreaming;
   const hasResults = lastStatus === 'results';
   const isEmpty = lastStatus === 'empty';
   const canSend = !isBusy && (text.trim().length > 0 || pickedImage !== null);
@@ -257,35 +274,64 @@ export default function ChatEntryScreen() {
     }
 
     setText('');
-    sendNewSession(trimmed);
+    runStreamingTurn(trimmed);
   };
 
-  const sendNewSession = (trimmed: string) => {
+  const runStreamingTurn = (trimmed: string) => {
     clearBanner('request-failure');
-    let routed = false;
-    const controller = createSessionStream(trimmed, {
-      onSession: (sessionId) => {
-        if (routed) return;
-        routed = true;
-        router.push(`/chat/${sessionId}` as never);
+    const turnId = nextIdRef.current++;
+    const turn: Turn = {
+      id: turnId,
+      user: { text: trimmed },
+      status: 'searching',
+      isStream: true,
+      streamText: '',
+      streamProducts: [],
+      streamDone: false,
+    };
+    setMessages((prev) => [...prev, turn]);
+
+    const patch = (mut: (t: Turn) => Partial<Turn>) =>
+      setMessages((prev) =>
+        prev.map((t) => (t.id === turnId ? { ...t, ...mut(t) } : t)),
+      );
+
+    const handlers = {
+      onSession: (sessionId: string) => {
+        sessionIdRef.current = sessionId;
+      },
+      onTextDelta: (delta: string) => {
+        patch((t) => ({ streamText: (t.streamText ?? '') + delta }));
+      },
+      onProduct: (product: ProductRef) => {
+        patch((t) => ({
+          streamProducts: [...(t.streamProducts ?? []), product],
+        }));
+      },
+      onDone: () => {
+        patch(() => ({ streamDone: true, status: 'results' as const }));
+        streamRef.current = null;
       },
       onError: () => {
         Haptic.error();
-        if (!routed) setText(trimmed);
+        setMessages((prev) => prev.filter((t) => t.id !== turnId));
+        streamRef.current = null;
         showBanner({
           id: 'request-failure',
           priority: 'error',
           title: '요청을 처리하지 못했어요',
           action: {
             label: '다시 시도',
-            onPress: () => sendNewSession(trimmed),
+            onPress: () => runStreamingTurn(trimmed),
           },
         });
       },
-    });
-    // Stream keeps running after we route; the detail screen refetches
-    // messages on mount once the assistant turn has been persisted.
-    void controller.promise.catch(() => {});
+    };
+
+    streamRef.current = sessionIdRef.current
+      ? sendMessageStream(sessionIdRef.current, trimmed, handlers)
+      : createSessionStream(trimmed, handlers);
+    void streamRef.current.promise.catch(() => {});
   };
 
   const handleSampleMood = (color: string) => {
@@ -471,11 +517,56 @@ export default function ChatEntryScreen() {
                   </View>
                 )}
 
-                {/* Searching */}
-                {turn.status === 'searching' && (
+                {/* Searching (mock pipeline only) */}
+                {turn.status === 'searching' && !turn.isStream && (
                   <View style={styles.botStatusRow}>
                     <ActivityIndicator size="small" color={IOSColors.secondaryLabel} />
                     <Text style={styles.botStatusText}>{SEARCH_HINT}</Text>
+                  </View>
+                )}
+
+                {/* SSE streaming assistant — real /v1/chat */}
+                {turn.isStream && (
+                  <View style={styles.streamBlock}>
+                    {turn.streamText ? (
+                      <Text style={styles.streamText}>{turn.streamText}</Text>
+                    ) : (
+                      !turn.streamDone && (
+                        <View style={styles.botStatusRow}>
+                          <ActivityIndicator
+                            size="small"
+                            color={IOSColors.secondaryLabel}
+                          />
+                          <Text style={styles.botStatusText}>{SEARCH_HINT}</Text>
+                        </View>
+                      )
+                    )}
+                    {turn.streamProducts && turn.streamProducts.length > 0 && (
+                      <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={styles.cardRow}
+                      >
+                        {turn.streamProducts.map((p, i) => (
+                          <View
+                            key={`${turn.id}:${i}`}
+                            style={styles.streamProductCard}
+                          >
+                            <ExpoImage
+                              source={p.image_url}
+                              style={styles.streamProductImage}
+                              contentFit="cover"
+                            />
+                            <Text
+                              style={styles.streamProductCaption}
+                              numberOfLines={3}
+                            >
+                              {p.caption.replace(/<[^>]+>/g, '')}
+                            </Text>
+                          </View>
+                        ))}
+                      </ScrollView>
+                    )}
                   </View>
                 )}
 
@@ -923,6 +1014,33 @@ const styles = StyleSheet.create({
   resultsBlock: {
     marginTop: 4,
     gap: 14,
+  },
+  streamBlock: {
+    marginTop: 4,
+    gap: 14,
+  },
+  streamText: {
+    ...IOSText.body,
+    color: IOSColors.label,
+    fontFamily: IOSFont.rounded,
+    paddingHorizontal: 4,
+    lineHeight: 22,
+  },
+  streamProductCard: {
+    width: 140,
+    backgroundColor: IOSColors.systemBackground,
+    borderRadius: 14,
+    overflow: 'hidden',
+  },
+  streamProductImage: {
+    width: 140,
+    height: 180,
+  },
+  streamProductCaption: {
+    ...IOSText.caption1,
+    color: IOSColors.label,
+    fontFamily: IOSFont.rounded,
+    padding: 8,
   },
   agentRow: {
     flexDirection: 'row',
