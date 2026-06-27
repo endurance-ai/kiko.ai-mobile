@@ -74,7 +74,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   tint: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
   },
   tintOff: {
     // systemFill 은 다크모드에서도 인식 가능한 회색 frost.
