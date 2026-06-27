@@ -355,13 +355,13 @@ export default function ChatEntryScreen() {
     if (!canSend) return;
     const trimmed = text.trim();
     const hasImage = pickedImage !== null;
-    const hasVisionLink = containsVisionLink(trimmed);
     Haptic.medium();
 
-    // Image / vision-link flows stay on the local mock pipeline until the
-    // server exposes image input on /chat. Text-only messages start a real
-    // session and hand off to the /chat/[id] detail screen.
-    if (hasImage || hasVisionLink || !trimmed) {
+    // Gallery uploads still need /v1/uploads (not deployed yet) — keep the
+    // mock pipeline for now. Plain text (including Pinterest / Instagram
+    // links) is forwarded to /v1/chat — the server's ReAct agent has its
+    // own link_resolver tool to fetch og:image and route to vision.
+    if (hasImage || !trimmed) {
       startTurn({
         text: trimmed || undefined,
         imageUri: pickedImage ?? undefined,
