@@ -1,7 +1,7 @@
 import { GlassView } from 'expo-glass-effect';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -18,15 +18,19 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { Image as ExpoImage } from 'expo-image';
+
 import { Banner } from '@/components/banner';
 import { FeedbackTrigger } from '@/components/feedback-trigger';
 import { PRODUCT_CARD_WIDTH, ProductCard } from '@/components/product-card';
 import { TopBar } from '@/components/top-bar';
 import { Haptic, IOSColors, IOSFont, IOSText } from '@/constants/ios';
-import { createSessionStream } from '@/lib/chat';
+import { createSessionStream, getMessages, sendMessageStream } from '@/lib/chat';
+import type { ChatStreamController } from '@/lib/sse';
 import { useBanner } from '@/state/banner';
 import { buildFilterLabel, PRICE_MAX, useFilter } from '@/state/filter';
 import { MOCK_PRODUCTS, type Product } from '@/state/products';
+import type { ProductRef } from '@/types/api';
 
 type TurnStatus = 'analyzing' | 'picking' | 'searching' | 'results' | 'empty';
 
@@ -62,6 +66,14 @@ type Turn = {
   pickedItem?: VisionItem;
   results?: Product[];
   narrowing?: Narrowing | null;
+  // SSE chat turn (real backend). When `isStream` is true the mock fields
+  // above are ignored and the assistant bubble streams in directly.
+  isStream?: boolean;
+  streamText?: string;
+  streamProducts?: ProductRef[];
+  streamDone?: boolean;
+  /** Placeholder shown while waiting for the first text_delta. */
+  streamPlaceholder?: string;
 };
 
 const SAMPLE_MOODS: { id: string; color: string }[] = [
@@ -99,8 +111,95 @@ function containsVisionLink(text: string | undefined): boolean {
   return !!text && VISION_LINK_RE.test(text);
 }
 
+const URL_RE = /https?:\/\/[^\s]+/i;
+
+function extractFirstUrl(text: string): string | null {
+  const m = text.match(URL_RE);
+  return m ? m[0] : null;
+}
+
+/**
+ * Best-effort fetch of the og:image (or twitter:image) for a given URL.
+ * Used to render a small thumbnail preview inside the user's chat bubble
+ * when they paste a Pinterest / Instagram / generic link. Failures are
+ * silent — the bubble just stays text-only.
+ */
+async function fetchLinkPreviewImage(url: string): Promise<string | null> {
+  try {
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+        Accept: 'text/html,*/*',
+      },
+    });
+    if (!res.ok) return null;
+    const html = await res.text();
+    const patterns = [
+      /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i,
+      /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i,
+      /<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i,
+      /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image["']/i,
+    ];
+    for (const re of patterns) {
+      const m = html.match(re);
+      if (m?.[1]) return m[1];
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Convert server message history (chronological) into the home Turn list.
+ * Each (user, assistant) pair becomes a single completed SSE-style turn.
+ * Trailing user message with no reply (rare) still renders as a turn with
+ * empty assistant content so the user input is visible.
+ */
+function messageItemsToTurns(
+  items: import('@/types/api').MessageItem[],
+  nextIdRef: { current: number },
+): Turn[] {
+  const sorted = [...items].sort(
+    (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+  );
+  const turns: Turn[] = [];
+  let i = 0;
+  while (i < sorted.length) {
+    const userMsg = sorted[i];
+    if (userMsg.role !== 'user') {
+      i++;
+      continue;
+    }
+    const assistantMsg =
+      sorted[i + 1]?.role === 'assistant' ? sorted[i + 1] : null;
+    turns.push({
+      id: nextIdRef.current++,
+      user: { text: userMsg.content },
+      status: 'results',
+      isStream: true,
+      streamText: assistantMsg?.content ?? '',
+      streamProducts: assistantMsg?.product_refs ?? [],
+      streamDone: true,
+    });
+    i += assistantMsg ? 2 : 1;
+  }
+  return turns;
+}
+
+// Best-effort heuristic for fashion / shopping intent. Used to pick the
+// transient bot status copy while waiting for the first text_delta. Not a
+// gate on anything else — false negatives just fall back to a generic line.
+const FASHION_KEYWORDS = /옷|셔츠|티셔츠|블라우스|니트|스웨터|가디건|후드|맨투맨|자켓|재킷|코트|아우터|이너|패딩|점퍼|조끼|베스트|원피스|드레스|스커트|치마|바지|팬츠|진|데님|슬랙스|쇼츠|반바지|신발|스니커즈|운동화|구두|로퍼|샌들|부츠|슬리퍼|가방|백|클러치|토트|크로스백|숄더백|모자|캡|비니|버킷햇|선글라스|안경|벨트|시계|악세사리|악세서리|주얼리|목걸이|반지|귀걸이|팔찌|핏|루즈핏|오버핏|슬림핏|와이드|크롭|롱|숏|컬러|색감|색상|브랜드|코디|룩|스타일|무드|빈티지|미니멀|스트릿|캐주얼|포멀|찾아|추천|입을|입고|사고/i;
+
+function looksLikeFashionQuery(text: string): boolean {
+  return FASHION_KEYWORDS.test(text);
+}
+
 export default function ChatEntryScreen() {
   const insets = useSafeAreaInsets();
+  const { session: sessionParam } = useLocalSearchParams<{ session?: string }>();
   const { value: filter, setValue: setFilter } = useFilter();
   const { active: activeBanner, show: showBanner, clear: clearBanner } = useBanner();
   const [text, setText] = useState('');
@@ -109,14 +208,68 @@ export default function ChatEntryScreen() {
   const [pinnedId, setPinnedId] = useState<string | null>(null);
   const scrollRef = useRef<ScrollView | null>(null);
   const nextIdRef = useRef(1);
+  const sessionIdRef = useRef<string | null>(null);
+  const streamRef = useRef<ChatStreamController | null>(null);
+
+  useEffect(() => () => streamRef.current?.cancel(), []);
+
+  // Load a past session into the home turn list (sidebar tap routes here
+  // with ?session=<uuid> so the chat continues on the same surface).
+  useEffect(() => {
+    if (!sessionParam) return;
+    let cancelled = false;
+    sessionIdRef.current = sessionParam;
+    (async () => {
+      try {
+        const res = await getMessages(sessionParam, { limit: 50 });
+        if (cancelled) return;
+        const turns = messageItemsToTurns(res.messages, nextIdRef);
+        setMessages(turns);
+      } catch {
+        // ignore — empty state will show
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionParam]);
 
   const lastTurn = messages[messages.length - 1] ?? null;
   const lastStatus = lastTurn?.status ?? null;
   const hasConversation = messages.length > 0;
-  const isBusy = lastStatus === 'searching' || lastStatus === 'analyzing';
+  const isStreaming =
+    lastTurn?.isStream === true && lastTurn.streamDone !== true;
+  const isBusy =
+    lastStatus === 'searching' || lastStatus === 'analyzing' || isStreaming;
   const hasResults = lastStatus === 'results';
   const isEmpty = lastStatus === 'empty';
   const canSend = !isBusy && (text.trim().length > 0 || pickedImage !== null);
+  // Unified pinned attachment: works for both mock products and SSE products.
+  // SSE pins use a composite id "<turnId>:<index>" so we look up by parsing it.
+  const pinnedAttachment: {
+    thumbColor?: string;
+    imageUrl?: string;
+    label: string;
+  } | null = (() => {
+    if (!pinnedId) return null;
+    const mockHit = lastTurn?.results?.find((p) => p.id === pinnedId);
+    if (mockHit) {
+      return { thumbColor: mockHit.colorHint, label: mockHit.brand };
+    }
+    const [maybeTurnId, maybeIdx] = pinnedId.split(':');
+    if (maybeTurnId && maybeIdx) {
+      const turn = messages.find((t) => String(t.id) === maybeTurnId);
+      const sse = turn?.streamProducts?.[Number(maybeIdx)];
+      if (sse) {
+        // caption is HTML-ish; the brand line is usually the bold prefix.
+        const stripped = sse.caption.replace(/<[^>]+>/g, '').trim();
+        const label = stripped.split('\n')[0] || '선택한 상품';
+        return { imageUrl: sse.image_url, label: label.slice(0, 20) };
+      }
+    }
+    return null;
+  })();
+  // Legacy name kept for the few mock-only branches still using `.colorHint`.
   const pinnedProduct = pinnedId
     ? lastTurn?.results?.find((p) => p.id === pinnedId) ?? null
     : null;
@@ -242,13 +395,13 @@ export default function ChatEntryScreen() {
     if (!canSend) return;
     const trimmed = text.trim();
     const hasImage = pickedImage !== null;
-    const hasVisionLink = containsVisionLink(trimmed);
     Haptic.medium();
 
-    // Image / vision-link flows stay on the local mock pipeline until the
-    // server exposes image input on /chat. Text-only messages start a real
-    // session and hand off to the /chat/[id] detail screen.
-    if (hasImage || hasVisionLink || !trimmed) {
+    // Gallery uploads still need /v1/uploads (not deployed yet) — keep the
+    // mock pipeline for now. Plain text (including Pinterest / Instagram
+    // links) is forwarded to /v1/chat — the server's ReAct agent has its
+    // own link_resolver tool to fetch og:image and route to vision.
+    if (hasImage || !trimmed) {
       startTurn({
         text: trimmed || undefined,
         imageUri: pickedImage ?? undefined,
@@ -257,35 +410,91 @@ export default function ChatEntryScreen() {
     }
 
     setText('');
-    sendNewSession(trimmed);
+    runStreamingTurn(trimmed);
   };
 
-  const sendNewSession = (trimmed: string) => {
+  const runStreamingTurn = (trimmed: string) => {
     clearBanner('request-failure');
-    let routed = false;
-    const controller = createSessionStream(trimmed, {
-      onSession: (sessionId) => {
-        if (routed) return;
-        routed = true;
-        router.push(`/chat/${sessionId}` as never);
+    const attachment = pinnedAttachment; // snapshot before we clear it
+    const turnId = nextIdRef.current++;
+    const turn: Turn = {
+      id: turnId,
+      user: {
+        text: trimmed,
+        imageUri: attachment?.imageUrl,
+        colorHint:
+          !attachment?.imageUrl && attachment?.thumbColor
+            ? attachment.thumbColor
+            : undefined,
+      },
+      status: 'searching',
+      isStream: true,
+      streamText: '',
+      streamProducts: [],
+      streamDone: false,
+      streamPlaceholder: looksLikeFashionQuery(trimmed)
+        ? '카탈로그에서 찾는 중…'
+        : '키코가 생각 중…',
+    };
+    setMessages((prev) => [...prev, turn]);
+    if (attachment) setPinnedId(null);
+    // Server takes plain text; if a product is pinned, prefix the message so
+    // the ReAct loop anchors to it.
+    const serverText = attachment ? `[${attachment.label}] ${trimmed}` : trimmed;
+
+    const patch = (mut: (t: Turn) => Partial<Turn>) =>
+      setMessages((prev) =>
+        prev.map((t) => (t.id === turnId ? { ...t, ...mut(t) } : t)),
+      );
+
+    // If the user message contains a URL and we don't already have an
+    // attachment image, try to grab the og:image for a chat-bubble preview.
+    if (!attachment?.imageUrl) {
+      const url = extractFirstUrl(trimmed);
+      if (url) {
+        void fetchLinkPreviewImage(url).then((imageUrl) => {
+          if (!imageUrl) return;
+          patch((t) => ({ user: { ...t.user, imageUri: imageUrl } }));
+        });
+      }
+    }
+
+    const handlers = {
+      onSession: (sessionId: string) => {
+        sessionIdRef.current = sessionId;
+      },
+      onTextDelta: (delta: string) => {
+        patch((t) => ({ streamText: (t.streamText ?? '') + delta }));
+      },
+      onProduct: (product: ProductRef) => {
+        patch((t) => ({
+          streamProducts: [...(t.streamProducts ?? []), product],
+        }));
+      },
+      onDone: () => {
+        patch(() => ({ streamDone: true, status: 'results' as const }));
+        streamRef.current = null;
       },
       onError: () => {
         Haptic.error();
-        if (!routed) setText(trimmed);
+        setMessages((prev) => prev.filter((t) => t.id !== turnId));
+        streamRef.current = null;
         showBanner({
           id: 'request-failure',
           priority: 'error',
           title: '요청을 처리하지 못했어요',
           action: {
             label: '다시 시도',
-            onPress: () => sendNewSession(trimmed),
+            onPress: () => runStreamingTurn(trimmed),
           },
         });
       },
-    });
-    // Stream keeps running after we route; the detail screen refetches
-    // messages on mount once the assistant turn has been persisted.
-    void controller.promise.catch(() => {});
+    };
+
+    streamRef.current = sessionIdRef.current
+      ? sendMessageStream(sessionIdRef.current, serverText, handlers)
+      : createSessionStream(serverText, handlers);
+    void streamRef.current.promise.catch(() => {});
   };
 
   const handleSampleMood = (color: string) => {
@@ -299,14 +508,15 @@ export default function ChatEntryScreen() {
     const label = chip?.label;
     if (!label) return;
     Haptic.medium();
-    // When a product is pinned, anchor the critique to it: send both the
-    // product thumbnail and the chip label as a single user message so the
-    // bubble carries the visual context of what's being refined.
+    // For real SSE turns, send the chip label as the next user message —
+    // server's ReAct loop handles the refine intent. The pinned-product
+    // anchor pattern stays available for the mock pipeline if needed.
+    if (sessionIdRef.current) {
+      runStreamingTurn(label);
+      return;
+    }
     if (pinnedProduct) {
-      startTurn({
-        text: label,
-        colorHint: pinnedProduct.colorHint,
-      });
+      startTurn({ text: label, colorHint: pinnedProduct.colorHint });
     } else {
       startTurn({ text: label });
     }
@@ -471,11 +681,91 @@ export default function ChatEntryScreen() {
                   </View>
                 )}
 
-                {/* Searching */}
-                {turn.status === 'searching' && (
+                {/* Searching (mock pipeline only) */}
+                {turn.status === 'searching' && !turn.isStream && (
                   <View style={styles.botStatusRow}>
                     <ActivityIndicator size="small" color={IOSColors.secondaryLabel} />
                     <Text style={styles.botStatusText}>{SEARCH_HINT}</Text>
+                  </View>
+                )}
+
+                {/* SSE streaming assistant — real /v1/chat */}
+                {turn.isStream && (
+                  <View style={styles.streamBlock}>
+                    {turn.streamText ? (
+                      <View style={styles.botBubbleRow}>
+                        <View style={styles.botBubble}>
+                          <Text style={styles.botBubbleText}>
+                            {turn.streamText}
+                          </Text>
+                        </View>
+                      </View>
+                    ) : (
+                      !turn.streamDone && (
+                        <View style={styles.botStatusRow}>
+                          <ActivityIndicator
+                            size="small"
+                            color={IOSColors.secondaryLabel}
+                          />
+                          {turn.streamPlaceholder && (
+                            <Text style={styles.botStatusText}>
+                              {turn.streamPlaceholder}
+                            </Text>
+                          )}
+                        </View>
+                      )
+                    )}
+                    {turn.streamProducts && turn.streamProducts.length > 0 && (
+                      <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={styles.cardRow}
+                      >
+                        {turn.streamProducts.map((p, i) => {
+                          const key = `${turn.id}:${i}`;
+                          const pinned = pinnedId === key;
+                          return (
+                            <View key={key} style={styles.streamProductCard}>
+                              <View style={styles.streamProductImageWrap}>
+                                <ExpoImage
+                                  source={p.image_url}
+                                  style={styles.streamProductImage}
+                                  contentFit="cover"
+                                />
+                                <Pressable
+                                  hitSlop={8}
+                                  style={styles.streamPinBtn}
+                                  onPress={() => {
+                                    Haptic.selection();
+                                    setPinnedId((prev) =>
+                                      prev === key ? null : key,
+                                    );
+                                  }}
+                                >
+                                  <SymbolView
+                                    name={pinned ? 'checkmark' : 'plus'}
+                                    size={14}
+                                    tintColor="#1C1C1E"
+                                    weight="bold"
+                                  />
+                                </Pressable>
+                              </View>
+                              <Text
+                                style={styles.streamProductCaption}
+                                numberOfLines={3}
+                              >
+                                {p.caption.replace(/<[^>]+>/g, '')}
+                              </Text>
+                            </View>
+                          );
+                        })}
+                      </ScrollView>
+                    )}
+                    {turn.streamDone && (
+                      <View style={styles.feedbackTriggerRow}>
+                        <FeedbackTrigger turnKey={`stream:${turn.id}`} />
+                      </View>
+                    )}
                   </View>
                 )}
 
@@ -613,16 +903,26 @@ export default function ChatEntryScreen() {
             isBusy && styles.composerBusy,
           ]}
         >
-          {pinnedProduct && (
+          {pinnedAttachment && (
             <View style={styles.attachmentRow}>
               <View style={styles.attachmentChip}>
-                <View
-                  style={[
-                    styles.attachmentThumb,
-                    { backgroundColor: pinnedProduct.colorHint },
-                  ]}
-                />
-                <Text style={styles.attachmentBrand}>{pinnedProduct.brand}</Text>
+                {pinnedAttachment.imageUrl ? (
+                  <ExpoImage
+                    source={pinnedAttachment.imageUrl}
+                    style={styles.attachmentThumb}
+                    contentFit="cover"
+                  />
+                ) : (
+                  <View
+                    style={[
+                      styles.attachmentThumb,
+                      { backgroundColor: pinnedAttachment.thumbColor ?? IOSColors.tertiarySystemBackground },
+                    ]}
+                  />
+                )}
+                <Text style={styles.attachmentBrand} numberOfLines={1}>
+                  {pinnedAttachment.label}
+                </Text>
                 <Pressable hitSlop={6} onPress={() => setPinnedId(null)}>
                   <SymbolView
                     name="xmark.circle.fill"
@@ -923,6 +1223,60 @@ const styles = StyleSheet.create({
   resultsBlock: {
     marginTop: 4,
     gap: 14,
+  },
+  streamBlock: {
+    marginTop: 4,
+    gap: 14,
+  },
+  botBubbleRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 4,
+  },
+  botBubble: {
+    maxWidth: '85%',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 18,
+    borderTopLeftRadius: 6,
+    backgroundColor: IOSColors.systemBackground,
+  },
+  botBubbleText: {
+    ...IOSText.body,
+    color: IOSColors.label,
+    fontFamily: IOSFont.rounded,
+    lineHeight: 22,
+  },
+  streamProductCard: {
+    width: 140,
+    backgroundColor: IOSColors.systemBackground,
+    borderRadius: 14,
+    overflow: 'hidden',
+  },
+  streamProductImageWrap: {
+    width: 140,
+    height: 180,
+    position: 'relative',
+  },
+  streamProductImage: {
+    width: '100%',
+    height: '100%',
+  },
+  streamProductCaption: {
+    ...IOSText.caption1,
+    color: IOSColors.label,
+    fontFamily: IOSFont.rounded,
+    padding: 8,
+  },
+  streamPinBtn: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   agentRow: {
     flexDirection: 'row',

@@ -229,7 +229,7 @@ export default function ChatDetailScreen() {
           ref={listRef}
           data={messages}
           keyExtractor={(m) => m.message_id}
-          renderItem={MessageRow}
+          renderItem={({ item }) => <MessageRow item={item} />}
           contentContainerStyle={{
             paddingTop: insets.top + FLOATING_HEADER_OFFSET,
             paddingBottom: composerBottom + 80,

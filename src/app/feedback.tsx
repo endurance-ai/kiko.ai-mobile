@@ -93,6 +93,7 @@ export default function FeedbackScreen() {
   return (
     <View style={styles.root}>
       <ScrollView
+        style={styles.scrollView}
         contentContainerStyle={styles.body}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
@@ -154,6 +155,7 @@ export default function FeedbackScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: IOSColors.systemBackground },
+  scrollView: { flex: 1 },
   body: {
     paddingHorizontal: 20,
     paddingTop: 16,

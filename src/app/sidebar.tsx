@@ -96,7 +96,8 @@ export default function SidebarScreen() {
     Haptic.medium();
     animateClose(() => {
       router.back();
-      setTimeout(() => router.replace('/home'), 30);
+      // Reset home into the empty 'new chat' surface.
+      setTimeout(() => router.replace('/home' as never), 30);
     });
   };
 
@@ -104,7 +105,12 @@ export default function SidebarScreen() {
     Haptic.light();
     animateClose(() => {
       router.back();
-      setTimeout(() => router.replace(`/chat/${sessionId}`), 30);
+      // Reuse the home surface (top bar + composer) — just hydrate it with
+      // the picked session's messages via the ?session= query param.
+      setTimeout(
+        () => router.replace(`/home?session=${sessionId}` as never),
+        30,
+      );
     });
   };
 
