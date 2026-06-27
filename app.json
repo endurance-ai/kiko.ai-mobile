@@ -18,12 +18,6 @@
               "kikoaimobile",
               "com.googleusercontent.apps.205071192266-4cq6itbajkhcothilspdlcg2tqevmdpd"
             ]
-          },
-          {
-            "CFBundleURLSchemes": [
-              "kikoaimobile",
-              "com.googleusercontent.apps.205071192266-4cq6itbajkhcothilspdlcg2tqevmdpd"
-            ]
           }
         ],
         "ITSAppUsesNonExemptEncryption": false
