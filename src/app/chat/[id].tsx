@@ -19,8 +19,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FLOATING_HEADER_OFFSET, FloatingHeader } from '@/components/floating-header';
 import { Haptic, IOSColors, IOSFont, IOSText } from '@/constants/ios';
-import { ApiError } from '@/lib/api';
-import { getMessages, sendMessage } from '@/lib/chat';
+import { getMessages, sendMessageStream } from '@/lib/chat';
+import type { ChatStreamController } from '@/lib/sse';
 import type { MessageItem, ProductRef } from '@/types/api';
 
 const PAGE_SIZE = 30;
@@ -122,7 +122,15 @@ export default function ChatDetailScreen() {
     setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 60);
   }, []);
 
-  const handleSend = useCallback(async () => {
+  const streamRef = useRef<ChatStreamController | null>(null);
+
+  useEffect(() => {
+    return () => {
+      streamRef.current?.cancel();
+    };
+  }, []);
+
+  const handleSend = useCallback(() => {
     if (!id) return;
     const trimmed = text.trim();
     if (!trimmed || sending) return;
@@ -131,22 +139,46 @@ export default function ChatDetailScreen() {
     setSending(true);
 
     const userMsg = makeLocalMessage('user', trimmed);
-    setMessages((prev) => [...(prev ?? []), userMsg]);
+    const assistantMsg = makeLocalMessage('assistant', '');
+    setMessages((prev) => [...(prev ?? []), userMsg, assistantMsg]);
     scrollToEnd();
 
-    try {
-      const res = await sendMessage(id, trimmed);
-      const assistantMsg = makeLocalMessage('assistant', res.reply_text, res.products ?? null);
-      setMessages((prev) => [...(prev ?? []), assistantMsg]);
-      scrollToEnd();
-    } catch (e) {
-      // Roll back optimistic user message on error
-      setMessages((prev) => (prev ?? []).filter((m) => m.message_id !== userMsg.message_id));
-      const detail = e instanceof ApiError ? e.detail : '메시지 전송에 실패했어요.';
-      Alert.alert('전송 실패', detail);
-    } finally {
-      setSending(false);
-    }
+    const updateAssistant = (mut: (m: MessageItem) => MessageItem) => {
+      setMessages((prev) =>
+        (prev ?? []).map((m) => (m.message_id === assistantMsg.message_id ? mut(m) : m)),
+      );
+    };
+
+    streamRef.current = sendMessageStream(id, trimmed, {
+      onTextDelta: (delta) => {
+        updateAssistant((m) => ({ ...m, content: m.content + delta }));
+        scrollToEnd();
+      },
+      onProduct: (product) => {
+        updateAssistant((m) => ({
+          ...m,
+          product_refs: [...(m.product_refs ?? []), product],
+        }));
+        scrollToEnd();
+      },
+      onDone: () => {
+        setSending(false);
+        streamRef.current = null;
+      },
+      onError: (detail) => {
+        // Drop the optimistic pair so the user can retry.
+        setMessages((prev) =>
+          (prev ?? []).filter(
+            (m) =>
+              m.message_id !== userMsg.message_id &&
+              m.message_id !== assistantMsg.message_id,
+          ),
+        );
+        setSending(false);
+        streamRef.current = null;
+        Alert.alert('전송 실패', detail);
+      },
+    });
   }, [id, text, sending, scrollToEnd]);
 
   const canSend = !sending && text.trim().length > 0;
