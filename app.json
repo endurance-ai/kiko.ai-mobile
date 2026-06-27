@@ -18,8 +18,15 @@
               "kikoaimobile",
               "com.googleusercontent.apps.205071192266-4cq6itbajkhcothilspdlcg2tqevmdpd"
             ]
+          },
+          {
+            "CFBundleURLSchemes": [
+              "kikoaimobile",
+              "com.googleusercontent.apps.205071192266-4cq6itbajkhcothilspdlcg2tqevmdpd"
+            ]
           }
-        ]
+        ],
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -30,7 +37,10 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "output": "static",
@@ -63,7 +73,12 @@
     },
     "extra": {
       "apiBaseUrl": "https://dev-ai.kikoai.me",
-      "googleClientId": "205071192266-4cq6itbajkhcothilspdlcg2tqevmdpd.apps.googleusercontent.com"
-    }
+      "googleClientId": "205071192266-4cq6itbajkhcothilspdlcg2tqevmdpd.apps.googleusercontent.com",
+      "router": {},
+      "eas": {
+        "projectId": "3eca8caa-f979-4d07-8a63-d418df878533"
+      }
+    },
+    "owner": "chldbsdud"
   }
 }

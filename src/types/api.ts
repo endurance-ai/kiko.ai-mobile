@@ -200,6 +200,8 @@ export interface RegisterDeviceRequest {
 export interface RegisterDeviceResponse {
   device_id: string;
   registered_at: string;
+}
+
 export type FeedbackRating = 'positive' | 'negative';
 
 export type FeedbackReasonKey =
