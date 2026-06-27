@@ -126,3 +126,64 @@ export interface SaveListResponse {
 export interface AddSaveRequest {
   product_id: string;
 }
+
+export interface BrandNode {
+  id: number;
+  brand_name: string;
+  brand_name_normalized: string | null;
+}
+
+export interface ProductDetail {
+  id: number;
+  brand: string;
+  name: string;
+  category: string | null;
+  subcategory: string | null;
+  price: number | null;
+  original_price: number | null;
+  sale_price: number | null;
+  image_url: string;
+  images: string[] | null;
+  product_url: string;
+  in_stock: boolean;
+  platform: string;
+  gender: string[] | null;
+  description: string | null;
+  color: string | null;
+  tags: string[] | null;
+  brand_node: BrandNode | null;
+}
+
+export interface RecordViewRequest {
+  session_id: string;
+  source_search_id?: string;
+  dwell_ms?: number;
+}
+
+export interface RecordViewResponse {
+  recorded: boolean;
+  view_id: string | null;
+}
+
+export interface ViewedProduct {
+  product_id: number;
+  brand: string;
+  name: string;
+  price: number | null;
+  image_url: string;
+  product_url: string;
+  viewed_at: string;
+  source_search_id: string | null;
+}
+
+export interface ViewedListResponse {
+  items: ViewedProduct[];
+  next_cursor: string | null;
+}
+
+export interface LinkCheckResponse {
+  alive: boolean;
+  last_checked_at: string;
+  http_status: number | null;
+  alternative_url: string | null;
+}
