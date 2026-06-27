@@ -1,7 +1,7 @@
 import { api } from '@/lib/api';
+import { streamChatSSE, type ChatStreamController, type ChatStreamHandlers } from '@/lib/sse';
 import type {
   ChatRequest,
-  ChatResponse,
   MessageListResponse,
   SessionSummary,
 } from '@/types/api';
@@ -24,19 +24,31 @@ export function getMessages(
   );
 }
 
-export function createSession(message: string): Promise<ChatResponse> {
+/**
+ * Open a new chat session with an initial message. Server streams the reply
+ * as Server-Sent Events: session → text_delta* → product* → done (or error).
+ */
+export function createSessionStream(
+  message: string,
+  handlers: ChatStreamHandlers,
+): ChatStreamController {
   const body: ChatRequest = { message };
-  return api.post<ChatResponse>('/v1/chat/sessions', body);
+  return streamChatSSE('/v1/chat/sessions', body, handlers);
 }
 
-export function sendMessage(
+/**
+ * Continue an existing chat session. Same SSE event sequence as createSessionStream.
+ */
+export function sendMessageStream(
   sessionId: string,
   message: string,
-): Promise<ChatResponse> {
+  handlers: ChatStreamHandlers,
+): ChatStreamController {
   const body: ChatRequest = { message };
-  return api.post<ChatResponse>(
+  return streamChatSSE(
     `/v1/chat/sessions/${encodeURIComponent(sessionId)}/messages`,
     body,
+    handlers,
   );
 }
 

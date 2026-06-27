@@ -22,8 +22,7 @@ import { FeedbackTrigger } from '@/components/feedback-trigger';
 import { PRODUCT_CARD_WIDTH, ProductCard } from '@/components/product-card';
 import { TopBar } from '@/components/top-bar';
 import { Haptic, IOSColors, IOSFont, IOSText } from '@/constants/ios';
-import { ApiError } from '@/lib/api';
-import { createSession } from '@/lib/chat';
+import { createSessionStream } from '@/lib/chat';
 import { buildFilterLabel, PRICE_MAX, useFilter } from '@/state/filter';
 import { MOCK_PRODUCTS, type Product } from '@/state/products';
 
@@ -255,15 +254,22 @@ export default function ChatEntryScreen() {
     }
 
     setText('');
-    try {
-      const res = await createSession(trimmed);
-      router.push(`/chat/${res.session_id}` as never);
-    } catch (e) {
-      const detail = e instanceof ApiError ? e.detail : '메시지 전송에 실패했어요.';
-      Haptic.error();
-      Alert.alert('전송 실패', detail);
-      setText(trimmed);
-    }
+    let routed = false;
+    const controller = createSessionStream(trimmed, {
+      onSession: (sessionId) => {
+        if (routed) return;
+        routed = true;
+        router.push(`/chat/${sessionId}` as never);
+      },
+      onError: (detail) => {
+        Haptic.error();
+        Alert.alert('전송 실패', detail);
+        if (!routed) setText(trimmed);
+      },
+    });
+    // Stream keeps running after we route; the detail screen refetches
+    // messages on mount once the assistant turn has been persisted.
+    void controller.promise.catch(() => {});
   };
 
   const handleSampleMood = (color: string) => {
