@@ -18,11 +18,13 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { Banner } from '@/components/banner';
 import { FeedbackTrigger } from '@/components/feedback-trigger';
 import { PRODUCT_CARD_WIDTH, ProductCard } from '@/components/product-card';
 import { TopBar } from '@/components/top-bar';
 import { Haptic, IOSColors, IOSFont, IOSText } from '@/constants/ios';
 import { createSessionStream } from '@/lib/chat';
+import { useBanner } from '@/state/banner';
 import { buildFilterLabel, PRICE_MAX, useFilter } from '@/state/filter';
 import { MOCK_PRODUCTS, type Product } from '@/state/products';
 
@@ -100,6 +102,7 @@ function containsVisionLink(text: string | undefined): boolean {
 export default function ChatEntryScreen() {
   const insets = useSafeAreaInsets();
   const { value: filter, setValue: setFilter } = useFilter();
+  const { active: activeBanner, show: showBanner, clear: clearBanner } = useBanner();
   const [text, setText] = useState('');
   const [pickedImage, setPickedImage] = useState<string | null>(null);
   const [messages, setMessages] = useState<Turn[]>([]);
@@ -254,6 +257,11 @@ export default function ChatEntryScreen() {
     }
 
     setText('');
+    sendNewSession(trimmed);
+  };
+
+  const sendNewSession = (trimmed: string) => {
+    clearBanner('request-failure');
     let routed = false;
     const controller = createSessionStream(trimmed, {
       onSession: (sessionId) => {
@@ -261,10 +269,18 @@ export default function ChatEntryScreen() {
         routed = true;
         router.push(`/chat/${sessionId}` as never);
       },
-      onError: (detail) => {
+      onError: () => {
         Haptic.error();
-        Alert.alert('전송 실패', detail);
         if (!routed) setText(trimmed);
+        showBanner({
+          id: 'request-failure',
+          priority: 'error',
+          title: '요청을 처리하지 못했어요',
+          action: {
+            label: '다시 시도',
+            onPress: () => sendNewSession(trimmed),
+          },
+        });
       },
     });
     // Stream keeps running after we route; the detail screen refetches
@@ -618,6 +634,9 @@ export default function ChatEntryScreen() {
             </View>
           )}
 
+          <Banner />
+
+          {!activeBanner && (
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -647,6 +666,7 @@ export default function ChatEntryScreen() {
                 </Pressable>
               ))}
           </ScrollView>
+          )}
 
           {pickedImage && (
             <View style={styles.previewRow}>
