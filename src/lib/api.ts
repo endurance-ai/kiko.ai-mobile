@@ -43,8 +43,16 @@ interface RequestOptions {
   auth?: boolean;
 }
 
-async function refreshAccessToken(): Promise<string | null> {
-  if (!hooks) return null;
+export function getCurrentAccessToken(): string | null {
+  return hooks?.getAccessToken() ?? null;
+}
+
+export async function notifyUnauthorized(): Promise<void> {
+  if (hooks) await hooks.onUnauthorized();
+}
+
+export function refreshAccessToken(): Promise<string | null> {
+  if (!hooks) return Promise.resolve(null);
   if (refreshInFlight) return refreshInFlight;
 
   refreshInFlight = (async () => {
