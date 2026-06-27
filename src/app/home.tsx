@@ -537,7 +537,6 @@ export default function ChatEntryScreen() {
                             size="small"
                             color={IOSColors.secondaryLabel}
                           />
-                          <Text style={styles.botStatusText}>{SEARCH_HINT}</Text>
                         </View>
                       )
                     )}
