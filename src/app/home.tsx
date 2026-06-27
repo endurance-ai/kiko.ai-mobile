@@ -1,7 +1,7 @@
 import { GlassView } from 'expo-glass-effect';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -25,7 +25,7 @@ import { FeedbackTrigger } from '@/components/feedback-trigger';
 import { PRODUCT_CARD_WIDTH, ProductCard } from '@/components/product-card';
 import { TopBar } from '@/components/top-bar';
 import { Haptic, IOSColors, IOSFont, IOSText } from '@/constants/ios';
-import { createSessionStream, sendMessageStream } from '@/lib/chat';
+import { createSessionStream, getMessages, sendMessageStream } from '@/lib/chat';
 import type { ChatStreamController } from '@/lib/sse';
 import { useBanner } from '@/state/banner';
 import { buildFilterLabel, PRICE_MAX, useFilter } from '@/state/filter';
@@ -111,6 +111,43 @@ function containsVisionLink(text: string | undefined): boolean {
   return !!text && VISION_LINK_RE.test(text);
 }
 
+/**
+ * Convert server message history (chronological) into the home Turn list.
+ * Each (user, assistant) pair becomes a single completed SSE-style turn.
+ * Trailing user message with no reply (rare) still renders as a turn with
+ * empty assistant content so the user input is visible.
+ */
+function messageItemsToTurns(
+  items: import('@/types/api').MessageItem[],
+  nextIdRef: { current: number },
+): Turn[] {
+  const sorted = [...items].sort(
+    (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+  );
+  const turns: Turn[] = [];
+  let i = 0;
+  while (i < sorted.length) {
+    const userMsg = sorted[i];
+    if (userMsg.role !== 'user') {
+      i++;
+      continue;
+    }
+    const assistantMsg =
+      sorted[i + 1]?.role === 'assistant' ? sorted[i + 1] : null;
+    turns.push({
+      id: nextIdRef.current++,
+      user: { text: userMsg.content },
+      status: 'results',
+      isStream: true,
+      streamText: assistantMsg?.content ?? '',
+      streamProducts: assistantMsg?.product_refs ?? [],
+      streamDone: true,
+    });
+    i += assistantMsg ? 2 : 1;
+  }
+  return turns;
+}
+
 // Best-effort heuristic for fashion / shopping intent. Used to pick the
 // transient bot status copy while waiting for the first text_delta. Not a
 // gate on anything else — false negatives just fall back to a generic line.
@@ -122,6 +159,7 @@ function looksLikeFashionQuery(text: string): boolean {
 
 export default function ChatEntryScreen() {
   const insets = useSafeAreaInsets();
+  const { session: sessionParam } = useLocalSearchParams<{ session?: string }>();
   const { value: filter, setValue: setFilter } = useFilter();
   const { active: activeBanner, show: showBanner, clear: clearBanner } = useBanner();
   const [text, setText] = useState('');
@@ -135,6 +173,27 @@ export default function ChatEntryScreen() {
 
   useEffect(() => () => streamRef.current?.cancel(), []);
 
+  // Load a past session into the home turn list (sidebar tap routes here
+  // with ?session=<uuid> so the chat continues on the same surface).
+  useEffect(() => {
+    if (!sessionParam) return;
+    let cancelled = false;
+    sessionIdRef.current = sessionParam;
+    (async () => {
+      try {
+        const res = await getMessages(sessionParam, { limit: 50 });
+        if (cancelled) return;
+        const turns = messageItemsToTurns(res.messages, nextIdRef);
+        setMessages(turns);
+      } catch {
+        // ignore — empty state will show
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionParam]);
+
   const lastTurn = messages[messages.length - 1] ?? null;
   const lastStatus = lastTurn?.status ?? null;
   const hasConversation = messages.length > 0;
@@ -145,6 +204,32 @@ export default function ChatEntryScreen() {
   const hasResults = lastStatus === 'results';
   const isEmpty = lastStatus === 'empty';
   const canSend = !isBusy && (text.trim().length > 0 || pickedImage !== null);
+  // Unified pinned attachment: works for both mock products and SSE products.
+  // SSE pins use a composite id "<turnId>:<index>" so we look up by parsing it.
+  const pinnedAttachment: {
+    thumbColor?: string;
+    imageUrl?: string;
+    label: string;
+  } | null = (() => {
+    if (!pinnedId) return null;
+    const mockHit = lastTurn?.results?.find((p) => p.id === pinnedId);
+    if (mockHit) {
+      return { thumbColor: mockHit.colorHint, label: mockHit.brand };
+    }
+    const [maybeTurnId, maybeIdx] = pinnedId.split(':');
+    if (maybeTurnId && maybeIdx) {
+      const turn = messages.find((t) => String(t.id) === maybeTurnId);
+      const sse = turn?.streamProducts?.[Number(maybeIdx)];
+      if (sse) {
+        // caption is HTML-ish; the brand line is usually the bold prefix.
+        const stripped = sse.caption.replace(/<[^>]+>/g, '').trim();
+        const label = stripped.split('\n')[0] || '선택한 상품';
+        return { imageUrl: sse.image_url, label: label.slice(0, 20) };
+      }
+    }
+    return null;
+  })();
+  // Legacy name kept for the few mock-only branches still using `.colorHint`.
   const pinnedProduct = pinnedId
     ? lastTurn?.results?.find((p) => p.id === pinnedId) ?? null
     : null;
@@ -290,10 +375,18 @@ export default function ChatEntryScreen() {
 
   const runStreamingTurn = (trimmed: string) => {
     clearBanner('request-failure');
+    const attachment = pinnedAttachment; // snapshot before we clear it
     const turnId = nextIdRef.current++;
     const turn: Turn = {
       id: turnId,
-      user: { text: trimmed },
+      user: {
+        text: trimmed,
+        imageUri: attachment?.imageUrl,
+        colorHint:
+          !attachment?.imageUrl && attachment?.thumbColor
+            ? attachment.thumbColor
+            : undefined,
+      },
       status: 'searching',
       isStream: true,
       streamText: '',
@@ -304,6 +397,10 @@ export default function ChatEntryScreen() {
         : '키코가 생각 중…',
     };
     setMessages((prev) => [...prev, turn]);
+    if (attachment) setPinnedId(null);
+    // Server takes plain text; if a product is pinned, prefix the message so
+    // the ReAct loop anchors to it.
+    const serverText = attachment ? `[${attachment.label}] ${trimmed}` : trimmed;
 
     const patch = (mut: (t: Turn) => Partial<Turn>) =>
       setMessages((prev) =>
@@ -343,8 +440,8 @@ export default function ChatEntryScreen() {
     };
 
     streamRef.current = sessionIdRef.current
-      ? sendMessageStream(sessionIdRef.current, trimmed, handlers)
-      : createSessionStream(trimmed, handlers);
+      ? sendMessageStream(sessionIdRef.current, serverText, handlers)
+      : createSessionStream(serverText, handlers);
     void streamRef.current.promise.catch(() => {});
   };
 
@@ -754,16 +851,26 @@ export default function ChatEntryScreen() {
             isBusy && styles.composerBusy,
           ]}
         >
-          {pinnedProduct && (
+          {pinnedAttachment && (
             <View style={styles.attachmentRow}>
               <View style={styles.attachmentChip}>
-                <View
-                  style={[
-                    styles.attachmentThumb,
-                    { backgroundColor: pinnedProduct.colorHint },
-                  ]}
-                />
-                <Text style={styles.attachmentBrand}>{pinnedProduct.brand}</Text>
+                {pinnedAttachment.imageUrl ? (
+                  <ExpoImage
+                    source={pinnedAttachment.imageUrl}
+                    style={styles.attachmentThumb}
+                    contentFit="cover"
+                  />
+                ) : (
+                  <View
+                    style={[
+                      styles.attachmentThumb,
+                      { backgroundColor: pinnedAttachment.thumbColor ?? IOSColors.tertiarySystemBackground },
+                    ]}
+                  />
+                )}
+                <Text style={styles.attachmentBrand} numberOfLines={1}>
+                  {pinnedAttachment.label}
+                </Text>
                 <Pressable hitSlop={6} onPress={() => setPinnedId(null)}>
                   <SymbolView
                     name="xmark.circle.fill"

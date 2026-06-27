@@ -96,9 +96,8 @@ export default function SidebarScreen() {
     Haptic.medium();
     animateClose(() => {
       router.back();
-      // Already on /home in most cases — just close the sidebar.
-      // If the user came from a chat/[id], hop back to /home for a fresh start.
-      setTimeout(() => router.dismissTo('/home'), 30);
+      // Reset home into the empty 'new chat' surface.
+      setTimeout(() => router.replace('/home' as never), 30);
     });
   };
 
@@ -106,8 +105,12 @@ export default function SidebarScreen() {
     Haptic.light();
     animateClose(() => {
       router.back();
-      // Push so the chat screen keeps a back history to /home.
-      setTimeout(() => router.push(`/chat/${sessionId}` as never), 30);
+      // Reuse the home surface (top bar + composer) — just hydrate it with
+      // the picked session's messages via the ?session= query param.
+      setTimeout(
+        () => router.replace(`/home?session=${sessionId}` as never),
+        30,
+      );
     });
   };
 
