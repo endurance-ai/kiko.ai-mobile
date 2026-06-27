@@ -5,7 +5,6 @@ import { SymbolView } from 'expo-symbols';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   KeyboardAvoidingView,
   Platform,
@@ -17,10 +16,12 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { Banner } from '@/components/banner';
 import { FLOATING_HEADER_OFFSET, FloatingHeader } from '@/components/floating-header';
 import { Haptic, IOSColors, IOSFont, IOSText } from '@/constants/ios';
 import { getMessages, sendMessageStream } from '@/lib/chat';
 import type { ChatStreamController } from '@/lib/sse';
+import { useBanner } from '@/state/banner';
 import type { MessageItem, ProductRef } from '@/types/api';
 
 const PAGE_SIZE = 30;
@@ -79,6 +80,7 @@ function makeLocalMessage(role: 'user' | 'assistant', content: string, productRe
 export default function ChatDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
+  const { show: showBanner, clear: clearBanner } = useBanner();
   const [messages, setMessages] = useState<MessageItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -130,56 +132,74 @@ export default function ChatDetailScreen() {
     };
   }, []);
 
+  const sendText = useCallback(
+    (trimmed: string) => {
+      if (!id) return;
+      clearBanner('request-failure');
+      setSending(true);
+
+      const userMsg = makeLocalMessage('user', trimmed);
+      const assistantMsg = makeLocalMessage('assistant', '');
+      setMessages((prev) => [...(prev ?? []), userMsg, assistantMsg]);
+      scrollToEnd();
+
+      const updateAssistant = (mut: (m: MessageItem) => MessageItem) => {
+        setMessages((prev) =>
+          (prev ?? []).map((m) =>
+            m.message_id === assistantMsg.message_id ? mut(m) : m,
+          ),
+        );
+      };
+
+      streamRef.current = sendMessageStream(id, trimmed, {
+        onTextDelta: (delta) => {
+          updateAssistant((m) => ({ ...m, content: m.content + delta }));
+          scrollToEnd();
+        },
+        onProduct: (product) => {
+          updateAssistant((m) => ({
+            ...m,
+            product_refs: [...(m.product_refs ?? []), product],
+          }));
+          scrollToEnd();
+        },
+        onDone: () => {
+          setSending(false);
+          streamRef.current = null;
+        },
+        onError: () => {
+          setMessages((prev) =>
+            (prev ?? []).filter(
+              (m) =>
+                m.message_id !== userMsg.message_id &&
+                m.message_id !== assistantMsg.message_id,
+            ),
+          );
+          setSending(false);
+          streamRef.current = null;
+          Haptic.error();
+          showBanner({
+            id: 'request-failure',
+            priority: 'error',
+            title: '요청을 처리하지 못했어요',
+            action: {
+              label: '다시 시도',
+              onPress: () => sendText(trimmed),
+            },
+          });
+        },
+      });
+    },
+    [id, scrollToEnd, showBanner, clearBanner],
+  );
+
   const handleSend = useCallback(() => {
-    if (!id) return;
     const trimmed = text.trim();
     if (!trimmed || sending) return;
     Haptic.medium();
     setText('');
-    setSending(true);
-
-    const userMsg = makeLocalMessage('user', trimmed);
-    const assistantMsg = makeLocalMessage('assistant', '');
-    setMessages((prev) => [...(prev ?? []), userMsg, assistantMsg]);
-    scrollToEnd();
-
-    const updateAssistant = (mut: (m: MessageItem) => MessageItem) => {
-      setMessages((prev) =>
-        (prev ?? []).map((m) => (m.message_id === assistantMsg.message_id ? mut(m) : m)),
-      );
-    };
-
-    streamRef.current = sendMessageStream(id, trimmed, {
-      onTextDelta: (delta) => {
-        updateAssistant((m) => ({ ...m, content: m.content + delta }));
-        scrollToEnd();
-      },
-      onProduct: (product) => {
-        updateAssistant((m) => ({
-          ...m,
-          product_refs: [...(m.product_refs ?? []), product],
-        }));
-        scrollToEnd();
-      },
-      onDone: () => {
-        setSending(false);
-        streamRef.current = null;
-      },
-      onError: (detail) => {
-        // Drop the optimistic pair so the user can retry.
-        setMessages((prev) =>
-          (prev ?? []).filter(
-            (m) =>
-              m.message_id !== userMsg.message_id &&
-              m.message_id !== assistantMsg.message_id,
-          ),
-        );
-        setSending(false);
-        streamRef.current = null;
-        Alert.alert('전송 실패', detail);
-      },
-    });
-  }, [id, text, sending, scrollToEnd]);
+    sendText(trimmed);
+  }, [text, sending, sendText]);
 
   const canSend = !sending && text.trim().length > 0;
   const isLoading = messages === null && !error;
@@ -241,6 +261,7 @@ export default function ChatDetailScreen() {
         pointerEvents="box-none"
       >
         <View style={[styles.composerWrap, { paddingBottom: composerBottom }]}>
+          <Banner />
           <GlassView glassEffectStyle="clear" style={styles.composer}>
             <TextInput
               value={text}
