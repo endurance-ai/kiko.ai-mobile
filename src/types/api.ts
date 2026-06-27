@@ -187,3 +187,17 @@ export interface LinkCheckResponse {
   http_status: number | null;
   alternative_url: string | null;
 }
+
+export type DevicePlatform = 'ios' | 'android';
+
+export interface RegisterDeviceRequest {
+  apns_token: string;
+  platform?: DevicePlatform;
+  app_version?: string;
+  device_model?: string;
+}
+
+export interface RegisterDeviceResponse {
+  device_id: string;
+  registered_at: string;
+}
