@@ -359,14 +359,15 @@ export default function ChatEntryScreen() {
     const label = chip?.label;
     if (!label) return;
     Haptic.medium();
-    // When a product is pinned, anchor the critique to it: send both the
-    // product thumbnail and the chip label as a single user message so the
-    // bubble carries the visual context of what's being refined.
+    // For real SSE turns, send the chip label as the next user message —
+    // server's ReAct loop handles the refine intent. The pinned-product
+    // anchor pattern stays available for the mock pipeline if needed.
+    if (sessionIdRef.current) {
+      runStreamingTurn(label);
+      return;
+    }
     if (pinnedProduct) {
-      startTurn({
-        text: label,
-        colorHint: pinnedProduct.colorHint,
-      });
+      startTurn({ text: label, colorHint: pinnedProduct.colorHint });
     } else {
       startTurn({ text: label });
     }
@@ -543,7 +544,13 @@ export default function ChatEntryScreen() {
                 {turn.isStream && (
                   <View style={styles.streamBlock}>
                     {turn.streamText ? (
-                      <Text style={styles.streamText}>{turn.streamText}</Text>
+                      <View style={styles.botBubbleRow}>
+                        <View style={styles.botBubble}>
+                          <Text style={styles.botBubbleText}>
+                            {turn.streamText}
+                          </Text>
+                        </View>
+                      </View>
                     ) : (
                       !turn.streamDone && (
                         <View style={styles.botStatusRow}>
@@ -565,25 +572,50 @@ export default function ChatEntryScreen() {
                         showsHorizontalScrollIndicator={false}
                         contentContainerStyle={styles.cardRow}
                       >
-                        {turn.streamProducts.map((p, i) => (
-                          <View
-                            key={`${turn.id}:${i}`}
-                            style={styles.streamProductCard}
-                          >
-                            <ExpoImage
-                              source={p.image_url}
-                              style={styles.streamProductImage}
-                              contentFit="cover"
-                            />
-                            <Text
-                              style={styles.streamProductCaption}
-                              numberOfLines={3}
-                            >
-                              {p.caption.replace(/<[^>]+>/g, '')}
-                            </Text>
-                          </View>
-                        ))}
+                        {turn.streamProducts.map((p, i) => {
+                          const key = `${turn.id}:${i}`;
+                          const pinned = pinnedId === key;
+                          return (
+                            <View key={key} style={styles.streamProductCard}>
+                              <View style={styles.streamProductImageWrap}>
+                                <ExpoImage
+                                  source={p.image_url}
+                                  style={styles.streamProductImage}
+                                  contentFit="cover"
+                                />
+                                <Pressable
+                                  hitSlop={8}
+                                  style={styles.streamPinBtn}
+                                  onPress={() => {
+                                    Haptic.selection();
+                                    setPinnedId((prev) =>
+                                      prev === key ? null : key,
+                                    );
+                                  }}
+                                >
+                                  <SymbolView
+                                    name={pinned ? 'checkmark' : 'plus'}
+                                    size={14}
+                                    tintColor="#1C1C1E"
+                                    weight="bold"
+                                  />
+                                </Pressable>
+                              </View>
+                              <Text
+                                style={styles.streamProductCaption}
+                                numberOfLines={3}
+                              >
+                                {p.caption.replace(/<[^>]+>/g, '')}
+                              </Text>
+                            </View>
+                          );
+                        })}
                       </ScrollView>
+                    )}
+                    {turn.streamDone && (
+                      <View style={styles.feedbackTriggerRow}>
+                        <FeedbackTrigger turnKey={`stream:${turn.id}`} />
+                      </View>
                     )}
                   </View>
                 )}
@@ -1037,11 +1069,22 @@ const styles = StyleSheet.create({
     marginTop: 4,
     gap: 14,
   },
-  streamText: {
+  botBubbleRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 4,
+  },
+  botBubble: {
+    maxWidth: '85%',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 18,
+    borderTopLeftRadius: 6,
+    backgroundColor: IOSColors.systemBackground,
+  },
+  botBubbleText: {
     ...IOSText.body,
     color: IOSColors.label,
     fontFamily: IOSFont.rounded,
-    paddingHorizontal: 4,
     lineHeight: 22,
   },
   streamProductCard: {
@@ -1050,15 +1093,31 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     overflow: 'hidden',
   },
-  streamProductImage: {
+  streamProductImageWrap: {
     width: 140,
     height: 180,
+    position: 'relative',
+  },
+  streamProductImage: {
+    width: '100%',
+    height: '100%',
   },
   streamProductCaption: {
     ...IOSText.caption1,
     color: IOSColors.label,
     fontFamily: IOSFont.rounded,
     padding: 8,
+  },
+  streamPinBtn: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   agentRow: {
     flexDirection: 'row',
