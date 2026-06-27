@@ -2,6 +2,7 @@ import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import { useColorScheme } from 'react-native';
 
 import { AuthProvider } from '@/state/auth';
+import { BannerProvider } from '@/state/banner';
 import { FeedbackProvider } from '@/state/feedback';
 import { FilterProvider } from '@/state/filter';
 import { SubscriptionProvider } from '@/state/subscription';
@@ -12,10 +13,11 @@ export default function RootLayout() {
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <AuthProvider>
-        <FilterProvider>
-          <WishlistProvider>
-            <SubscriptionProvider>
-              <FeedbackProvider>
+        <BannerProvider>
+          <FilterProvider>
+            <WishlistProvider>
+              <SubscriptionProvider>
+                <FeedbackProvider>
                 <Stack screenOptions={{ headerShown: false }}>
                   <Stack.Screen name="index" />
                   <Stack.Screen name="login" options={{ animation: 'fade' }} />
@@ -58,10 +60,11 @@ export default function RootLayout() {
                     }}
                   />
                 </Stack>
-              </FeedbackProvider>
-            </SubscriptionProvider>
-          </WishlistProvider>
-        </FilterProvider>
+                </FeedbackProvider>
+              </SubscriptionProvider>
+            </WishlistProvider>
+          </FilterProvider>
+        </BannerProvider>
       </AuthProvider>
     </ThemeProvider>
   );
