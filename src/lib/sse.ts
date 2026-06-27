@@ -11,6 +11,8 @@ export interface ChatStreamHandlers {
   onSession?: (sessionId: string) => void;
   onTextDelta?: (delta: string) => void;
   onProduct?: (product: ProductRef) => void;
+  /** Emitted after products are persisted as a result set (server PR #96). */
+  onSearch?: (searchId: string) => void;
   onDone?: () => void;
   onError?: (detail: string) => void;
 }
@@ -81,6 +83,11 @@ function dispatch(event: SseEvent, handlers: ChatStreamHandlers): boolean {
         caption: typeof data.caption === 'string' ? data.caption : '',
       };
       handlers.onProduct?.(product);
+      return false;
+    }
+    case 'search': {
+      const id = data.search_id;
+      if (typeof id === 'string') handlers.onSearch?.(id);
       return false;
     }
     case 'done':

@@ -74,6 +74,8 @@ type Turn = {
   streamDone?: boolean;
   /** Placeholder shown while waiting for the first text_delta. */
   streamPlaceholder?: string;
+  /** search_id from the server (SSE 'search' event) — tags feedback / view records. */
+  streamSearchId?: string;
 };
 
 const SAMPLE_MOODS: { id: string; color: string }[] = [
@@ -471,6 +473,9 @@ export default function ChatEntryScreen() {
           streamProducts: [...(t.streamProducts ?? []), product],
         }));
       },
+      onSearch: (searchId: string) => {
+        patch(() => ({ streamSearchId: searchId }));
+      },
       onDone: () => {
         patch(() => ({ streamDone: true, status: 'results' as const }));
         streamRef.current = null;
@@ -763,7 +768,10 @@ export default function ChatEntryScreen() {
                     )}
                     {turn.streamDone && (
                       <View style={styles.feedbackTriggerRow}>
-                        <FeedbackTrigger turnKey={`stream:${turn.id}`} />
+                        <FeedbackTrigger
+                          turnKey={`stream:${turn.id}`}
+                          searchId={turn.streamSearchId}
+                        />
                       </View>
                     )}
                   </View>
