@@ -8,15 +8,22 @@ import { useFeedback } from '@/state/feedback';
 type Props = {
   /** Stable identifier for this agent turn (e.g. "search:42" / "fallback:42"). */
   turnKey: string;
+  /** Optional server search_id — when present, propagated to POST /v1/feedback. */
+  searchId?: string;
 };
 
-export function FeedbackTrigger({ turnKey }: Props) {
+export function FeedbackTrigger({ turnKey, searchId }: Props) {
   const { getSubmitted } = useFeedback();
   const submitted = getSubmitted(turnKey);
 
   const open = (rating: 'positive' | 'negative') => {
     Haptic.light();
-    router.push(`/feedback?turn=${encodeURIComponent(turnKey)}&rating=${rating}`);
+    const searchPart = searchId
+      ? `&search=${encodeURIComponent(searchId)}`
+      : '';
+    router.push(
+      `/feedback?turn=${encodeURIComponent(turnKey)}&rating=${rating}${searchPart}`,
+    );
   };
 
   return (
