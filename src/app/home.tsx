@@ -496,9 +496,18 @@ export default function ChatEntryScreen() {
       },
     };
 
+    // Filter values from the composer chip — '무관' / max slider = no ceiling
+    // so the server sees no constraint. priceMax is stored in 만원 units; the
+    // server expects KRW 원 — multiply by 10,000.
+    const filterOpts = {
+      gender: filter.gender === 'any' ? undefined : filter.gender,
+      priceMaxKrw:
+        filter.priceMax >= PRICE_MAX ? undefined : filter.priceMax * 10_000,
+    };
+
     streamRef.current = sessionIdRef.current
-      ? sendMessageStream(sessionIdRef.current, serverText, handlers)
-      : createSessionStream(serverText, handlers);
+      ? sendMessageStream(sessionIdRef.current, serverText, handlers, filterOpts)
+      : createSessionStream(serverText, handlers, filterOpts);
     void streamRef.current.promise.catch(() => {});
   };
 
@@ -729,9 +738,30 @@ export default function ChatEntryScreen() {
                         {turn.streamProducts.map((p, i) => {
                           const key = `${turn.id}:${i}`;
                           const pinned = pinnedId === key;
+                          const productId = p.product_id;
+                          const goPdp = () => {
+                            if (productId == null) return;
+                            Haptic.light();
+                            const sid = sessionIdRef.current;
+                            const search = turn.streamSearchId;
+                            const params = [
+                              sid ? `session=${encodeURIComponent(sid)}` : '',
+                              search ? `source=${encodeURIComponent(search)}` : '',
+                            ]
+                              .filter(Boolean)
+                              .join('&');
+                            const url = params
+                              ? `/product/${productId}?${params}`
+                              : `/product/${productId}`;
+                            router.push(url as never);
+                          };
                           return (
                             <View key={key} style={styles.streamProductCard}>
-                              <View style={styles.streamProductImageWrap}>
+                              <Pressable
+                                style={styles.streamProductImageWrap}
+                                onPress={goPdp}
+                                disabled={productId == null}
+                              >
                                 <ExpoImage
                                   source={p.image_url}
                                   style={styles.streamProductImage}
@@ -754,13 +784,15 @@ export default function ChatEntryScreen() {
                                     weight="bold"
                                   />
                                 </Pressable>
-                              </View>
-                              <Text
-                                style={styles.streamProductCaption}
-                                numberOfLines={3}
-                              >
-                                {p.caption.replace(/<[^>]+>/g, '')}
-                              </Text>
+                              </Pressable>
+                              <Pressable onPress={goPdp} disabled={productId == null}>
+                                <Text
+                                  style={styles.streamProductCaption}
+                                  numberOfLines={3}
+                                >
+                                  {p.caption.replace(/<[^>]+>/g, '')}
+                                </Text>
+                              </Pressable>
                             </View>
                           );
                         })}
