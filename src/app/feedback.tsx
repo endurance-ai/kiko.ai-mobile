@@ -74,9 +74,9 @@ export default function FeedbackScreen() {
         rating,
         reasons: picked,
         comment: note.trim(),
-        // Per design notice: submitting implies the conversation snapshot may
-        // be used for model improvement.
-        consent: true,
+        // TEMP: false until server-side Langfuse export 500 is fixed.
+        // Will revert to true once 재관 confirms the export path is safe.
+        consent: false,
       });
       rememberSubmitted({ turnKey, rating, reasons: picked, note: note.trim() });
       Haptic.success();
