@@ -1,8 +1,8 @@
-import { GlassView } from 'expo-glass-effect';
-import { Image } from 'expo-image';
-import { useLocalSearchParams } from 'expo-router';
-import { SymbolView } from 'expo-symbols';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { GlassView } from "expo-glass-effect";
+import { Image } from "expo-image";
+import { useLocalSearchParams } from "expo-router";
+import { SymbolView } from "expo-symbols";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -13,32 +13,39 @@ import {
   Text,
   TextInput,
   View,
-} from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { Banner } from '@/components/banner';
-import { FLOATING_HEADER_OFFSET, FloatingHeader } from '@/components/floating-header';
-import { Haptic, IOSColors, IOSFont, IOSText } from '@/constants/ios';
-import { getMessages, sendMessageStream } from '@/lib/chat';
-import type { ChatStreamController } from '@/lib/sse';
-import { useBanner } from '@/state/banner';
-import type { MessageItem, ProductRef } from '@/types/api';
+import { Banner } from "@/components/banner";
+import {
+  FLOATING_HEADER_OFFSET,
+  FloatingHeader,
+} from "@/components/floating-header";
+import { Haptic, IOSColors, IOSFont, IOSText } from "@/constants/ios";
+import { getMessages, sendMessageStream } from "@/lib/chat";
+import type { ChatStreamController } from "@/lib/sse";
+import { useBanner } from "@/state/banner";
+import type { MessageItem, ProductRef } from "@/types/api";
 
 const PAGE_SIZE = 30;
 
 function ProductCardSmall({ product }: { product: ProductRef }) {
   return (
     <View style={styles.productCard}>
-      <Image source={product.image_url} style={styles.productImage} contentFit="cover" />
+      <Image
+        source={product.image_url}
+        style={styles.productImage}
+        contentFit="cover"
+      />
       <Text style={styles.productCaption} numberOfLines={3}>
-        {product.caption.replace(/<[^>]+>/g, '')}
+        {product.caption.replace(/<[^>]+>/g, "")}
       </Text>
     </View>
   );
 }
 
 function MessageRow({ item }: { item: MessageItem }) {
-  const isUser = item.role === 'user';
+  const isUser = item.role === "user";
   return (
     <View style={[styles.msg, isUser ? styles.msgUser : styles.msgAssistant]}>
       <View
@@ -67,7 +74,11 @@ function MessageRow({ item }: { item: MessageItem }) {
   );
 }
 
-function makeLocalMessage(role: 'user' | 'assistant', content: string, productRefs: ProductRef[] | null = null): MessageItem {
+function makeLocalMessage(
+  role: "user" | "assistant",
+  content: string,
+  productRefs: ProductRef[] | null = null,
+): MessageItem {
   return {
     message_id: `local:${role}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`,
     role,
@@ -85,7 +96,7 @@ export default function ChatDetailScreen() {
   const [error, setError] = useState<string | null>(null);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [text, setText] = useState('');
+  const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const listRef = useRef<FlatList<MessageItem> | null>(null);
 
@@ -97,7 +108,7 @@ export default function ChatDetailScreen() {
       setMessages(res.messages);
       setNextCursor(res.next_cursor);
     } catch (e) {
-      setError(e instanceof Error ? e.message : '불러오기 실패');
+      setError(e instanceof Error ? e.message : "불러오기 실패");
       setMessages([]);
     }
   }, [id]);
@@ -106,7 +117,10 @@ export default function ChatDetailScreen() {
     if (!id || !nextCursor || loadingMore) return;
     setLoadingMore(true);
     try {
-      const res = await getMessages(id, { cursor: nextCursor, limit: PAGE_SIZE });
+      const res = await getMessages(id, {
+        cursor: nextCursor,
+        limit: PAGE_SIZE,
+      });
       setMessages((prev) => [...(prev ?? []), ...res.messages]);
       setNextCursor(res.next_cursor);
     } catch {
@@ -135,11 +149,11 @@ export default function ChatDetailScreen() {
   const sendText = useCallback(
     (trimmed: string) => {
       if (!id) return;
-      clearBanner('request-failure');
+      clearBanner("request-failure");
       setSending(true);
 
-      const userMsg = makeLocalMessage('user', trimmed);
-      const assistantMsg = makeLocalMessage('assistant', '');
+      const userMsg = makeLocalMessage("user", trimmed);
+      const assistantMsg = makeLocalMessage("assistant", "");
       setMessages((prev) => [...(prev ?? []), userMsg, assistantMsg]);
       scrollToEnd();
 
@@ -179,11 +193,11 @@ export default function ChatDetailScreen() {
           streamRef.current = null;
           Haptic.error();
           showBanner({
-            id: 'request-failure',
-            priority: 'error',
-            title: '요청을 처리하지 못했어요',
+            id: "request-failure",
+            priority: "error",
+            title: "요청을 처리하지 못했어요",
             action: {
-              label: '다시 시도',
+              label: "다시 시도",
               onPress: () => sendText(trimmed),
             },
           });
@@ -197,7 +211,7 @@ export default function ChatDetailScreen() {
     const trimmed = text.trim();
     if (!trimmed || sending) return;
     Haptic.medium();
-    setText('');
+    setText("");
     sendText(trimmed);
   }, [text, sending, sendText]);
 
@@ -245,18 +259,22 @@ export default function ChatDetailScreen() {
           ListEmptyComponent={
             isEmpty ? (
               <View style={styles.center}>
-                <Text style={styles.muted}>메시지를 입력해 대화를 시작해보세요</Text>
+                <Text style={styles.muted}>
+                  메시지를 입력해 대화를 시작해보세요
+                </Text>
               </View>
             ) : null
           }
           ListFooterComponent={
-            loadingMore ? <ActivityIndicator style={{ paddingVertical: 16 }} /> : null
+            loadingMore ? (
+              <ActivityIndicator style={{ paddingVertical: 16 }} />
+            ) : null
           }
         />
       )}
 
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={styles.composerFloat}
         pointerEvents="box-none"
       >
@@ -266,7 +284,9 @@ export default function ChatDetailScreen() {
             <TextInput
               value={text}
               onChangeText={setText}
-              placeholder={sending ? '키코가 답하는 중...' : '메시지를 입력하세요'}
+              placeholder={
+                sending ? "키코가 답하는 중..." : "메시지를 입력하세요"
+              }
               placeholderTextColor={IOSColors.placeholderText}
               style={styles.input}
               returnKeyType="send"
@@ -281,7 +301,10 @@ export default function ChatDetailScreen() {
               onPress={handleSend}
             >
               {sending ? (
-                <ActivityIndicator size="small" color={IOSColors.systemBackground} />
+                <ActivityIndicator
+                  size="small"
+                  color={IOSColors.systemBackground}
+                />
               ) : (
                 <SymbolView
                   name="arrow.up"
@@ -304,8 +327,8 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: IOSColors.secondarySystemBackground },
   center: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     paddingVertical: 80,
     gap: 8,
   },
@@ -331,13 +354,13 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   msgUser: {
-    alignItems: 'flex-end',
+    alignItems: "flex-end",
   },
   msgAssistant: {
-    alignItems: 'flex-start',
+    alignItems: "flex-start",
   },
   bubble: {
-    maxWidth: '80%',
+    maxWidth: "80%",
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 18,
@@ -362,16 +385,16 @@ const styles = StyleSheet.create({
     color: IOSColors.label,
   },
   productsRow: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 8,
     marginTop: 8,
-    flexWrap: 'wrap',
+    flexWrap: "wrap",
   },
   productCard: {
     width: 120,
     backgroundColor: IOSColors.systemBackground,
     borderRadius: 12,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   productImage: {
     width: 120,
@@ -384,7 +407,7 @@ const styles = StyleSheet.create({
     padding: 8,
   },
   composerFloat: {
-    position: 'absolute',
+    position: "absolute",
     left: 0,
     right: 0,
     bottom: 0,
@@ -395,14 +418,14 @@ const styles = StyleSheet.create({
     paddingTop: 8,
   },
   composer: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
+    flexDirection: "row",
+    alignItems: "flex-end",
     minHeight: 52,
     borderRadius: 26,
     paddingLeft: 16,
     paddingRight: 6,
     paddingVertical: 6,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   input: {
     flex: 1,
@@ -417,8 +440,8 @@ const styles = StyleSheet.create({
     height: 40,
     borderRadius: 20,
     backgroundColor: IOSColors.label,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     marginLeft: 6,
   },
   sendBtnDisabled: {

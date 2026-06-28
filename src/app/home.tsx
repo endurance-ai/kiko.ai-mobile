@@ -86,6 +86,33 @@ const SAMPLE_MOODS: { id: string; color: string }[] = [
 
 const SEARCH_HINT = '인디 · 빈티지 2,900+ 브랜드에서 찾는 중…';
 const ANALYZE_HINT = '사진 분석 중… 아이템 추출하고 있어';
+
+// Composer placeholder pools. Rotated by a ticker so the hint refreshes
+// while the user is reading. Sources of truth for all states below.
+const BUSY_GENERAL_HINTS = [
+  '키코가 3,200+ 브랜드에서 찾는 중…',
+  '당신 취향의 브랜드에서 찾는 중…',
+  '당신 취향의 디자이너를 찾는 중…',
+  '지금 막 나온 신상부터 살펴보는 중…',
+  '이미지에서 핏 · 색 · 무드를 읽는 중…',
+];
+const BUSY_CRITIQUE_HINTS = [
+  '더 디테일하게 찾는 중…',
+  '더 비슷하게 다시 찾아보는 중…',
+  '더 저렴한 가격으로 찾는 중…',
+  '조건을 좁혀서 정확하게 찾는 중…',
+];
+const IDLE_INITIAL_HINTS = [
+  '이미지/사진을 추가하거나 요청을 입력해보세요',
+  'SNS 링크를 넣어보세요',
+  '사진 한 장이면 충분해요',
+];
+const IDLE_AFTER_RESULTS_HINTS = [
+  '더 저렴한 것 찾아줘',
+  '더 비슷한 것 찾아줘',
+  '정확한 핏 요청하기',
+  '디테일한 차이를 설명하기',
+];
 const PICK_PROMPT = (n: number) => `이 사진에서 ${n}개 아이템 찾았어. 어떤 거 찾아줄까?`;
 const AGENT_INTRO_DEFAULT = '이런 거 어때? · 콕집기로 골라봐';
 const AGENT_INTRO_NARROWING = '이런 거 찾았어 · 근데 좀 갈리네';
@@ -230,6 +257,18 @@ export default function ChatEntryScreen() {
   const streamRef = useRef<ChatStreamController | null>(null);
 
   useEffect(() => () => streamRef.current?.cancel(), []);
+
+  // Rotating placeholder ticker. 2.5s cadence so users notice the variation
+  // without it feeling jittery. Module-level hint arrays index via tick % len.
+  const [hintTick, setHintTick] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setHintTick((n) => n + 1), 2500);
+    return () => clearInterval(t);
+  }, []);
+  // Sticky flag — set when the current send originated from a critique chip
+  // so the busy hints can swap to the critique-specific pool. Cleared on
+  // next non-critique send or when the stream ends.
+  const lastSendFromCritiqueRef = useRef(false);
 
   // Load a past session into the home turn list (sidebar tap routes here
   // with ?session=<uuid> so the chat continues on the same surface).
@@ -434,6 +473,7 @@ export default function ChatEntryScreen() {
     const trimmed = text.trim();
     const hasImage = pickedImage !== null;
     Haptic.medium();
+    lastSendFromCritiqueRef.current = false;
 
     // Gallery uploads still need /v1/uploads (not deployed yet) — keep the
     // mock pipeline for now. Plain text (including Pinterest / Instagram
@@ -584,6 +624,7 @@ export default function ChatEntryScreen() {
     const label = chip?.label;
     if (!label) return;
     Haptic.medium();
+    lastSendFromCritiqueRef.current = true;
     // For real SSE turns, send the chip label as the next user message —
     // server's ReAct loop handles the refine intent. The pinned-product
     // anchor pattern stays available for the mock pipeline if needed.
@@ -1111,17 +1152,17 @@ export default function ChatEntryScreen() {
             <TextInput
               value={text}
               onChangeText={setText}
-              placeholder={
-                isBusy
-                  ? '키코가 찾는 중...'
-                  : pinnedProduct
-                  ? '또는 직접 입력...'
-                  : isEmpty
-                  ? '다르게 설명해볼래…'
-                  : hasResults
-                  ? '이거랑 비슷한데 더 저렴하게…'
-                  : '이미지 올리기 · 링크 붙여넣기'
-              }
+              placeholder={(() => {
+                if (isBusy) {
+                  const pool = lastSendFromCritiqueRef.current
+                    ? BUSY_CRITIQUE_HINTS
+                    : BUSY_GENERAL_HINTS;
+                  return pool[hintTick % pool.length];
+                }
+                if (pinnedProduct) return '또는 직접 입력...';
+                const pool = hasResults ? IDLE_AFTER_RESULTS_HINTS : IDLE_INITIAL_HINTS;
+                return pool[hintTick % pool.length];
+              })()}
               placeholderTextColor={IOSColors.placeholderText}
               style={styles.input}
               returnKeyType="send"
@@ -1150,8 +1191,14 @@ export default function ChatEntryScreen() {
           have the solid root color behind them and look opaque. */}
       <View style={styles.topBarFloat} pointerEvents="box-none">
         <TopBar
-          onOpenMenu={() => router.push('/sidebar')}
-          onOpenList={() => router.push('/history')}
+          onOpenMenu={() => {
+            const sid = sessionIdRef.current;
+            router.push(sid ? `/sidebar?current=${sid}` : '/sidebar');
+          }}
+          onOpenList={() => {
+            const sid = sessionIdRef.current;
+            router.push(sid ? `/history?session=${sid}` : '/history');
+          }}
           onOpenWishlist={() => router.push('/wishlist')}
         />
       </View>
@@ -1253,6 +1300,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 18,
+    borderTopRightRadius: 6,
     backgroundColor: IOSColors.label,
   },
   userBubbleText: {
@@ -1390,7 +1438,7 @@ const styles = StyleSheet.create({
   feedbackTriggerRow: {
     flexDirection: 'row',
     paddingHorizontal: 4,
-    marginTop: 4,
+    marginTop: -8,
   },
   agentText: {
     ...IOSText.body,

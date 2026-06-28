@@ -1,6 +1,6 @@
-import { router } from 'expo-router';
-import { SymbolView } from 'expo-symbols';
-import { useCallback, useEffect, useState } from 'react';
+import { router } from "expo-router";
+import { SymbolView } from "expo-symbols";
+import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -12,22 +12,25 @@ import {
   Text,
   TextInput,
   View,
-} from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { FLOATING_HEADER_OFFSET, FloatingHeader } from '@/components/floating-header';
-import { Haptic, IOSColors, IOSFont, IOSText } from '@/constants/ios';
-import { ApiError } from '@/lib/api';
-import { deleteMe, getMe, updateMe } from '@/lib/me';
-import { useAuth } from '@/state/auth';
-import type { UserProfile } from '@/types/api';
+import {
+  FLOATING_HEADER_OFFSET,
+  FloatingHeader,
+} from "@/components/floating-header";
+import { Haptic, IOSColors, IOSFont, IOSText } from "@/constants/ios";
+import { ApiError } from "@/lib/api";
+import { deleteMe, getMe, updateMe } from "@/lib/me";
+import { useAuth } from "@/state/auth";
+import type { UserProfile } from "@/types/api";
 
 const DELETE_NOTICE =
-  '삭제 시 찜·히스토리·취향 데이터가 모두 지워져요. 구독 중이라면 App Store 구독은 별도로 해지해 주세요.';
+  "삭제 시 찜·히스토리·취향 데이터가 모두 지워져요. 구독 중이라면 App Store 구독은 별도로 해지해 주세요.";
 
 const PROVIDER_LABEL: Record<string, string> = {
-  apple: 'Apple ID',
-  google: 'Google',
+  apple: "Apple ID",
+  google: "Google",
 };
 
 function providerSummary(profile: UserProfile): string {
@@ -41,7 +44,7 @@ export default function ProfileScreen() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [name, setName] = useState('');
+  const [name, setName] = useState("");
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -51,9 +54,11 @@ export default function ProfileScreen() {
       setLoading(true);
       const me = await getMe();
       setProfile(me);
-      setName(me.display_name ?? '');
+      setName(me.display_name ?? "");
     } catch (e) {
-      setError(e instanceof ApiError ? e.detail : '프로필을 불러오지 못했어요.');
+      setError(
+        e instanceof ApiError ? e.detail : "프로필을 불러오지 못했어요.",
+      );
     } finally {
       setLoading(false);
     }
@@ -66,7 +71,7 @@ export default function ProfileScreen() {
   const handleNameBlur = useCallback(async () => {
     if (!profile) return;
     const trimmed = name.trim();
-    if (trimmed === (profile.display_name ?? '')) return;
+    if (trimmed === (profile.display_name ?? "")) return;
     setSaving(true);
     try {
       const res = await updateMe({ display_name: trimmed });
@@ -74,8 +79,11 @@ export default function ProfileScreen() {
       Haptic.success();
     } catch (e) {
       Haptic.error();
-      Alert.alert('저장 실패', e instanceof ApiError ? e.detail : '잠시 후 다시 시도해주세요.');
-      setName(profile.display_name ?? '');
+      Alert.alert(
+        "저장 실패",
+        e instanceof ApiError ? e.detail : "잠시 후 다시 시도해주세요.",
+      );
+      setName(profile.display_name ?? "");
     } finally {
       setSaving(false);
     }
@@ -84,13 +92,13 @@ export default function ProfileScreen() {
   const confirmDelete = useCallback(() => {
     Haptic.warning();
     Alert.alert(
-      '계정 삭제',
-      '정말 삭제할까요? 모든 데이터가 영구히 지워져요. 되돌릴 수 없어요.',
+      "계정 삭제",
+      "정말 삭제할까요? 모든 데이터가 영구히 지워져요. 되돌릴 수 없어요.",
       [
-        { text: '취소', style: 'cancel' },
+        { text: "취소", style: "cancel" },
         {
-          text: '삭제',
-          style: 'destructive',
+          text: "삭제",
+          style: "destructive",
           onPress: async () => {
             setDeleting(true);
             try {
@@ -98,12 +106,12 @@ export default function ProfileScreen() {
               await signOut();
               Haptic.success();
               router.dismissAll();
-              router.replace('/login');
+              router.replace("/login");
             } catch (e) {
               Haptic.error();
               Alert.alert(
-                '삭제 실패',
-                e instanceof ApiError ? e.detail : '잠시 후 다시 시도해주세요.',
+                "삭제 실패",
+                e instanceof ApiError ? e.detail : "잠시 후 다시 시도해주세요.",
               );
             } finally {
               setDeleting(false);
@@ -118,7 +126,7 @@ export default function ProfileScreen() {
     <View style={styles.root}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         <ScrollView
           contentContainerStyle={[
@@ -148,7 +156,10 @@ export default function ProfileScreen() {
               <View style={styles.labelRow}>
                 <Text style={styles.label}>성명</Text>
                 {saving && (
-                  <ActivityIndicator size="small" color={IOSColors.secondaryLabel} />
+                  <ActivityIndicator
+                    size="small"
+                    color={IOSColors.secondaryLabel}
+                  />
                 )}
               </View>
               <TextInput
@@ -208,7 +219,7 @@ const styles = StyleSheet.create({
   },
   center: {
     paddingVertical: 80,
-    alignItems: 'center',
+    alignItems: "center",
     gap: 12,
   },
   muted: {
@@ -229,8 +240,8 @@ const styles = StyleSheet.create({
   },
 
   labelRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 8,
     marginBottom: 8,
   },
@@ -244,13 +255,13 @@ const styles = StyleSheet.create({
     color: IOSColors.label,
     height: 52,
     paddingHorizontal: 16,
-    borderRadius: 14,
+    borderRadius: 20,
     backgroundColor: IOSColors.systemBackground,
     marginBottom: 20,
     fontFamily: IOSFont.rounded,
   },
   inputReadonly: {
-    justifyContent: 'center',
+    justifyContent: "center",
   },
   accountText: {
     ...IOSText.body,
@@ -259,18 +270,18 @@ const styles = StyleSheet.create({
   },
 
   deleteCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     height: 52,
     paddingHorizontal: 16,
-    borderRadius: 14,
+    borderRadius: 20,
     backgroundColor: IOSColors.systemBackground,
     marginTop: 4,
   },
   deleteTitle: {
     ...IOSText.body,
-    fontWeight: '700',
+    fontWeight: "400",
     color: IOSColors.systemRed,
     fontFamily: IOSFont.rounded,
   },

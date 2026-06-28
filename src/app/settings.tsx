@@ -1,12 +1,22 @@
-import { router } from 'expo-router';
-import { SymbolView } from 'expo-symbols';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { router } from "expo-router";
+import { SymbolView } from "expo-symbols";
+import {
+  Alert,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { FLOATING_HEADER_OFFSET, FloatingHeader } from '@/components/floating-header';
-import { Haptic, IOSColors, IOSFont, IOSText } from '@/constants/ios';
-import { useAuth } from '@/state/auth';
-import { useSubscription } from '@/state/subscription';
+import {
+  FLOATING_HEADER_OFFSET,
+  FloatingHeader,
+} from "@/components/floating-header";
+import { Haptic, IOSColors, IOSFont, IOSText } from "@/constants/ios";
+import { useAuth } from "@/state/auth";
+import { useSubscription } from "@/state/subscription";
 
 type Row = {
   id: string;
@@ -23,14 +33,14 @@ export default function SettingsScreen() {
   const { subscription } = useSubscription();
 
   const confirmLogout = () => {
-    Alert.alert('로그아웃', '정말 로그아웃하시겠어요?', [
-      { text: '취소', style: 'cancel' },
+    Alert.alert("로그아웃", "정말 로그아웃하시겠어요?", [
+      { text: "취소", style: "cancel" },
       {
-        text: '로그아웃',
-        style: 'destructive',
+        text: "로그아웃",
+        style: "destructive",
         onPress: async () => {
           await signOut();
-          router.replace('/login');
+          router.replace("/login");
         },
       },
     ]);
@@ -39,37 +49,37 @@ export default function SettingsScreen() {
   const sections: Row[][] = [
     [
       {
-        id: 'profile',
-        icon: 'person',
-        title: '프로필',
-        subtitle: '성명 · 계정 삭제',
-        onPress: () => router.push('/profile'),
+        id: "profile",
+        icon: "person",
+        title: "프로필",
+        subtitle: "성명 · 계정 삭제",
+        onPress: () => router.push("/profile"),
       },
       {
-        id: 'billing',
-        icon: 'creditcard',
-        title: '결제',
-        subtitle: subscription.active ? 'Pro 플랜' : 'Pro 이용하기',
-        onPress: () => router.push('/billing'),
+        id: "billing",
+        icon: "creditcard",
+        title: "결제",
+        subtitle: subscription.active ? "Pro 플랜" : "Pro 이용하기",
+        onPress: () => router.push("/billing"),
       },
       {
-        id: 'notifications',
-        icon: 'bell',
-        title: '알림',
-        onPress: () => router.push('/notifications'),
+        id: "notifications",
+        icon: "bell",
+        title: "알림",
+        onPress: () => router.push("/notifications"),
       },
       {
-        id: 'privacy',
-        icon: 'shield',
-        title: '개인정보',
-        onPress: () => router.push('/privacy'),
+        id: "privacy",
+        icon: "shield",
+        title: "개인정보",
+        onPress: () => router.push("/privacy"),
       },
     ],
     [
       {
-        id: 'logout',
-        icon: 'rectangle.portrait.and.arrow.right',
-        title: '로그아웃',
+        id: "logout",
+        icon: "rectangle.portrait.and.arrow.right",
+        title: "로그아웃",
         destructive: true,
         onPress: confirmLogout,
       },
@@ -96,21 +106,6 @@ export default function SettingsScreen() {
                 }}
                 style={[styles.row, ridx > 0 && styles.rowDivider]}
               >
-                <View
-                  style={[
-                    styles.iconBox,
-                    row.destructive && styles.iconBoxDestructive,
-                  ]}
-                >
-                  <SymbolView
-                    name={row.icon as never}
-                    size={20}
-                    tintColor={
-                      row.destructive ? IOSColors.systemRed : IOSColors.label
-                    }
-                    weight="regular"
-                  />
-                </View>
                 <View style={styles.rowText}>
                   <Text
                     style={[
@@ -120,9 +115,6 @@ export default function SettingsScreen() {
                   >
                     {row.title}
                   </Text>
-                  {row.subtitle && (
-                    <Text style={styles.rowSubtitle}>{row.subtitle}</Text>
-                  )}
                 </View>
                 {!row.destructive && (
                   <SymbolView
@@ -157,13 +149,13 @@ const styles = StyleSheet.create({
   },
 
   card: {
-    borderRadius: 16,
+    borderRadius: 20,
     backgroundColor: IOSColors.systemBackground,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   row: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 14,
     paddingHorizontal: 14,
     paddingVertical: 14,
@@ -175,18 +167,18 @@ const styles = StyleSheet.create({
   iconBox: {
     width: 40,
     height: 40,
-    borderRadius: 12,
+    borderRadius: 20,
     backgroundColor: IOSColors.tertiarySystemBackground,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   iconBoxDestructive: {
-    backgroundColor: 'rgba(255,59,48,0.10)',
+    backgroundColor: "rgba(255,59,48,0.10)",
   },
   rowText: { flex: 1 },
   rowTitle: {
     ...IOSText.body,
-    fontWeight: '600',
+    fontWeight: "400",
     color: IOSColors.label,
     fontFamily: IOSFont.rounded,
   },
