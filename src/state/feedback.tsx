@@ -1,6 +1,13 @@
-import { createContext, ReactNode, useCallback, useContext, useMemo, useState } from 'react';
+import {
+  createContext,
+  ReactNode,
+  useCallback,
+  useContext,
+  useMemo,
+  useState,
+} from "react";
 
-import type { FeedbackRating, FeedbackReasonKey } from '@/types/api';
+import type { FeedbackRating, FeedbackReasonKey } from "@/types/api";
 
 export type { FeedbackRating, FeedbackReasonKey };
 
@@ -10,20 +17,19 @@ export interface ReasonChip {
 }
 
 export const NEGATIVE_REASONS: ReasonChip[] = [
-  { key: 'mood_off', label: '무드가 안 맞아' },
-  { key: 'fit', label: '핏 · 실루엣' },
-  { key: 'color', label: '색감' },
-  { key: 'category_wrong', label: '카테고리 틀림' },
-  { key: 'too_expensive', label: '너무 비싸' },
-  { key: 'dead_link', label: '품절 · 링크' },
-  { key: 'too_similar', label: '비슷비슷' },
+  { key: "mood_off", label: "무드가 안 맞아요" },
+  { key: "fit", label: "핏이 안 맞아요" },
+  { key: "color", label: "색이 안 맞아요" },
+  { key: "category_wrong", label: "옷 종류가 달라요" },
+  { key: "too_expensive", label: "너무 비싸요" },
+  { key: "too_similar", label: "비슷비슷해요" },
 ];
 
 export const POSITIVE_REASONS: ReasonChip[] = [
-  { key: 'mood_match', label: '무드 딱 맞아' },
-  { key: 'new_brand', label: '새 브랜드 발견' },
-  { key: 'price_good', label: '가격 좋아' },
-  { key: 'discovery', label: '발견의 재미' },
+  { key: "mood_match", label: "무드가 딱 맞아요" },
+  { key: "fit_color_good", label: "핏 / 색이 좋아요" },
+  { key: "new_brand", label: "새로운 브랜드예요" },
+  { key: "price_good", label: "가격이 좋아요" },
 ];
 
 export interface FeedbackRecord {
@@ -36,7 +42,7 @@ export interface FeedbackRecord {
 
 interface Ctx {
   getSubmitted: (turnKey: string) => FeedbackRating | null;
-  rememberSubmitted: (rec: Omit<FeedbackRecord, 'submittedAt'>) => void;
+  rememberSubmitted: (rec: Omit<FeedbackRecord, "submittedAt">) => void;
   records: FeedbackRecord[];
 }
 
@@ -46,14 +52,18 @@ export function FeedbackProvider({ children }: { children: ReactNode }) {
   const [records, setRecords] = useState<FeedbackRecord[]>([]);
 
   const getSubmitted = useCallback(
-    (turnKey: string) => records.find((r) => r.turnKey === turnKey)?.rating ?? null,
+    (turnKey: string) =>
+      records.find((r) => r.turnKey === turnKey)?.rating ?? null,
     [records],
   );
 
   const rememberSubmitted = useCallback(
-    (rec: Omit<FeedbackRecord, 'submittedAt'>) => {
+    (rec: Omit<FeedbackRecord, "submittedAt">) => {
       const next: FeedbackRecord = { ...rec, submittedAt: Date.now() };
-      setRecords((prev) => [next, ...prev.filter((r) => r.turnKey !== rec.turnKey)]);
+      setRecords((prev) => [
+        next,
+        ...prev.filter((r) => r.turnKey !== rec.turnKey),
+      ]);
     },
     [],
   );
@@ -67,6 +77,6 @@ export function FeedbackProvider({ children }: { children: ReactNode }) {
 
 export function useFeedback(): Ctx {
   const ctx = useContext(FeedbackCtx);
-  if (!ctx) throw new Error('useFeedback must be inside <FeedbackProvider>');
+  if (!ctx) throw new Error("useFeedback must be inside <FeedbackProvider>");
   return ctx;
 }

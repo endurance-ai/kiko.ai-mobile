@@ -1,6 +1,6 @@
-import { Image } from 'expo-image';
-import { router } from 'expo-router';
-import { SymbolView } from 'expo-symbols';
+import { Image } from "expo-image";
+import { router } from "expo-router";
+import { SymbolView } from "expo-symbols";
 import {
   ActivityIndicator,
   Dimensions,
@@ -10,30 +10,33 @@ import {
   StyleSheet,
   Text,
   View,
-} from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { FLOATING_HEADER_OFFSET, FloatingHeader } from '@/components/floating-header';
-import { Haptic, IOSColors, IOSFont, IOSText } from '@/constants/ios';
-import { useWishlist } from '@/state/wishlist';
-import type { SaveListItem } from '@/types/api';
+import {
+  FLOATING_HEADER_OFFSET,
+  FloatingHeader,
+} from "@/components/floating-header";
+import { Haptic, IOSColors, IOSFont, IOSText } from "@/constants/ios";
+import { useWishlist } from "@/state/wishlist";
+import type { SaveListItem } from "@/types/api";
 
-const SCREEN_W = Dimensions.get('window').width;
+const SCREEN_W = Dimensions.get("window").width;
 const GRID_PADDING = 20;
 const GRID_GAP = 10;
 const CARD_W = (SCREEN_W - GRID_PADDING * 2 - GRID_GAP * 2) / 3;
 
 function formatPrice(price: number | null): string {
-  if (price === null || Number.isNaN(price)) return '';
-  return `₩${Math.round(price).toLocaleString('ko-KR')}`;
+  if (price === null || Number.isNaN(price)) return "";
+  return `₩${Math.round(price).toLocaleString("ko-KR")}`;
 }
 
 export default function WishlistScreen() {
   const insets = useSafeAreaInsets();
   const { items, status, error, toggle, refresh } = useWishlist();
 
-  const isLoading = status === 'loading' && items.length === 0;
-  const isError = status === 'error' && items.length === 0;
+  const isLoading = status === "loading" && items.length === 0;
+  const isError = status === "error" && items.length === 0;
 
   return (
     <View style={styles.root}>
@@ -45,7 +48,7 @@ export default function WishlistScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
-            refreshing={status === 'loading' && items.length > 0}
+            refreshing={status === "loading" && items.length > 0}
             onRefresh={() => void refresh()}
             tintColor="#999"
           />
@@ -68,17 +71,9 @@ export default function WishlistScreen() {
           </View>
         )}
 
-        {status === 'ready' && items.length === 0 && (
+        {status === "ready" && items.length === 0 && (
           <View style={styles.emptyBlock}>
-            <SymbolView
-              name="heart"
-              size={36}
-              tintColor={IOSColors.tertiaryLabel}
-              weight="regular"
-            />
-            <Text style={styles.emptyText}>
-              마음에 드는 제품의 ♥ 를 눌러서 저장해봐
-            </Text>
+            <Text style={styles.emptyText}>저장할수록 더 똑똑해져요</Text>
           </View>
         )}
 
@@ -160,7 +155,7 @@ function WishCard({
         )}
       </Pressable>
       <Text style={styles.brand} numberOfLines={1}>
-        {stale ? '판매 종료' : product?.brand ?? ''}
+        {stale ? "판매 종료" : (product?.brand ?? "")}
       </Text>
     </View>
   );
@@ -182,7 +177,7 @@ const styles = StyleSheet.create({
   },
 
   center: {
-    alignItems: 'center',
+    alignItems: "center",
     paddingVertical: 60,
     gap: 12,
   },
@@ -204,19 +199,19 @@ const styles = StyleSheet.create({
   },
 
   emptyBlock: {
-    alignItems: 'center',
+    alignItems: "center",
     paddingVertical: 80,
     gap: 14,
   },
   emptyText: {
-    ...IOSText.subhead,
+    ...IOSText.body,
     color: IOSColors.secondaryLabel,
     fontFamily: IOSFont.rounded,
   },
 
   grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: "row",
+    flexWrap: "wrap",
     gap: GRID_GAP,
   },
   card: { width: CARD_W },
@@ -224,39 +219,39 @@ const styles = StyleSheet.create({
     width: CARD_W,
     height: CARD_W,
     borderRadius: 14,
-    overflow: 'hidden',
-    position: 'relative',
+    overflow: "hidden",
+    position: "relative",
   },
-  cardImage: { width: '100%', height: '100%' },
+  cardImage: { width: "100%", height: "100%" },
   heartBtn: {
-    position: 'absolute',
+    position: "absolute",
     top: 8,
     right: 8,
     width: 26,
     height: 26,
     borderRadius: 13,
-    backgroundColor: 'rgba(255,255,255,0.92)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "rgba(255,255,255,0.92)",
+    justifyContent: "center",
+    alignItems: "center",
   },
   priceTag: {
-    position: 'absolute',
+    position: "absolute",
     bottom: 8,
     left: 8,
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 8,
-    backgroundColor: 'rgba(255,255,255,0.92)',
+    backgroundColor: "rgba(255,255,255,0.92)",
   },
   priceText: {
     ...IOSText.caption1,
-    fontWeight: '700',
-    color: '#1C1C1E',
+    fontWeight: "700",
+    color: "#1C1C1E",
     fontFamily: IOSFont.rounded,
   },
   brand: {
     ...IOSText.footnote,
-    fontWeight: '600',
+    fontWeight: "600",
     color: IOSColors.label,
     marginTop: 6,
     fontFamily: IOSFont.rounded,

@@ -1,15 +1,24 @@
-import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useCallback, useEffect, useState } from "react";
+import {
+  ActivityIndicator,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { FLOATING_HEADER_OFFSET, FloatingHeader } from '@/components/floating-header';
-import { GlassToggle } from '@/components/glass-toggle';
-import { IOSColors, IOSFont, IOSText } from '@/constants/ios';
-import { getNotifications, updateNotifications } from '@/lib/devices';
-import type { NotificationCategories } from '@/types/api';
+import {
+  FLOATING_HEADER_OFFSET,
+  FloatingHeader,
+} from "@/components/floating-header";
+import { GlassToggle } from "@/components/glass-toggle";
+import { IOSColors, IOSFont, IOSText } from "@/constants/ios";
+import { getNotifications, updateNotifications } from "@/lib/devices";
+import type { NotificationCategories } from "@/types/api";
 
 const SYSTEM_WARNING =
-  '기기 알림이 꺼져 있으면 새 디깅 결과를 못 받아요. iOS 설정에서 켜 주세요.';
+  "기기 알림이 꺼져 있으면 새 디깅 결과를 못 받아요. iOS 설정에서 켜 주세요.";
 
 // 매핑 — 화면의 2개 토글 ↔ 서버 카테고리 3개 (taste_push 는 별도 노출 X, 기본 유지)
 // '알림' 토글 = system (Pro 트리거 등 핵심 푸시)
@@ -88,10 +97,13 @@ export default function NotificationsScreen() {
             </View>
             <View style={[styles.row, styles.rowDivider]}>
               <View style={styles.rowText}>
-                <Text style={styles.rowTitle}>마케팅·이벤트</Text>
-                <Text style={styles.rowHint}>혜택·신규 브랜드 소식</Text>
+                <Text style={styles.rowTitle}>마케팅</Text>
+                <Text style={styles.rowHint}>혜택/신규 브랜드 소식</Text>
               </View>
-              <GlassToggle value={marketing} onValueChange={onMarketingChange} />
+              <GlassToggle
+                value={marketing}
+                onValueChange={onMarketingChange}
+              />
             </View>
           </View>
         )}
@@ -115,17 +127,17 @@ const styles = StyleSheet.create({
 
   loadingBox: {
     paddingVertical: 40,
-    alignItems: 'center',
+    alignItems: "center",
   },
 
   card: {
     borderRadius: 16,
     backgroundColor: IOSColors.systemBackground,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   row: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     paddingHorizontal: 16,
     paddingVertical: 16,
     gap: 12,
@@ -137,7 +149,7 @@ const styles = StyleSheet.create({
   rowText: { flex: 1 },
   rowTitle: {
     ...IOSText.body,
-    fontWeight: '600',
+    fontWeight: "400",
     color: IOSColors.label,
     fontFamily: IOSFont.rounded,
   },

@@ -234,6 +234,7 @@ export type FeedbackReasonKey =
   | 'dead_link'
   | 'too_similar'
   | 'mood_match'
+  | 'fit_color_good'
   | 'new_brand'
   | 'price_good'
   | 'discovery';
@@ -249,4 +250,34 @@ export interface FeedbackRequest {
 export interface FeedbackResponse {
   feedback_id: string;
   exported_to_training: boolean;
+}
+
+export type HistoryFeedType = 'all' | 'result_set' | 'product';
+
+export interface HistoryResultSetItem {
+  type: 'result_set';
+  occurred_at: string;
+  search_id: string;
+  query_text: string;
+  result_count: number;
+  preview_images: string[];
+}
+
+export interface HistoryProductItem {
+  type: 'product';
+  occurred_at: string;
+  product_id: number;
+  brand: string | null;
+  name: string | null;
+  price: number | null;
+  image_url: string;
+  product_url: string | null;
+  source_search_id: string | null;
+}
+
+export type HistoryItem = HistoryResultSetItem | HistoryProductItem;
+
+export interface HistoryResponse {
+  items: HistoryItem[];
+  next_cursor: string | null;
 }

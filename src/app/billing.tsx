@@ -1,4 +1,4 @@
-import { SymbolView } from 'expo-symbols';
+import { SymbolView } from "expo-symbols";
 import {
   Alert,
   Linking,
@@ -7,30 +7,36 @@ import {
   StyleSheet,
   Text,
   View,
-} from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+} from "react-native";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 
-import { FLOATING_HEADER_OFFSET, FloatingHeader } from '@/components/floating-header';
-import { Haptic, IOSColors, IOSFont, IOSText } from '@/constants/ios';
-import { formatKoreanDate, useSubscription } from '@/state/subscription';
+import {
+  FLOATING_HEADER_OFFSET,
+  FloatingHeader,
+} from "@/components/floating-header";
+import { Haptic, IOSColors, IOSFont, IOSText } from "@/constants/ios";
+import { formatKoreanDate, useSubscription } from "@/state/subscription";
 
-const PRO_ACCENT = '#4F46E5';
+const PRO_ACCENT = "#4F46E5";
 
 type FeatureRow = {
   label: string;
-  free: 'check' | 'dash';
-  pro: 'check' | 'dash';
+  free: "check" | "dash";
+  pro: "check" | "dash";
 };
 
 const FEATURES: FeatureRow[] = [
-  { label: '코어 디깅 모델', free: 'check', pro: 'check' },
-  { label: '더 많은 메시지', free: 'dash', pro: 'check' },
-  { label: '더 높은 업로드 한도', free: 'dash', pro: 'check' },
-  { label: '더 많은 메모리', free: 'dash', pro: 'check' },
-  { label: '새 기능 얼리 액세스', free: 'dash', pro: 'check' },
+  { label: "코어 디깅 모델", free: "check", pro: "check" },
+  { label: "더 많은 메시지", free: "dash", pro: "check" },
+  { label: "더 높은 업로드 한도", free: "dash", pro: "check" },
+  { label: "더 많은 메모리", free: "dash", pro: "check" },
+  { label: "새 기능 얼리 액세스", free: "dash", pro: "check" },
 ];
 
-const COMING_SOON = ['최신 브랜드 발매/세일 자동 트래커', '백그라운드 서칭'];
+const COMING_SOON = ["최신 브랜드 발매/세일 자동 트래커", "백그라운드 서칭"];
 
 export default function BillingScreen() {
   const { subscription } = useSubscription();
@@ -68,7 +74,7 @@ function UpgradeView() {
           />
         </View>
 
-        <Text style={styles.upgradeTitle}>Kiko Pro{'\n'}이용하기</Text>
+        <Text style={styles.upgradeTitle}>Kiko Pro{"\n"}이용하기</Text>
         <Text style={styles.upgradeSub}>
           확장된 액세스 권한으로 더 많은 브랜드를 발견하기
         </Text>
@@ -77,15 +83,14 @@ function UpgradeView() {
           <View style={styles.featureHeaderRow}>
             <Text style={styles.featureLabel}>기능</Text>
             <Text style={styles.featureColumnHeader}>Free</Text>
-            <Text style={[styles.featureColumnHeader, { color: PRO_ACCENT }]}>Pro</Text>
+            <Text style={[styles.featureColumnHeader, { color: PRO_ACCENT }]}>
+              Pro
+            </Text>
           </View>
           {FEATURES.map((f, idx) => (
             <View
               key={f.label}
-              style={[
-                styles.featureRow,
-                idx > 0 && styles.featureRowDivider,
-              ]}
+              style={[styles.featureRow, idx > 0 && styles.featureRowDivider]}
             >
               <Text style={styles.featureRowLabel}>{f.label}</Text>
               <FeatureMark kind={f.free} muted />
@@ -95,7 +100,9 @@ function UpgradeView() {
         </View>
 
         <View style={styles.comingSoonCard}>
-          <Text style={styles.comingSoonHeader}>Pro의 더 많은 기능 준비 중</Text>
+          <Text style={styles.comingSoonHeader}>
+            Pro의 더 많은 기능 준비 중
+          </Text>
           {COMING_SOON.map((label) => (
             <Text key={label} style={styles.comingSoonItem}>
               {label}
@@ -104,9 +111,10 @@ function UpgradeView() {
         </View>
       </ScrollView>
 
-      <SafeAreaView edges={['bottom']} style={styles.upgradeFooter}>
-        <Pressable style={styles.upgradeBtn} onPress={handleUpgrade}>
-          <Text style={styles.upgradeBtnText}>₩9,900에 업그레이드</Text>
+      <SafeAreaView edges={["bottom"]} style={styles.upgradeFooter}>
+        <Pressable style={styles.upgradeBtn}>
+          {/* <Text style={styles.upgradeBtnText}>₩9,900에 업그레이드</Text> */}
+          <Text style={styles.upgradeBtnText}>곧 만나요 !</Text>
         </Pressable>
         <Text style={styles.upgradeDisclaimer}>
           매월 자동 청구. 언제든 취소할 수 있습니다.
@@ -123,14 +131,16 @@ function FeatureMark({
   color,
   muted,
 }: {
-  kind: 'check' | 'dash';
+  kind: "check" | "dash";
   color?: string;
   muted?: boolean;
 }) {
-  if (kind === 'dash') {
+  if (kind === "dash") {
     return (
       <View style={styles.featureCell}>
-        <Text style={[styles.featureDash, muted && styles.featureDashMuted]}>—</Text>
+        <Text style={[styles.featureDash, muted && styles.featureDashMuted]}>
+          —
+        </Text>
       </View>
     );
   }
@@ -139,7 +149,7 @@ function FeatureMark({
       <SymbolView
         name="checkmark"
         size={18}
-        tintColor={muted ? IOSColors.tertiaryLabel : color ?? IOSColors.label}
+        tintColor={muted ? IOSColors.tertiaryLabel : (color ?? IOSColors.label)}
         weight="bold"
       />
     </View>
@@ -154,13 +164,13 @@ function ManageView() {
 
   const handleManage = async () => {
     Haptic.light();
-    await Linking.openURL('itms-apps://apps.apple.com/account/subscriptions');
+    await Linking.openURL("itms-apps://apps.apple.com/account/subscriptions");
   };
 
   const handleRestore = () => {
     Haptic.light();
     // TODO: StoreKit2 transaction restore -> POST /v1/iap/restore
-    Alert.alert('구매 복원', '복원할 구매 내역이 없거나 이미 동기화됐어요.');
+    Alert.alert("구매 복원", "복원할 구매 내역이 없거나 이미 동기화됐어요.");
   };
 
   return (
@@ -219,28 +229,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 8,
     paddingBottom: 140,
-    alignItems: 'center',
+    alignItems: "center",
   },
   sparkleWrap: {
     width: 56,
     height: 56,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     marginTop: 8,
     marginBottom: 16,
   },
   upgradeTitle: {
     ...IOSText.title1,
-    fontWeight: '800',
+    fontWeight: "800",
     color: IOSColors.label,
-    textAlign: 'center',
+    textAlign: "center",
     fontFamily: IOSFont.rounded,
     lineHeight: 40,
   },
   upgradeSub: {
     ...IOSText.subhead,
     color: IOSColors.secondaryLabel,
-    textAlign: 'center',
+    textAlign: "center",
     marginTop: 12,
     marginBottom: 28,
     lineHeight: 22,
@@ -248,15 +258,15 @@ const styles = StyleSheet.create({
   },
 
   featureCard: {
-    width: '100%',
+    width: "100%",
     borderRadius: 18,
     backgroundColor: IOSColors.systemBackground,
     paddingVertical: 8,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   featureHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     paddingHorizontal: 20,
     paddingVertical: 16,
   },
@@ -268,15 +278,15 @@ const styles = StyleSheet.create({
   },
   featureColumnHeader: {
     width: 60,
-    textAlign: 'center',
+    textAlign: "center",
     ...IOSText.subhead,
-    fontWeight: '600',
+    fontWeight: "600",
     color: IOSColors.secondaryLabel,
     fontFamily: IOSFont.rounded,
   },
   featureRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     paddingHorizontal: 20,
     paddingVertical: 14,
   },
@@ -289,7 +299,7 @@ const styles = StyleSheet.create({
   },
   featureCell: {
     width: 60,
-    alignItems: 'center',
+    alignItems: "center",
   },
   featureDash: {
     ...IOSText.body,
@@ -301,7 +311,7 @@ const styles = StyleSheet.create({
   },
 
   comingSoonCard: {
-    width: '100%',
+    width: "100%",
     marginTop: 16,
     padding: 18,
     borderRadius: 18,
@@ -310,7 +320,7 @@ const styles = StyleSheet.create({
   },
   comingSoonHeader: {
     ...IOSText.footnote,
-    fontWeight: '600',
+    fontWeight: "600",
     color: IOSColors.secondaryLabel,
     fontFamily: IOSFont.rounded,
     marginBottom: 4,
@@ -322,7 +332,7 @@ const styles = StyleSheet.create({
   },
 
   upgradeFooter: {
-    position: 'absolute',
+    position: "absolute",
     left: 0,
     right: 0,
     bottom: 0,
@@ -336,8 +346,8 @@ const styles = StyleSheet.create({
     height: 56,
     borderRadius: 999,
     backgroundColor: IOSColors.label,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   upgradeBtnText: {
     ...IOSText.headline,
@@ -347,7 +357,7 @@ const styles = StyleSheet.create({
   upgradeDisclaimer: {
     ...IOSText.footnote,
     color: IOSColors.tertiaryLabel,
-    textAlign: 'center',
+    textAlign: "center",
     fontFamily: IOSFont.rounded,
   },
 
@@ -364,19 +374,19 @@ const styles = StyleSheet.create({
     backgroundColor: IOSColors.systemBackground,
   },
   planTopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
   planLeft: {
     ...IOSText.body,
-    fontWeight: '600',
+    fontWeight: "600",
     color: IOSColors.label,
     fontFamily: IOSFont.rounded,
   },
   planRight: {
     ...IOSText.body,
-    fontWeight: '600',
+    fontWeight: "600",
     color: PRO_ACCENT,
     fontFamily: IOSFont.rounded,
   },
@@ -389,12 +399,12 @@ const styles = StyleSheet.create({
   actionCard: {
     borderRadius: 16,
     backgroundColor: IOSColors.systemBackground,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   actionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingHorizontal: 16,
     paddingVertical: 16,
   },
@@ -408,8 +418,8 @@ const styles = StyleSheet.create({
     fontFamily: IOSFont.rounded,
   },
   actionTrailing: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 6,
   },
   actionTrailingText: {

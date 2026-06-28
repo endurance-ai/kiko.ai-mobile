@@ -27,6 +27,11 @@ import type { ProductDetail } from '@/types/api';
 const SCREEN_W = Dimensions.get('window').width;
 const HERO_HEIGHT = Math.round(SCREEN_W * 0.95);
 
+// Product photos are predominantly white-bg, so dark-mode would render
+// the back/heart icons in white-on-white. Force light-mode label color
+// here so the glass buttons remain readable on the hero regardless of theme.
+const HERO_BTN_TINT = '#1C1C1E';
+
 const CRITIQUE = [
   { id: 'sim', label: '더 비슷하게' },
   { id: 'cheap', label: '더 저렴하게' },
@@ -170,7 +175,7 @@ export default function ProductDetailScreen() {
                   <SymbolView
                     name="chevron.left"
                     size={18}
-                    tintColor={IOSColors.label}
+                    tintColor={HERO_BTN_TINT}
                     weight="semibold"
                   />
                 </GlassView>
@@ -187,7 +192,7 @@ export default function ProductDetailScreen() {
                   <SymbolView
                     name={saved ? 'heart.fill' : 'heart'}
                     size={18}
-                    tintColor={saved ? IOSColors.systemRed : IOSColors.label}
+                    tintColor={saved ? IOSColors.systemRed : HERO_BTN_TINT}
                     weight="medium"
                   />
                 </GlassView>
