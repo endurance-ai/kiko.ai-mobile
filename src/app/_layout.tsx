@@ -61,7 +61,7 @@ export default function RootLayout() {
                           name="feedback"
                           options={{
                             presentation: 'formSheet',
-                            sheetAllowedDetents: [0.95, 1.0],
+                            sheetAllowedDetents: [0.6, 0.95],
                             sheetGrabberVisible: true,
                             sheetCornerRadius: 28,
                             gestureEnabled: true,
