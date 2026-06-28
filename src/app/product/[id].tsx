@@ -43,7 +43,6 @@ export default function ProductDetailScreen() {
   const [product, setProduct] = useState<ProductDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [whyExpanded, setWhyExpanded] = useState(false);
   const [text, setText] = useState('');
 
   const { isSaved, toggle: toggleSaved } = useWishlist();
@@ -232,35 +231,6 @@ export default function ProductDetailScreen() {
             </Pressable>
           </View>
 
-          {/* Action buttons */}
-          <View style={styles.actionRow}>
-            {[
-              { id: 'similar', label: '비슷한 것' },
-              { id: 'cheaper', label: '더 저렴' },
-              { id: 'why', label: '왜 비슷한지' },
-            ].map((a) => (
-              <Pressable
-                key={a.id}
-                style={styles.actionBtn}
-                onPress={() => {
-                  Haptic.light();
-                  if (a.id === 'why') setWhyExpanded((v) => !v);
-                }}
-              >
-                <Text style={styles.actionText}>{a.label}</Text>
-              </Pressable>
-            ))}
-          </View>
-
-          {/* Why card */}
-          {whyExpanded && (
-            <View style={styles.whyCard}>
-              <Text style={styles.whyText}>
-                {product.description ??
-                  '비슷한 색감 · 핏 · 소재 — 무드 시그널이 일치해.'}
-              </Text>
-            </View>
-          )}
         </ScrollView>
       )}
 
@@ -476,42 +446,6 @@ const styles = StyleSheet.create({
   ctaText: {
     ...IOSText.headline,
     color: IOSColors.systemBackground,
-    fontFamily: IOSFont.rounded,
-  },
-
-  actionRow: {
-    flexDirection: 'row',
-    paddingHorizontal: 20,
-    paddingTop: 14,
-    gap: 8,
-  },
-  actionBtn: {
-    flex: 1,
-    height: 40,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: IOSColors.separator,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: IOSColors.systemBackground,
-  },
-  actionText: {
-    ...IOSText.subhead,
-    fontWeight: '500',
-    color: IOSColors.label,
-    fontFamily: IOSFont.rounded,
-  },
-  whyCard: {
-    marginHorizontal: 20,
-    marginTop: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderRadius: 14,
-    backgroundColor: IOSColors.tertiarySystemBackground,
-  },
-  whyText: {
-    ...IOSText.subhead,
-    color: IOSColors.label,
     fontFamily: IOSFont.rounded,
   },
 
