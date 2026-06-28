@@ -3,14 +3,15 @@ import { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Haptic, IOSColors, IOSFont, IOSText } from '@/constants/ios';
 import { ApiError } from '@/lib/api';
@@ -27,6 +28,7 @@ const CONSENT_NOTICE =
   '이 보고서를 제출하면 현재 대화 전체가 Endurance AI로 전송되어 향후 모델 개선에 사용됩니다.';
 
 export default function FeedbackScreen() {
+  const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{
     turn?: string;
     rating?: string;
@@ -91,13 +93,11 @@ export default function FeedbackScreen() {
   };
 
   return (
-    <View style={styles.root}>
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.body}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
+    <KeyboardAvoidingView
+      style={styles.root}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
+      <View style={styles.body}>
         <Text style={styles.title}>{title}</Text>
         <Text style={styles.subtitle}>해당되는 걸 고르고, 한 줄 적어줘.</Text>
 
@@ -134,9 +134,14 @@ export default function FeedbackScreen() {
         <View style={styles.consentBox}>
           <Text style={styles.consentText}>{CONSENT_NOTICE}</Text>
         </View>
-      </ScrollView>
+      </View>
 
-      <SafeAreaView edges={['bottom']} style={styles.footerSafe}>
+      <View
+        style={[
+          styles.footer,
+          { paddingBottom: Math.max(insets.bottom, 12) },
+        ]}
+      >
         <Pressable
           disabled={!canSubmit}
           style={[styles.submit, !canSubmit && styles.submitDisabled]}
@@ -148,18 +153,18 @@ export default function FeedbackScreen() {
             <Text style={styles.submitText}>제출</Text>
           )}
         </Pressable>
-      </SafeAreaView>
-    </View>
+      </View>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: IOSColors.systemBackground },
-  scrollView: { flex: 1 },
   body: {
+    flex: 1,
     paddingHorizontal: 20,
     paddingTop: 16,
-    paddingBottom: 24,
+    paddingBottom: 16,
   },
   title: {
     ...IOSText.title3,
@@ -229,9 +234,8 @@ const styles = StyleSheet.create({
     fontFamily: IOSFont.rounded,
   },
 
-  footerSafe: {
+  footer: {
     paddingHorizontal: 20,
-    paddingBottom: 12,
     paddingTop: 8,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: IOSColors.separator,
