@@ -27,6 +27,8 @@ export interface RevokeRequest {
 export interface ProductRef {
   image_url: string;
   caption: string;
+  /** products.id (ai-server PR #98). Allows chat card -> PDP deep link. */
+  product_id: number | null;
 }
 
 export interface ChatResponse {
@@ -58,6 +60,10 @@ export interface MessageListResponse {
 
 export interface ChatRequest {
   message: string;
+  /** 'unisex' | 'women' | 'men' — sent as-is, server validates. */
+  gender?: string | null;
+  /** Upper price bound in KRW (원 단위). <=0 or null = no ceiling. */
+  price_max?: number | null;
 }
 
 export interface ApiErrorBody {
@@ -200,6 +206,21 @@ export interface RegisterDeviceRequest {
 export interface RegisterDeviceResponse {
   device_id: string;
   registered_at: string;
+}
+
+export interface NotificationCategories {
+  release_alerts?: boolean | null;
+  taste_push?: boolean | null;
+  system?: boolean | null;
+}
+
+export interface UpdateNotificationsRequest {
+  categories: NotificationCategories;
+}
+
+export interface UpdateNotificationsResponse {
+  categories: NotificationCategories;
+  updated_at: string;
 }
 
 export type FeedbackRating = 'positive' | 'negative';

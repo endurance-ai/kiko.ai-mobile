@@ -201,7 +201,23 @@ function looksLikeFashionQuery(text: string): boolean {
 
 export default function ChatEntryScreen() {
   const insets = useSafeAreaInsets();
-  const { session: sessionParam } = useLocalSearchParams<{ session?: string }>();
+  const {
+    session: sessionParam,
+    seed: seedParam,
+    pin_image: pinImageParam,
+    pin_label: pinLabelParam,
+    pin_id: pinIdParam,
+    pin_name: pinNameParam,
+    pin_price: pinPriceParam,
+  } = useLocalSearchParams<{
+    session?: string;
+    seed?: string;
+    pin_image?: string;
+    pin_label?: string;
+    pin_id?: string;
+    pin_name?: string;
+    pin_price?: string;
+  }>();
   const { value: filter, setValue: setFilter } = useFilter();
   const { active: activeBanner, show: showBanner, clear: clearBanner } = useBanner();
   const [text, setText] = useState('');
@@ -235,6 +251,26 @@ export default function ChatEntryScreen() {
       cancelled = true;
     };
   }, [sessionParam]);
+
+  // Pick up a seed message handed off from another screen (PDP critique chip
+  // or composer). Fires once per seed value.
+  const handledSeedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!seedParam) return;
+    if (handledSeedRef.current === seedParam) return;
+    handledSeedRef.current = seedParam;
+    const attachment = pinLabelParam
+      ? {
+          imageUrl: pinImageParam,
+          label: pinLabelParam,
+          productId: pinIdParam,
+          productName: pinNameParam,
+          productPrice: pinPriceParam,
+        }
+      : undefined;
+    // Defer slightly so the session effect can stamp sessionIdRef first.
+    setTimeout(() => runStreamingTurn(seedParam, attachment), 50);
+  }, [seedParam, pinImageParam, pinLabelParam, pinIdParam, pinNameParam, pinPriceParam]);
 
   const lastTurn = messages[messages.length - 1] ?? null;
   const lastStatus = lastTurn?.status ?? null;
@@ -415,9 +451,21 @@ export default function ChatEntryScreen() {
     runStreamingTurn(trimmed);
   };
 
-  const runStreamingTurn = (trimmed: string) => {
+  const runStreamingTurn = (
+    trimmed: string,
+    overrideAttachment?: {
+      imageUrl?: string;
+      thumbColor?: string;
+      label: string;
+      productId?: string;
+      productName?: string;
+      productPrice?: string;
+    },
+  ) => {
     clearBanner('request-failure');
-    const attachment = pinnedAttachment; // snapshot before we clear it
+    // Explicit override wins (e.g. handoff from PDP). Otherwise use the
+    // currently-pinned product from the composer.
+    const attachment = overrideAttachment ?? pinnedAttachment;
     const turnId = nextIdRef.current++;
     const turn: Turn = {
       id: turnId,
@@ -442,7 +490,21 @@ export default function ChatEntryScreen() {
     if (attachment) setPinnedId(null);
     // Server takes plain text; if a product is pinned, prefix the message so
     // the ReAct loop anchors to it.
-    const serverText = attachment ? `[${attachment.label}] ${trimmed}` : trimmed;
+    // Build a context-rich prefix the server's ReAct agent can anchor on.
+    // We try product_id first (deterministic lookup), then brand + name + price
+    // for human-readable fallback. The user only sees `trimmed` in the bubble.
+    let serverText = trimmed;
+    if (attachment) {
+      const parts: string[] = [];
+      const pid = (attachment as { productId?: string }).productId;
+      const pname = (attachment as { productName?: string }).productName;
+      const pprice = (attachment as { productPrice?: string }).productPrice;
+      if (pid) parts.push(`#${pid}`);
+      parts.push(attachment.label);
+      if (pname) parts.push(pname);
+      if (pprice) parts.push(`₩${Number(pprice).toLocaleString('ko-KR')}`);
+      serverText = `[${parts.join(' · ')}] ${trimmed}`;
+    }
 
     const patch = (mut: (t: Turn) => Partial<Turn>) =>
       setMessages((prev) =>
@@ -496,9 +558,18 @@ export default function ChatEntryScreen() {
       },
     };
 
+    // Filter values from the composer chip — '무관' / max slider = no ceiling
+    // so the server sees no constraint. priceMax is stored in 만원 units; the
+    // server expects KRW 원 — multiply by 10,000.
+    const filterOpts = {
+      gender: filter.gender === 'any' ? undefined : filter.gender,
+      priceMaxKrw:
+        filter.priceMax >= PRICE_MAX ? undefined : filter.priceMax * 10_000,
+    };
+
     streamRef.current = sessionIdRef.current
-      ? sendMessageStream(sessionIdRef.current, serverText, handlers)
-      : createSessionStream(serverText, handlers);
+      ? sendMessageStream(sessionIdRef.current, serverText, handlers, filterOpts)
+      : createSessionStream(serverText, handlers, filterOpts);
     void streamRef.current.promise.catch(() => {});
   };
 
@@ -729,9 +800,30 @@ export default function ChatEntryScreen() {
                         {turn.streamProducts.map((p, i) => {
                           const key = `${turn.id}:${i}`;
                           const pinned = pinnedId === key;
+                          const productId = p.product_id;
+                          const goPdp = () => {
+                            if (productId == null) return;
+                            Haptic.light();
+                            const sid = sessionIdRef.current;
+                            const search = turn.streamSearchId;
+                            const params = [
+                              sid ? `session=${encodeURIComponent(sid)}` : '',
+                              search ? `source=${encodeURIComponent(search)}` : '',
+                            ]
+                              .filter(Boolean)
+                              .join('&');
+                            const url = params
+                              ? `/product/${productId}?${params}`
+                              : `/product/${productId}`;
+                            router.push(url as never);
+                          };
                           return (
                             <View key={key} style={styles.streamProductCard}>
-                              <View style={styles.streamProductImageWrap}>
+                              <Pressable
+                                style={styles.streamProductImageWrap}
+                                onPress={goPdp}
+                                disabled={productId == null}
+                              >
                                 <ExpoImage
                                   source={p.image_url}
                                   style={styles.streamProductImage}
@@ -754,13 +846,15 @@ export default function ChatEntryScreen() {
                                     weight="bold"
                                   />
                                 </Pressable>
-                              </View>
-                              <Text
-                                style={styles.streamProductCaption}
-                                numberOfLines={3}
-                              >
-                                {p.caption.replace(/<[^>]+>/g, '')}
-                              </Text>
+                              </Pressable>
+                              <Pressable onPress={goPdp} disabled={productId == null}>
+                                <Text
+                                  style={styles.streamProductCaption}
+                                  numberOfLines={3}
+                                >
+                                  {p.caption.replace(/<[^>]+>/g, '')}
+                                </Text>
+                              </Pressable>
                             </View>
                           );
                         })}

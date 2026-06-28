@@ -81,6 +81,7 @@ function dispatch(event: SseEvent, handlers: ChatStreamHandlers): boolean {
       const product: ProductRef = {
         image_url: typeof data.image_url === 'string' ? data.image_url : '',
         caption: typeof data.caption === 'string' ? data.caption : '',
+        product_id: typeof data.product_id === 'number' ? data.product_id : null,
       };
       handlers.onProduct?.(product);
       return false;

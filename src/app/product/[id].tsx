@@ -43,13 +43,49 @@ export default function ProductDetailScreen() {
   const [product, setProduct] = useState<ProductDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [whyExpanded, setWhyExpanded] = useState(false);
   const [text, setText] = useState('');
 
   const { isSaved, toggle: toggleSaved } = useWishlist();
   const productIdStr = product ? String(product.id) : '';
   const saved = productIdStr ? isSaved(productIdStr) : false;
   const canSend = text.trim().length > 0;
+
+  // Hand the message + this product as a pinned attachment off to /home, which
+  // owns the chat surface. Home reads the seed/pin params, fires the SSE turn
+  // there so the user sees the streaming response in the main chat flow.
+  const kickoffChat = useCallback(
+    (msg: string) => {
+      if (!product) return;
+      Haptic.medium();
+      const params: string[] = [`seed=${encodeURIComponent(msg)}`];
+      if (session) params.push(`session=${encodeURIComponent(session)}`);
+      if (product.image_url)
+        params.push(`pin_image=${encodeURIComponent(product.image_url)}`);
+      params.push(
+        `pin_label=${encodeURIComponent(product.brand || product.name || '선택한 상품')}`,
+      );
+      params.push(`pin_id=${encodeURIComponent(String(product.id))}`);
+      if (product.name) params.push(`pin_name=${encodeURIComponent(product.name)}`);
+      if (product.price != null)
+        params.push(`pin_price=${encodeURIComponent(String(Math.round(product.price)))}`);
+      router.replace(`/home?${params.join('&')}` as never);
+    },
+    [product, session],
+  );
+
+  const handleCritique = useCallback(
+    (label: string) => {
+      kickoffChat(label);
+    },
+    [kickoffChat],
+  );
+
+  const handleComposerSend = useCallback(() => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    setText('');
+    kickoffChat(trimmed);
+  }, [text, kickoffChat]);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -201,35 +237,6 @@ export default function ProductDetailScreen() {
             </Pressable>
           </View>
 
-          {/* Action buttons */}
-          <View style={styles.actionRow}>
-            {[
-              { id: 'similar', label: '비슷한 것' },
-              { id: 'cheaper', label: '더 저렴' },
-              { id: 'why', label: '왜 비슷한지' },
-            ].map((a) => (
-              <Pressable
-                key={a.id}
-                style={styles.actionBtn}
-                onPress={() => {
-                  Haptic.light();
-                  if (a.id === 'why') setWhyExpanded((v) => !v);
-                }}
-              >
-                <Text style={styles.actionText}>{a.label}</Text>
-              </Pressable>
-            ))}
-          </View>
-
-          {/* Why card */}
-          {whyExpanded && (
-            <View style={styles.whyCard}>
-              <Text style={styles.whyText}>
-                {product.description ??
-                  '비슷한 색감 · 핏 · 소재 — 무드 시그널이 일치해.'}
-              </Text>
-            </View>
-          )}
         </ScrollView>
       )}
 
@@ -256,7 +263,7 @@ export default function ProductDetailScreen() {
                 <Text style={styles.scopeBrand}>· {product.brand}</Text>
               </View>
               {CRITIQUE.map((c) => (
-                <Pressable key={c.id} onPress={() => Haptic.light()}>
+                <Pressable key={c.id} onPress={() => handleCritique(c.label)}>
                   <GlassView glassEffectStyle="clear" style={styles.critiqueChip}>
                     <Text style={styles.critiqueText}>{c.label}</Text>
                   </GlassView>
@@ -284,12 +291,13 @@ export default function ProductDetailScreen() {
                 placeholderTextColor={IOSColors.placeholderText}
                 style={styles.input}
                 returnKeyType="send"
+                onSubmitEditing={handleComposerSend}
               />
               <Pressable
                 hitSlop={6}
                 disabled={!canSend}
                 style={[styles.sendBtn, !canSend && styles.sendBtnDisabled]}
-                onPress={() => Haptic.medium()}
+                onPress={handleComposerSend}
               >
                 <SymbolView
                   name="arrow.right"
@@ -444,42 +452,6 @@ const styles = StyleSheet.create({
   ctaText: {
     ...IOSText.headline,
     color: IOSColors.systemBackground,
-    fontFamily: IOSFont.rounded,
-  },
-
-  actionRow: {
-    flexDirection: 'row',
-    paddingHorizontal: 20,
-    paddingTop: 14,
-    gap: 8,
-  },
-  actionBtn: {
-    flex: 1,
-    height: 40,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: IOSColors.separator,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: IOSColors.systemBackground,
-  },
-  actionText: {
-    ...IOSText.subhead,
-    fontWeight: '500',
-    color: IOSColors.label,
-    fontFamily: IOSFont.rounded,
-  },
-  whyCard: {
-    marginHorizontal: 20,
-    marginTop: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderRadius: 14,
-    backgroundColor: IOSColors.tertiarySystemBackground,
-  },
-  whyText: {
-    ...IOSText.subhead,
-    color: IOSColors.label,
     fontFamily: IOSFont.rounded,
   },
 

@@ -1,19 +1,69 @@
-import { useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FLOATING_HEADER_OFFSET, FloatingHeader } from '@/components/floating-header';
 import { GlassToggle } from '@/components/glass-toggle';
 import { IOSColors, IOSFont, IOSText } from '@/constants/ios';
+import { getNotifications, updateNotifications } from '@/lib/devices';
+import type { NotificationCategories } from '@/types/api';
 
 const SYSTEM_WARNING =
   '기기 알림이 꺼져 있으면 새 디깅 결과를 못 받아요. iOS 설정에서 켜 주세요.';
 
+// 매핑 — 화면의 2개 토글 ↔ 서버 카테고리 3개 (taste_push 는 별도 노출 X, 기본 유지)
+// '알림' 토글 = system (Pro 트리거 등 핵심 푸시)
+// '마케팅·이벤트' 토글 = release_alerts (혜택 / 신규 브랜드)
+function readEnabled(cat: NotificationCategories): boolean {
+  return cat.system !== false; // null / undefined → true 로 간주 (기본 on)
+}
+function readMarketing(cat: NotificationCategories): boolean {
+  return cat.release_alerts === true;
+}
+
 export default function NotificationsScreen() {
   const insets = useSafeAreaInsets();
-  // Placeholder until backend exposes notification prefs.
   const [enabled, setEnabled] = useState(true);
   const [marketing, setMarketing] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await getNotifications();
+        if (cancelled) return;
+        setEnabled(readEnabled(res.categories));
+        setMarketing(readMarketing(res.categories));
+      } catch {
+        // 401 / network — leave defaults; user can still toggle.
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Patch only the key that changed so we don't clobber other categories
+  // (e.g. taste_push) the user might have set elsewhere.
+  const persist = useCallback(async (patch: NotificationCategories) => {
+    try {
+      await updateNotifications(patch);
+    } catch {
+      // silent — local state already reflects intent
+    }
+  }, []);
+
+  const onEnabledChange = (v: boolean) => {
+    setEnabled(v);
+    void persist({ system: v });
+  };
+  const onMarketingChange = (v: boolean) => {
+    setMarketing(v);
+    void persist({ release_alerts: v });
+  };
 
   return (
     <View style={styles.root}>
@@ -24,21 +74,27 @@ export default function NotificationsScreen() {
         ]}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.card}>
-          <View style={styles.row}>
-            <View style={styles.rowText}>
-              <Text style={styles.rowTitle}>알림</Text>
-            </View>
-            <GlassToggle value={enabled} onValueChange={setEnabled} />
+        {loading ? (
+          <View style={styles.loadingBox}>
+            <ActivityIndicator />
           </View>
-          <View style={[styles.row, styles.rowDivider]}>
-            <View style={styles.rowText}>
-              <Text style={styles.rowTitle}>마케팅·이벤트</Text>
-              <Text style={styles.rowHint}>혜택·신규 브랜드 소식</Text>
+        ) : (
+          <View style={styles.card}>
+            <View style={styles.row}>
+              <View style={styles.rowText}>
+                <Text style={styles.rowTitle}>알림</Text>
+              </View>
+              <GlassToggle value={enabled} onValueChange={onEnabledChange} />
             </View>
-            <GlassToggle value={marketing} onValueChange={setMarketing} />
+            <View style={[styles.row, styles.rowDivider]}>
+              <View style={styles.rowText}>
+                <Text style={styles.rowTitle}>마케팅·이벤트</Text>
+                <Text style={styles.rowHint}>혜택·신규 브랜드 소식</Text>
+              </View>
+              <GlassToggle value={marketing} onValueChange={onMarketingChange} />
+            </View>
           </View>
-        </View>
+        )}
 
         <Text style={styles.footerNote}>{SYSTEM_WARNING}</Text>
       </ScrollView>
@@ -55,6 +111,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 12,
     paddingBottom: 32,
+  },
+
+  loadingBox: {
+    paddingVertical: 40,
+    alignItems: 'center',
   },
 
   card: {

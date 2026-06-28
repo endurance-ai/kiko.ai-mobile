@@ -24,16 +24,31 @@ export function getMessages(
   );
 }
 
+export interface ChatSendOpts {
+  /** 'unisex' | 'women' | 'men' (mobile FilterProvider). '무관' should pass undefined. */
+  gender?: string;
+  /** Upper price bound in KRW (원). undefined or 0 = no ceiling. */
+  priceMaxKrw?: number;
+}
+
+function buildRequest(message: string, opts?: ChatSendOpts): ChatRequest {
+  return {
+    message,
+    gender: opts?.gender ?? null,
+    price_max: opts?.priceMaxKrw && opts.priceMaxKrw > 0 ? opts.priceMaxKrw : null,
+  };
+}
+
 /**
  * Open a new chat session with an initial message. Server streams the reply
- * as Server-Sent Events: session → text_delta* → product* → done (or error).
+ * as Server-Sent Events: session → text_delta* → product* → search → done (or error).
  */
 export function createSessionStream(
   message: string,
   handlers: ChatStreamHandlers,
+  opts?: ChatSendOpts,
 ): ChatStreamController {
-  const body: ChatRequest = { message };
-  return streamChatSSE('/v1/chat/sessions', body, handlers);
+  return streamChatSSE('/v1/chat/sessions', buildRequest(message, opts), handlers);
 }
 
 /**
@@ -43,11 +58,11 @@ export function sendMessageStream(
   sessionId: string,
   message: string,
   handlers: ChatStreamHandlers,
+  opts?: ChatSendOpts,
 ): ChatStreamController {
-  const body: ChatRequest = { message };
   return streamChatSSE(
     `/v1/chat/sessions/${encodeURIComponent(sessionId)}/messages`,
-    body,
+    buildRequest(message, opts),
     handlers,
   );
 }
