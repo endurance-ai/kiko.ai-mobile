@@ -61,7 +61,13 @@ export default function ProductDetailScreen() {
       if (session) params.push(`session=${encodeURIComponent(session)}`);
       if (product.image_url)
         params.push(`pin_image=${encodeURIComponent(product.image_url)}`);
-      params.push(`pin_label=${encodeURIComponent(product.brand || product.name || '선택한 상품')}`);
+      params.push(
+        `pin_label=${encodeURIComponent(product.brand || product.name || '선택한 상품')}`,
+      );
+      params.push(`pin_id=${encodeURIComponent(String(product.id))}`);
+      if (product.name) params.push(`pin_name=${encodeURIComponent(product.name)}`);
+      if (product.price != null)
+        params.push(`pin_price=${encodeURIComponent(String(Math.round(product.price)))}`);
       router.replace(`/home?${params.join('&')}` as never);
     },
     [product, session],

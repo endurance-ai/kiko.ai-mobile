@@ -206,11 +206,17 @@ export default function ChatEntryScreen() {
     seed: seedParam,
     pin_image: pinImageParam,
     pin_label: pinLabelParam,
+    pin_id: pinIdParam,
+    pin_name: pinNameParam,
+    pin_price: pinPriceParam,
   } = useLocalSearchParams<{
     session?: string;
     seed?: string;
     pin_image?: string;
     pin_label?: string;
+    pin_id?: string;
+    pin_name?: string;
+    pin_price?: string;
   }>();
   const { value: filter, setValue: setFilter } = useFilter();
   const { active: activeBanner, show: showBanner, clear: clearBanner } = useBanner();
@@ -254,11 +260,17 @@ export default function ChatEntryScreen() {
     if (handledSeedRef.current === seedParam) return;
     handledSeedRef.current = seedParam;
     const attachment = pinLabelParam
-      ? { imageUrl: pinImageParam, label: pinLabelParam }
+      ? {
+          imageUrl: pinImageParam,
+          label: pinLabelParam,
+          productId: pinIdParam,
+          productName: pinNameParam,
+          productPrice: pinPriceParam,
+        }
       : undefined;
     // Defer slightly so the session effect can stamp sessionIdRef first.
     setTimeout(() => runStreamingTurn(seedParam, attachment), 50);
-  }, [seedParam, pinImageParam, pinLabelParam]);
+  }, [seedParam, pinImageParam, pinLabelParam, pinIdParam, pinNameParam, pinPriceParam]);
 
   const lastTurn = messages[messages.length - 1] ?? null;
   const lastStatus = lastTurn?.status ?? null;
@@ -441,7 +453,14 @@ export default function ChatEntryScreen() {
 
   const runStreamingTurn = (
     trimmed: string,
-    overrideAttachment?: { imageUrl?: string; thumbColor?: string; label: string },
+    overrideAttachment?: {
+      imageUrl?: string;
+      thumbColor?: string;
+      label: string;
+      productId?: string;
+      productName?: string;
+      productPrice?: string;
+    },
   ) => {
     clearBanner('request-failure');
     // Explicit override wins (e.g. handoff from PDP). Otherwise use the
@@ -471,7 +490,21 @@ export default function ChatEntryScreen() {
     if (attachment) setPinnedId(null);
     // Server takes plain text; if a product is pinned, prefix the message so
     // the ReAct loop anchors to it.
-    const serverText = attachment ? `[${attachment.label}] ${trimmed}` : trimmed;
+    // Build a context-rich prefix the server's ReAct agent can anchor on.
+    // We try product_id first (deterministic lookup), then brand + name + price
+    // for human-readable fallback. The user only sees `trimmed` in the bubble.
+    let serverText = trimmed;
+    if (attachment) {
+      const parts: string[] = [];
+      const pid = (attachment as { productId?: string }).productId;
+      const pname = (attachment as { productName?: string }).productName;
+      const pprice = (attachment as { productPrice?: string }).productPrice;
+      if (pid) parts.push(`#${pid}`);
+      parts.push(attachment.label);
+      if (pname) parts.push(pname);
+      if (pprice) parts.push(`₩${Number(pprice).toLocaleString('ko-KR')}`);
+      serverText = `[${parts.join(' · ')}] ${trimmed}`;
+    }
 
     const patch = (mut: (t: Turn) => Partial<Turn>) =>
       setMessages((prev) =>
