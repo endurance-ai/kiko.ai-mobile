@@ -51,6 +51,37 @@ export default function ProductDetailScreen() {
   const saved = productIdStr ? isSaved(productIdStr) : false;
   const canSend = text.trim().length > 0;
 
+  // Hand the message + this product as a pinned attachment off to /home, which
+  // owns the chat surface. Home reads the seed/pin params, fires the SSE turn
+  // there so the user sees the streaming response in the main chat flow.
+  const kickoffChat = useCallback(
+    (msg: string) => {
+      if (!product) return;
+      Haptic.medium();
+      const params: string[] = [`seed=${encodeURIComponent(msg)}`];
+      if (session) params.push(`session=${encodeURIComponent(session)}`);
+      if (product.image_url)
+        params.push(`pin_image=${encodeURIComponent(product.image_url)}`);
+      params.push(`pin_label=${encodeURIComponent(product.brand || product.name || '선택한 상품')}`);
+      router.replace(`/home?${params.join('&')}` as never);
+    },
+    [product, session],
+  );
+
+  const handleCritique = useCallback(
+    (label: string) => {
+      kickoffChat(label);
+    },
+    [kickoffChat],
+  );
+
+  const handleComposerSend = useCallback(() => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    setText('');
+    kickoffChat(trimmed);
+  }, [text, kickoffChat]);
+
   const load = useCallback(async () => {
     if (!id) return;
     try {
@@ -256,7 +287,7 @@ export default function ProductDetailScreen() {
                 <Text style={styles.scopeBrand}>· {product.brand}</Text>
               </View>
               {CRITIQUE.map((c) => (
-                <Pressable key={c.id} onPress={() => Haptic.light()}>
+                <Pressable key={c.id} onPress={() => handleCritique(c.label)}>
                   <GlassView glassEffectStyle="clear" style={styles.critiqueChip}>
                     <Text style={styles.critiqueText}>{c.label}</Text>
                   </GlassView>
@@ -284,12 +315,13 @@ export default function ProductDetailScreen() {
                 placeholderTextColor={IOSColors.placeholderText}
                 style={styles.input}
                 returnKeyType="send"
+                onSubmitEditing={handleComposerSend}
               />
               <Pressable
                 hitSlop={6}
                 disabled={!canSend}
                 style={[styles.sendBtn, !canSend && styles.sendBtnDisabled]}
-                onPress={() => Haptic.medium()}
+                onPress={handleComposerSend}
               >
                 <SymbolView
                   name="arrow.right"

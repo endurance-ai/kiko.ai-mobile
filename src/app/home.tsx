@@ -201,7 +201,17 @@ function looksLikeFashionQuery(text: string): boolean {
 
 export default function ChatEntryScreen() {
   const insets = useSafeAreaInsets();
-  const { session: sessionParam } = useLocalSearchParams<{ session?: string }>();
+  const {
+    session: sessionParam,
+    seed: seedParam,
+    pin_image: pinImageParam,
+    pin_label: pinLabelParam,
+  } = useLocalSearchParams<{
+    session?: string;
+    seed?: string;
+    pin_image?: string;
+    pin_label?: string;
+  }>();
   const { value: filter, setValue: setFilter } = useFilter();
   const { active: activeBanner, show: showBanner, clear: clearBanner } = useBanner();
   const [text, setText] = useState('');
@@ -235,6 +245,20 @@ export default function ChatEntryScreen() {
       cancelled = true;
     };
   }, [sessionParam]);
+
+  // Pick up a seed message handed off from another screen (PDP critique chip
+  // or composer). Fires once per seed value.
+  const handledSeedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!seedParam) return;
+    if (handledSeedRef.current === seedParam) return;
+    handledSeedRef.current = seedParam;
+    const attachment = pinLabelParam
+      ? { imageUrl: pinImageParam, label: pinLabelParam }
+      : undefined;
+    // Defer slightly so the session effect can stamp sessionIdRef first.
+    setTimeout(() => runStreamingTurn(seedParam, attachment), 50);
+  }, [seedParam, pinImageParam, pinLabelParam]);
 
   const lastTurn = messages[messages.length - 1] ?? null;
   const lastStatus = lastTurn?.status ?? null;
@@ -415,9 +439,14 @@ export default function ChatEntryScreen() {
     runStreamingTurn(trimmed);
   };
 
-  const runStreamingTurn = (trimmed: string) => {
+  const runStreamingTurn = (
+    trimmed: string,
+    overrideAttachment?: { imageUrl?: string; thumbColor?: string; label: string },
+  ) => {
     clearBanner('request-failure');
-    const attachment = pinnedAttachment; // snapshot before we clear it
+    // Explicit override wins (e.g. handoff from PDP). Otherwise use the
+    // currently-pinned product from the composer.
+    const attachment = overrideAttachment ?? pinnedAttachment;
     const turnId = nextIdRef.current++;
     const turn: Turn = {
       id: turnId,
