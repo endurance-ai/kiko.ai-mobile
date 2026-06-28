@@ -1,9 +1,9 @@
-import { GlassView } from 'expo-glass-effect';
-import { Image } from 'expo-image';
-import * as ImagePicker from 'expo-image-picker';
-import { router, useLocalSearchParams } from 'expo-router';
-import { SymbolView } from 'expo-symbols';
-import { useEffect, useRef, useState } from 'react';
+import { GlassView } from "expo-glass-effect";
+import { Image } from "expo-image";
+import * as ImagePicker from "expo-image-picker";
+import { router, useLocalSearchParams } from "expo-router";
+import { SymbolView } from "expo-symbols";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -15,24 +15,28 @@ import {
   Text,
   TextInput,
   View,
-} from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { Image as ExpoImage } from 'expo-image';
+import { Image as ExpoImage } from "expo-image";
 
-import { Banner } from '@/components/banner';
-import { FeedbackTrigger } from '@/components/feedback-trigger';
-import { PRODUCT_CARD_WIDTH, ProductCard } from '@/components/product-card';
-import { TopBar } from '@/components/top-bar';
-import { Haptic, IOSColors, IOSFont, IOSText } from '@/constants/ios';
-import { createSessionStream, getMessages, sendMessageStream } from '@/lib/chat';
-import type { ChatStreamController } from '@/lib/sse';
-import { useBanner } from '@/state/banner';
-import { buildFilterLabel, PRICE_MAX, useFilter } from '@/state/filter';
-import { MOCK_PRODUCTS, type Product } from '@/state/products';
-import type { ProductRef } from '@/types/api';
+import { Banner } from "@/components/banner";
+import { FeedbackTrigger } from "@/components/feedback-trigger";
+import { PRODUCT_CARD_WIDTH, ProductCard } from "@/components/product-card";
+import { TopBar } from "@/components/top-bar";
+import { Haptic, IOSColors, IOSFont, IOSText } from "@/constants/ios";
+import {
+  createSessionStream,
+  getMessages,
+  sendMessageStream,
+} from "@/lib/chat";
+import type { ChatStreamController } from "@/lib/sse";
+import { useBanner } from "@/state/banner";
+import { buildFilterLabel, PRICE_MAX, useFilter } from "@/state/filter";
+import { MOCK_PRODUCTS, type Product } from "@/state/products";
+import type { ProductRef } from "@/types/api";
 
-type TurnStatus = 'analyzing' | 'picking' | 'searching' | 'results' | 'empty';
+type TurnStatus = "analyzing" | "picking" | "searching" | "results" | "empty";
 
 type VisionItem = {
   id: string;
@@ -41,10 +45,10 @@ type VisionItem = {
 };
 
 const MOCK_VISION_ITEMS: VisionItem[] = [
-  { id: 'shirt', label: '코튼 오버셔츠', emoji: '👔' },
-  { id: 'jeans', label: '와이드 데님', emoji: '👖' },
-  { id: 'shoes', label: '레더 스니커즈', emoji: '👟' },
-  { id: 'watch', label: '미니멀 시계', emoji: '⌚' },
+  { id: "shirt", label: "코튼 오버셔츠", emoji: "👔" },
+  { id: "jeans", label: "와이드 데님", emoji: "👖" },
+  { id: "shoes", label: "레더 스니커즈", emoji: "👟" },
+  { id: "watch", label: "미니멀 시계", emoji: "⌚" },
 ];
 
 type UserMessage = {
@@ -79,56 +83,57 @@ type Turn = {
 };
 
 const SAMPLE_MOODS: { id: string; color: string }[] = [
-  { id: 'm1', color: '#D8D6D2' },
-  { id: 'm2', color: '#BFBDB9' },
-  { id: 'm3', color: '#9C9A96' },
+  { id: "m1", color: "#D8D6D2" },
+  { id: "m2", color: "#BFBDB9" },
+  { id: "m3", color: "#9C9A96" },
 ];
 
-const SEARCH_HINT = '인디 · 빈티지 2,900+ 브랜드에서 찾는 중…';
-const ANALYZE_HINT = '사진 분석 중… 아이템 추출하고 있어';
+const SEARCH_HINT = "인디 · 빈티지 2,900+ 브랜드에서 찾는 중…";
+const ANALYZE_HINT = "사진 분석 중… 아이템 추출하고 있어";
 
 // Composer placeholder pools. Rotated by a ticker so the hint refreshes
 // while the user is reading. Sources of truth for all states below.
 const BUSY_GENERAL_HINTS = [
-  '키코가 3,200+ 브랜드에서 찾는 중…',
-  '당신 취향의 브랜드에서 찾는 중…',
-  '당신 취향의 디자이너를 찾는 중…',
-  '지금 막 나온 신상부터 살펴보는 중…',
-  '이미지에서 핏 · 색 · 무드를 읽는 중…',
+  "키코가 3,200+ 브랜드에서 찾는 중…",
+  "당신 취향의 브랜드에서 찾는 중…",
+  "당신 취향의 디자이너를 찾는 중…",
+  "지금 막 나온 신상부터 살펴보는 중…",
+  "이미지에서 핏 · 색 · 무드를 읽는 중…",
 ];
 const BUSY_CRITIQUE_HINTS = [
-  '더 디테일하게 찾는 중…',
-  '더 비슷하게 다시 찾아보는 중…',
-  '더 저렴한 가격으로 찾는 중…',
-  '조건을 좁혀서 정확하게 찾는 중…',
+  "더 디테일하게 찾는 중…",
+  "더 비슷하게 다시 찾아보는 중…",
+  "더 저렴한 가격으로 찾는 중…",
+  "조건을 좁혀서 정확하게 찾는 중…",
 ];
 const IDLE_INITIAL_HINTS = [
-  '이미지/사진을 추가하거나 요청을 입력해보세요',
-  'SNS 링크를 넣어보세요',
-  '사진 한 장이면 충분해요',
+  "이미지/링크를 추가하거나 요청…",
+  "SNS 링크를 넣어보세요",
+  "사진 한 장이면 충분해요",
 ];
 const IDLE_AFTER_RESULTS_HINTS = [
-  '더 저렴한 것 찾아줘',
-  '더 비슷한 것 찾아줘',
-  '정확한 핏 요청하기',
-  '디테일한 차이를 설명하기',
+  "더 저렴한 것 찾아줘",
+  "더 비슷한 것 찾아줘",
+  "정확한 핏 요청하기",
+  "디테일한 차이를 설명하기",
 ];
-const PICK_PROMPT = (n: number) => `이 사진에서 ${n}개 아이템 찾았어. 어떤 거 찾아줄까?`;
-const AGENT_INTRO_DEFAULT = '이런 거 어때? · 콕집기로 골라봐';
-const AGENT_INTRO_NARROWING = '이런 거 찾았어 · 근데 좀 갈리네';
-const EMPTY_FALLBACK = '이 무드는 아직 딱 맞는 걸 못 찾았어. 이렇게 해볼까?';
+const PICK_PROMPT = (n: number) =>
+  `이 사진에서 ${n}개 아이템 찾았어. 어떤 거 찾아줄까?`;
+const AGENT_INTRO_DEFAULT = "이런 거 어때? · 콕집기로 골라봐";
+const AGENT_INTRO_NARROWING = "이런 거 찾았어 · 근데 좀 갈리네";
+const EMPTY_FALLBACK = "이 무드는 아직 딱 맞는 걸 못 찾았어. 이렇게 해볼까?";
 
 // Critique chips stay identical whether a product is pinned or not — the
 // single source of truth keeps refine actions predictable. The "왜" affordance
 // (which only made sense for an anchored item) is dropped on purpose.
 const CRITIQUE_CHIPS = [
-  { id: 'similar', label: '더 비슷하게' },
-  { id: 'cheaper', label: '더 저렴하게' },
+  { id: "similar", label: "더 비슷하게" },
+  { id: "cheaper", label: "더 저렴하게" },
 ];
 
 const MOCK_NARROWING: Narrowing = {
-  question: '기장에서 갈려 — 어디로 좁힐까?',
-  options: ['롱 기장', '크롭'],
+  question: "기장에서 갈려 — 어디로 좁힐까?",
+  options: ["롱 기장", "크롭"],
 };
 
 // Pinterest / Instagram 링크는 og:image 해석을 통해 이미지 입력과 동치로 본다
@@ -157,9 +162,9 @@ async function fetchLinkPreviewImage(url: string): Promise<string | null> {
   try {
     const res = await fetch(url, {
       headers: {
-        'User-Agent':
-          'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
-        Accept: 'text/html,*/*',
+        "User-Agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+        Accept: "text/html,*/*",
       },
     });
     if (!res.ok) return null;
@@ -187,28 +192,29 @@ async function fetchLinkPreviewImage(url: string): Promise<string | null> {
  * empty assistant content so the user input is visible.
  */
 function messageItemsToTurns(
-  items: import('@/types/api').MessageItem[],
+  items: import("@/types/api").MessageItem[],
   nextIdRef: { current: number },
 ): Turn[] {
   const sorted = [...items].sort(
-    (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+    (a, b) =>
+      new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
   );
   const turns: Turn[] = [];
   let i = 0;
   while (i < sorted.length) {
     const userMsg = sorted[i];
-    if (userMsg.role !== 'user') {
+    if (userMsg.role !== "user") {
       i++;
       continue;
     }
     const assistantMsg =
-      sorted[i + 1]?.role === 'assistant' ? sorted[i + 1] : null;
+      sorted[i + 1]?.role === "assistant" ? sorted[i + 1] : null;
     turns.push({
       id: nextIdRef.current++,
       user: { text: userMsg.content },
-      status: 'results',
+      status: "results",
       isStream: true,
-      streamText: assistantMsg?.content ?? '',
+      streamText: assistantMsg?.content ?? "",
       streamProducts: assistantMsg?.product_refs ?? [],
       streamDone: true,
     });
@@ -220,7 +226,8 @@ function messageItemsToTurns(
 // Best-effort heuristic for fashion / shopping intent. Used to pick the
 // transient bot status copy while waiting for the first text_delta. Not a
 // gate on anything else — false negatives just fall back to a generic line.
-const FASHION_KEYWORDS = /옷|셔츠|티셔츠|블라우스|니트|스웨터|가디건|후드|맨투맨|자켓|재킷|코트|아우터|이너|패딩|점퍼|조끼|베스트|원피스|드레스|스커트|치마|바지|팬츠|진|데님|슬랙스|쇼츠|반바지|신발|스니커즈|운동화|구두|로퍼|샌들|부츠|슬리퍼|가방|백|클러치|토트|크로스백|숄더백|모자|캡|비니|버킷햇|선글라스|안경|벨트|시계|악세사리|악세서리|주얼리|목걸이|반지|귀걸이|팔찌|핏|루즈핏|오버핏|슬림핏|와이드|크롭|롱|숏|컬러|색감|색상|브랜드|코디|룩|스타일|무드|빈티지|미니멀|스트릿|캐주얼|포멀|찾아|추천|입을|입고|사고/i;
+const FASHION_KEYWORDS =
+  /옷|셔츠|티셔츠|블라우스|니트|스웨터|가디건|후드|맨투맨|자켓|재킷|코트|아우터|이너|패딩|점퍼|조끼|베스트|원피스|드레스|스커트|치마|바지|팬츠|진|데님|슬랙스|쇼츠|반바지|신발|스니커즈|운동화|구두|로퍼|샌들|부츠|슬리퍼|가방|백|클러치|토트|크로스백|숄더백|모자|캡|비니|버킷햇|선글라스|안경|벨트|시계|악세사리|악세서리|주얼리|목걸이|반지|귀걸이|팔찌|핏|루즈핏|오버핏|슬림핏|와이드|크롭|롱|숏|컬러|색감|색상|브랜드|코디|룩|스타일|무드|빈티지|미니멀|스트릿|캐주얼|포멀|찾아|추천|입을|입고|사고/i;
 
 function looksLikeFashionQuery(text: string): boolean {
   return FASHION_KEYWORDS.test(text);
@@ -246,8 +253,12 @@ export default function ChatEntryScreen() {
     pin_price?: string;
   }>();
   const { value: filter, setValue: setFilter } = useFilter();
-  const { active: activeBanner, show: showBanner, clear: clearBanner } = useBanner();
-  const [text, setText] = useState('');
+  const {
+    active: activeBanner,
+    show: showBanner,
+    clear: clearBanner,
+  } = useBanner();
+  const [text, setText] = useState("");
   const [pickedImage, setPickedImage] = useState<string | null>(null);
   const [messages, setMessages] = useState<Turn[]>([]);
   const [pinnedId, setPinnedId] = useState<string | null>(null);
@@ -258,13 +269,6 @@ export default function ChatEntryScreen() {
 
   useEffect(() => () => streamRef.current?.cancel(), []);
 
-  // Rotating placeholder ticker. 2.5s cadence so users notice the variation
-  // without it feeling jittery. Module-level hint arrays index via tick % len.
-  const [hintTick, setHintTick] = useState(0);
-  useEffect(() => {
-    const t = setInterval(() => setHintTick((n) => n + 1), 2500);
-    return () => clearInterval(t);
-  }, []);
   // Sticky flag — set when the current send originated from a critique chip
   // so the busy hints can swap to the critique-specific pool. Cleared on
   // next non-critique send or when the stream ends.
@@ -309,7 +313,14 @@ export default function ChatEntryScreen() {
       : undefined;
     // Defer slightly so the session effect can stamp sessionIdRef first.
     setTimeout(() => runStreamingTurn(seedParam, attachment), 50);
-  }, [seedParam, pinImageParam, pinLabelParam, pinIdParam, pinNameParam, pinPriceParam]);
+  }, [
+    seedParam,
+    pinImageParam,
+    pinLabelParam,
+    pinIdParam,
+    pinNameParam,
+    pinPriceParam,
+  ]);
 
   const lastTurn = messages[messages.length - 1] ?? null;
   const lastStatus = lastTurn?.status ?? null;
@@ -317,9 +328,9 @@ export default function ChatEntryScreen() {
   const isStreaming =
     lastTurn?.isStream === true && lastTurn.streamDone !== true;
   const isBusy =
-    lastStatus === 'searching' || lastStatus === 'analyzing' || isStreaming;
-  const hasResults = lastStatus === 'results';
-  const isEmpty = lastStatus === 'empty';
+    lastStatus === "searching" || lastStatus === "analyzing" || isStreaming;
+  const hasResults = lastStatus === "results";
+  const isEmpty = lastStatus === "empty";
   const canSend = !isBusy && (text.trim().length > 0 || pickedImage !== null);
   // Unified pinned attachment: works for both mock products and SSE products.
   // SSE pins use a composite id "<turnId>:<index>" so we look up by parsing it.
@@ -333,14 +344,14 @@ export default function ChatEntryScreen() {
     if (mockHit) {
       return { thumbColor: mockHit.colorHint, label: mockHit.brand };
     }
-    const [maybeTurnId, maybeIdx] = pinnedId.split(':');
+    const [maybeTurnId, maybeIdx] = pinnedId.split(":");
     if (maybeTurnId && maybeIdx) {
       const turn = messages.find((t) => String(t.id) === maybeTurnId);
       const sse = turn?.streamProducts?.[Number(maybeIdx)];
       if (sse) {
         // caption is HTML-ish; the brand line is usually the bold prefix.
-        const stripped = sse.caption.replace(/<[^>]+>/g, '').trim();
-        const label = stripped.split('\n')[0] || '선택한 상품';
+        const stripped = sse.caption.replace(/<[^>]+>/g, "").trim();
+        const label = stripped.split("\n")[0] || "선택한 상품";
         return { imageUrl: sse.image_url, label: label.slice(0, 20) };
       }
     }
@@ -348,14 +359,32 @@ export default function ChatEntryScreen() {
   })();
   // Legacy name kept for the few mock-only branches still using `.colorHint`.
   const pinnedProduct = pinnedId
-    ? lastTurn?.results?.find((p) => p.id === pinnedId) ?? null
+    ? (lastTurn?.results?.find((p) => p.id === pinnedId) ?? null)
     : null;
   const critiqueChips = CRITIQUE_CHIPS;
+
+  // Composer placeholder — one random pick per state context. Recomputes
+  // only when the relevant state combo changes (busy ↔ idle, results ↔ empty),
+  // so the user doesn't see it jitter mid-typing.
+  const composerPlaceholder = useMemo(() => {
+    if (isBusy) {
+      const pool = lastSendFromCritiqueRef.current
+        ? BUSY_CRITIQUE_HINTS
+        : BUSY_GENERAL_HINTS;
+      return pool[Math.floor(Math.random() * pool.length)];
+    }
+    if (pinnedProduct) return "또는 직접 입력...";
+    const pool = hasResults ? IDLE_AFTER_RESULTS_HINTS : IDLE_INITIAL_HINTS;
+    return pool[Math.floor(Math.random() * pool.length)];
+  }, [isBusy, hasResults, pinnedProduct]);
 
   // Auto-scroll to bottom whenever messages or status change.
   useEffect(() => {
     if (!scrollRef.current) return;
-    const t = setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 60);
+    const t = setTimeout(
+      () => scrollRef.current?.scrollToEnd({ animated: true }),
+      60,
+    );
     return () => clearTimeout(t);
   }, [messages]);
 
@@ -366,20 +395,20 @@ export default function ChatEntryScreen() {
   };
 
   const runFinalSearch = (turnId: number) => {
-    updateTurn(turnId, { status: 'searching' });
+    updateTurn(turnId, { status: "searching" });
     setTimeout(() => {
       const wouldBeEmpty = filter.priceMax < 100;
       if (wouldBeEmpty) {
         Haptic.warning();
         updateTurn(turnId, {
-          status: 'empty',
+          status: "empty",
           results: [],
           narrowing: null,
         });
       } else {
         Haptic.success();
         updateTurn(turnId, {
-          status: 'results',
+          status: "results",
           results: MOCK_PRODUCTS,
           narrowing: MOCK_NARROWING,
         });
@@ -394,17 +423,17 @@ export default function ChatEntryScreen() {
     const turn: Turn = {
       id: turnId,
       user: msg,
-      status: hasImageInput ? 'analyzing' : 'searching',
+      status: hasImageInput ? "analyzing" : "searching",
     };
     setMessages((prev) => [...prev, turn]);
-    setText('');
+    setText("");
     setPickedImage(null);
     setPinnedId(null);
 
     if (hasImageInput) {
       setTimeout(() => {
         updateTurn(turnId, {
-          status: 'picking',
+          status: "picking",
           visionItems: MOCK_VISION_ITEMS,
         });
         Haptic.light();
@@ -421,11 +450,14 @@ export default function ChatEntryScreen() {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
       Haptic.error();
-      Alert.alert('권한 필요', '갤러리 접근 권한이 필요해요. 설정에서 허용해줘.');
+      Alert.alert(
+        "권한 필요",
+        "갤러리 접근 권한이 필요해요. 설정에서 허용해줘.",
+      );
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
+      mediaTypes: ["images"],
       quality: 0.85,
       allowsEditing: false,
     });
@@ -437,7 +469,7 @@ export default function ChatEntryScreen() {
   const handleOpenFilter = () => {
     if (isBusy) return;
     Haptic.light();
-    router.push('/filter');
+    router.push("/filter");
   };
 
   const handlePickItem = (turnId: number, item: VisionItem) => {
@@ -487,7 +519,7 @@ export default function ChatEntryScreen() {
       return;
     }
 
-    setText('');
+    setText("");
     runStreamingTurn(trimmed);
   };
 
@@ -502,7 +534,7 @@ export default function ChatEntryScreen() {
       productPrice?: string;
     },
   ) => {
-    clearBanner('request-failure');
+    clearBanner("request-failure");
     // Explicit override wins (e.g. handoff from PDP). Otherwise use the
     // currently-pinned product from the composer.
     const attachment = overrideAttachment ?? pinnedAttachment;
@@ -517,14 +549,14 @@ export default function ChatEntryScreen() {
             ? attachment.thumbColor
             : undefined,
       },
-      status: 'searching',
+      status: "searching",
       isStream: true,
-      streamText: '',
+      streamText: "",
       streamProducts: [],
       streamDone: false,
       streamPlaceholder: looksLikeFashionQuery(trimmed)
-        ? '카탈로그에서 찾는 중…'
-        : '키코가 생각 중…',
+        ? "카탈로그에서 찾는 중…"
+        : "키코가 생각 중…",
     };
     setMessages((prev) => [...prev, turn]);
     if (attachment) setPinnedId(null);
@@ -542,8 +574,8 @@ export default function ChatEntryScreen() {
       if (pid) parts.push(`#${pid}`);
       parts.push(attachment.label);
       if (pname) parts.push(pname);
-      if (pprice) parts.push(`₩${Number(pprice).toLocaleString('ko-KR')}`);
-      serverText = `[${parts.join(' · ')}] ${trimmed}`;
+      if (pprice) parts.push(`₩${Number(pprice).toLocaleString("ko-KR")}`);
+      serverText = `[${parts.join(" · ")}] ${trimmed}`;
     }
 
     const patch = (mut: (t: Turn) => Partial<Turn>) =>
@@ -568,7 +600,7 @@ export default function ChatEntryScreen() {
         sessionIdRef.current = sessionId;
       },
       onTextDelta: (delta: string) => {
-        patch((t) => ({ streamText: (t.streamText ?? '') + delta }));
+        patch((t) => ({ streamText: (t.streamText ?? "") + delta }));
       },
       onProduct: (product: ProductRef) => {
         patch((t) => ({
@@ -579,7 +611,7 @@ export default function ChatEntryScreen() {
         patch(() => ({ streamSearchId: searchId }));
       },
       onDone: () => {
-        patch(() => ({ streamDone: true, status: 'results' as const }));
+        patch(() => ({ streamDone: true, status: "results" as const }));
         streamRef.current = null;
       },
       onError: () => {
@@ -587,11 +619,11 @@ export default function ChatEntryScreen() {
         setMessages((prev) => prev.filter((t) => t.id !== turnId));
         streamRef.current = null;
         showBanner({
-          id: 'request-failure',
-          priority: 'error',
-          title: '요청을 처리하지 못했어요',
+          id: "request-failure",
+          priority: "error",
+          title: "요청을 처리하지 못했어요",
           action: {
-            label: '다시 시도',
+            label: "다시 시도",
             onPress: () => runStreamingTurn(trimmed),
           },
         });
@@ -602,13 +634,18 @@ export default function ChatEntryScreen() {
     // so the server sees no constraint. priceMax is stored in 만원 units; the
     // server expects KRW 원 — multiply by 10,000.
     const filterOpts = {
-      gender: filter.gender === 'any' ? undefined : filter.gender,
+      gender: filter.gender === "any" ? undefined : filter.gender,
       priceMaxKrw:
         filter.priceMax >= PRICE_MAX ? undefined : filter.priceMax * 10_000,
     };
 
     streamRef.current = sessionIdRef.current
-      ? sendMessageStream(sessionIdRef.current, serverText, handlers, filterOpts)
+      ? sendMessageStream(
+          sessionIdRef.current,
+          serverText,
+          handlers,
+          filterOpts,
+        )
       : createSessionStream(serverText, handlers, filterOpts);
     void streamRef.current.promise.catch(() => {});
   };
@@ -664,7 +701,9 @@ export default function ChatEntryScreen() {
         >
           {messages.map((turn) => {
             const isLast = turn.id === lastTurn?.id;
-            const agentText = turn.narrowing ? AGENT_INTRO_NARROWING : AGENT_INTRO_DEFAULT;
+            const agentText = turn.narrowing
+              ? AGENT_INTRO_NARROWING
+              : AGENT_INTRO_DEFAULT;
 
             return (
               <View key={turn.id} style={styles.turn}>
@@ -730,16 +769,21 @@ export default function ChatEntryScreen() {
                   return (
                     <View style={styles.userTextRow}>
                       <View style={styles.userBubble}>
-                        <Text style={styles.userBubbleText}>{turn.user.text}</Text>
+                        <Text style={styles.userBubbleText}>
+                          {turn.user.text}
+                        </Text>
                       </View>
                     </View>
                   );
                 })()}
 
                 {/* Analyzing */}
-                {turn.status === 'analyzing' && (
+                {turn.status === "analyzing" && (
                   <View style={styles.botStatusRow}>
-                    <ActivityIndicator size="small" color={IOSColors.secondaryLabel} />
+                    <ActivityIndicator
+                      size="small"
+                      color={IOSColors.secondaryLabel}
+                    />
                     <Text style={styles.botStatusText}>{ANALYZE_HINT}</Text>
                   </View>
                 )}
@@ -757,7 +801,7 @@ export default function ChatEntryScreen() {
                         const isPicked = turn.pickedItem?.id === it.id;
                         const onTap = () => {
                           if (isBusy) return;
-                          if (isLast && turn.status === 'picking') {
+                          if (isLast && turn.status === "picking") {
                             handlePickItem(turn.id, it);
                           } else {
                             Haptic.medium();
@@ -767,7 +811,10 @@ export default function ChatEntryScreen() {
                         return (
                           <Pressable
                             key={it.id}
-                            style={[styles.pickerBtn, isPicked && styles.pickerBtnPicked]}
+                            style={[
+                              styles.pickerBtn,
+                              isPicked && styles.pickerBtnPicked,
+                            ]}
                             onPress={onTap}
                           >
                             <Text style={styles.pickerEmoji}>{it.emoji}</Text>
@@ -799,9 +846,12 @@ export default function ChatEntryScreen() {
                 )}
 
                 {/* Searching (mock pipeline only) */}
-                {turn.status === 'searching' && !turn.isStream && (
+                {turn.status === "searching" && !turn.isStream && (
                   <View style={styles.botStatusRow}>
-                    <ActivityIndicator size="small" color={IOSColors.secondaryLabel} />
+                    <ActivityIndicator
+                      size="small"
+                      color={IOSColors.secondaryLabel}
+                    />
                     <Text style={styles.botStatusText}>{SEARCH_HINT}</Text>
                   </View>
                 )}
@@ -848,11 +898,13 @@ export default function ChatEntryScreen() {
                             const sid = sessionIdRef.current;
                             const search = turn.streamSearchId;
                             const params = [
-                              sid ? `session=${encodeURIComponent(sid)}` : '',
-                              search ? `source=${encodeURIComponent(search)}` : '',
+                              sid ? `session=${encodeURIComponent(sid)}` : "",
+                              search
+                                ? `source=${encodeURIComponent(search)}`
+                                : "",
                             ]
                               .filter(Boolean)
-                              .join('&');
+                              .join("&");
                             const url = params
                               ? `/product/${productId}?${params}`
                               : `/product/${productId}`;
@@ -881,19 +933,22 @@ export default function ChatEntryScreen() {
                                   }}
                                 >
                                   <SymbolView
-                                    name={pinned ? 'checkmark' : 'plus'}
+                                    name={pinned ? "checkmark" : "plus"}
                                     size={14}
                                     tintColor="#1C1C1E"
                                     weight="bold"
                                   />
                                 </Pressable>
                               </Pressable>
-                              <Pressable onPress={goPdp} disabled={productId == null}>
+                              <Pressable
+                                onPress={goPdp}
+                                disabled={productId == null}
+                              >
                                 <Text
                                   style={styles.streamProductCaption}
                                   numberOfLines={3}
                                 >
-                                  {p.caption.replace(/<[^>]+>/g, '')}
+                                  {p.caption.replace(/<[^>]+>/g, "")}
                                 </Text>
                               </Pressable>
                             </View>
@@ -913,13 +968,18 @@ export default function ChatEntryScreen() {
                 )}
 
                 {/* Empty fallback */}
-                {turn.status === 'empty' && (
+                {turn.status === "empty" && (
                   <View style={styles.fallbackBlock}>
                     <Text style={styles.fallbackText}>{EMPTY_FALLBACK}</Text>
                     {isLast && (
                       <>
-                        <Pressable style={styles.fallbackAction} onPress={handleLoosen}>
-                          <Text style={styles.fallbackActionText}>조건 풀어서 다시 보기</Text>
+                        <Pressable
+                          style={styles.fallbackAction}
+                          onPress={handleLoosen}
+                        >
+                          <Text style={styles.fallbackActionText}>
+                            조건 풀어서 다시 보기
+                          </Text>
                         </Pressable>
                         <Pressable
                           style={styles.fallbackAction}
@@ -938,75 +998,85 @@ export default function ChatEntryScreen() {
                 )}
 
                 {/* Results */}
-                {turn.status === 'results' && turn.results && turn.results.length > 0 && (
-                  <View style={styles.resultsBlock}>
-                    <Text style={styles.agentText}>{agentText}</Text>
-                    <ScrollView
-                      horizontal
-                      showsHorizontalScrollIndicator={false}
-                      contentContainerStyle={styles.cardRow}
-                      snapToInterval={PRODUCT_CARD_WIDTH + 12}
-                      decelerationRate="fast"
-                    >
-                      {turn.results.slice(0, 5).map((p) => (
-                        <ProductCard
-                          key={p.id}
-                          product={p}
-                          pinned={isLast && pinnedId === p.id}
-                          onPress={() => router.push(`/product/${p.id}`)}
-                          onPin={() => isLast && handlePin(p)}
+                {turn.status === "results" &&
+                  turn.results &&
+                  turn.results.length > 0 && (
+                    <View style={styles.resultsBlock}>
+                      <Text style={styles.agentText}>{agentText}</Text>
+                      <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={styles.cardRow}
+                        snapToInterval={PRODUCT_CARD_WIDTH + 12}
+                        decelerationRate="fast"
+                      >
+                        {turn.results.slice(0, 5).map((p) => (
+                          <ProductCard
+                            key={p.id}
+                            product={p}
+                            pinned={isLast && pinnedId === p.id}
+                            onPress={() => router.push(`/product/${p.id}`)}
+                            onPin={() => isLast && handlePin(p)}
+                          />
+                        ))}
+                      </ScrollView>
+                      <Pressable
+                        style={styles.moreLink}
+                        onPress={() => {
+                          Haptic.light();
+                          router.push("/list");
+                        }}
+                      >
+                        <Text style={styles.moreLinkText}>
+                          더보기 (이 세트 {turn.results.length}개)
+                        </Text>
+                        <SymbolView
+                          name="chevron.right"
+                          size={12}
+                          tintColor={IOSColors.label}
+                          weight="semibold"
                         />
-                      ))}
-                    </ScrollView>
-                    <Pressable
-                      style={styles.moreLink}
-                      onPress={() => {
-                        Haptic.light();
-                        router.push('/list');
-                      }}
-                    >
-                      <Text style={styles.moreLinkText}>
-                        더보기 (이 세트 {turn.results.length}개)
-                      </Text>
-                      <SymbolView
-                        name="chevron.right"
-                        size={12}
-                        tintColor={IOSColors.label}
-                        weight="semibold"
-                      />
-                    </Pressable>
+                      </Pressable>
 
-                    <View style={styles.feedbackTriggerRow}>
-                      <FeedbackTrigger turnKey={`search:${turn.id}`} />
-                    </View>
-
-                    {turn.narrowing && (
-                      <View style={styles.narrowingBlock}>
-                        <Text style={styles.narrowingQ}>{turn.narrowing.question}</Text>
-                        <View style={styles.narrowingChipRow}>
-                          {turn.narrowing.options.map((opt) => (
-                            <Pressable
-                              key={opt}
-                              disabled={!isLast || isBusy}
-                              onPress={() => handleNarrowingPick(opt)}
-                            >
-                              <View style={styles.narrowChip}>
-                                <Text style={styles.narrowChipText}>{opt}</Text>
-                              </View>
-                            </Pressable>
-                          ))}
-                          {isLast && (
-                            <Pressable onPress={() => dismissNarrowing(turn.id)}>
-                              <View style={styles.narrowDismiss}>
-                                <Text style={styles.narrowDismissText}>상관없어</Text>
-                              </View>
-                            </Pressable>
-                          )}
-                        </View>
+                      <View style={styles.feedbackTriggerRow}>
+                        <FeedbackTrigger turnKey={`search:${turn.id}`} />
                       </View>
-                    )}
-                  </View>
-                )}
+
+                      {turn.narrowing && (
+                        <View style={styles.narrowingBlock}>
+                          <Text style={styles.narrowingQ}>
+                            {turn.narrowing.question}
+                          </Text>
+                          <View style={styles.narrowingChipRow}>
+                            {turn.narrowing.options.map((opt) => (
+                              <Pressable
+                                key={opt}
+                                disabled={!isLast || isBusy}
+                                onPress={() => handleNarrowingPick(opt)}
+                              >
+                                <View style={styles.narrowChip}>
+                                  <Text style={styles.narrowChipText}>
+                                    {opt}
+                                  </Text>
+                                </View>
+                              </Pressable>
+                            ))}
+                            {isLast && (
+                              <Pressable
+                                onPress={() => dismissNarrowing(turn.id)}
+                              >
+                                <View style={styles.narrowDismiss}>
+                                  <Text style={styles.narrowDismissText}>
+                                    상관없어
+                                  </Text>
+                                </View>
+                              </Pressable>
+                            )}
+                          </View>
+                        </View>
+                      )}
+                    </View>
+                  )}
               </View>
             );
           })}
@@ -1016,7 +1086,9 @@ export default function ChatEntryScreen() {
           <View style={styles.emptyCard}>
             <View style={styles.mascot} />
             <Text style={styles.emptyTitle}>무드 이미지를 올려봐</Text>
-            <Text style={styles.emptySubtitle}>그 느낌의 살 수 있는 옷을 찾아줄게</Text>
+            <Text style={styles.emptySubtitle}>
+              그 느낌의 살 수 있는 옷을 찾아줄게
+            </Text>
           </View>
 
           <View style={styles.thumbnailRow}>
@@ -1034,7 +1106,7 @@ export default function ChatEntryScreen() {
       {/* Composer — floats over content so chips/input show real glass with
           the result cards scrolling underneath. */}
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
         keyboardVerticalOffset={0}
         style={styles.composerFloat}
         pointerEvents="box-none"
@@ -1059,7 +1131,11 @@ export default function ChatEntryScreen() {
                   <View
                     style={[
                       styles.attachmentThumb,
-                      { backgroundColor: pinnedAttachment.thumbColor ?? IOSColors.tertiarySystemBackground },
+                      {
+                        backgroundColor:
+                          pinnedAttachment.thumbColor ??
+                          IOSColors.tertiarySystemBackground,
+                      },
                     ]}
                   />
                 )}
@@ -1080,35 +1156,40 @@ export default function ChatEntryScreen() {
           <Banner />
 
           {!activeBanner && (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.chipRow}
-          >
-            <Pressable onPress={handleOpenFilter} disabled={isBusy}>
-              <GlassView glassEffectStyle="clear" style={styles.filterChip}>
-                <Text style={styles.filterChipText}>{buildFilterLabel(filter)}</Text>
-                <SymbolView
-                  name="chevron.up"
-                  size={11}
-                  tintColor={IOSColors.secondaryLabel}
-                  weight="semibold"
-                />
-              </GlassView>
-            </Pressable>
-            {hasResults &&
-              critiqueChips.map((c) => (
-                <Pressable
-                  key={c.id}
-                  onPress={() => handleCritique(c.id)}
-                  disabled={isBusy}
-                >
-                  <GlassView glassEffectStyle="clear" style={styles.critiqueChip}>
-                    <Text style={styles.critiqueChipText}>{c.label}</Text>
-                  </GlassView>
-                </Pressable>
-              ))}
-          </ScrollView>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.chipRow}
+            >
+              <Pressable onPress={handleOpenFilter} disabled={isBusy}>
+                <GlassView glassEffectStyle="clear" style={styles.filterChip}>
+                  <Text style={styles.filterChipText}>
+                    {buildFilterLabel(filter)}
+                  </Text>
+                  <SymbolView
+                    name="chevron.up"
+                    size={11}
+                    tintColor={IOSColors.secondaryLabel}
+                    weight="semibold"
+                  />
+                </GlassView>
+              </Pressable>
+              {hasResults &&
+                critiqueChips.map((c) => (
+                  <Pressable
+                    key={c.id}
+                    onPress={() => handleCritique(c.id)}
+                    disabled={isBusy}
+                  >
+                    <GlassView
+                      glassEffectStyle="clear"
+                      style={styles.critiqueChip}
+                    >
+                      <Text style={styles.critiqueChipText}>{c.label}</Text>
+                    </GlassView>
+                  </Pressable>
+                ))}
+            </ScrollView>
           )}
 
           {pickedImage && (
@@ -1152,17 +1233,7 @@ export default function ChatEntryScreen() {
             <TextInput
               value={text}
               onChangeText={setText}
-              placeholder={(() => {
-                if (isBusy) {
-                  const pool = lastSendFromCritiqueRef.current
-                    ? BUSY_CRITIQUE_HINTS
-                    : BUSY_GENERAL_HINTS;
-                  return pool[hintTick % pool.length];
-                }
-                if (pinnedProduct) return '또는 직접 입력...';
-                const pool = hasResults ? IDLE_AFTER_RESULTS_HINTS : IDLE_INITIAL_HINTS;
-                return pool[hintTick % pool.length];
-              })()}
+              placeholder={composerPlaceholder}
               placeholderTextColor={IOSColors.placeholderText}
               style={styles.input}
               returnKeyType="send"
@@ -1193,13 +1264,13 @@ export default function ChatEntryScreen() {
         <TopBar
           onOpenMenu={() => {
             const sid = sessionIdRef.current;
-            router.push(sid ? `/sidebar?current=${sid}` : '/sidebar');
+            router.push(sid ? `/sidebar?current=${sid}` : "/sidebar");
           }}
           onOpenList={() => {
             const sid = sessionIdRef.current;
-            router.push(sid ? `/history?session=${sid}` : '/history');
+            router.push(sid ? `/history?session=${sid}` : "/history");
           }}
-          onOpenWishlist={() => router.push('/wishlist')}
+          onOpenWishlist={() => router.push("/wishlist")}
         />
       </View>
     </View>
@@ -1212,14 +1283,14 @@ const styles = StyleSheet.create({
     backgroundColor: IOSColors.secondarySystemBackground,
   },
   topBarFloat: {
-    position: 'absolute',
+    position: "absolute",
     top: 0,
     left: 0,
     right: 0,
     zIndex: 50,
   },
   composerFloat: {
-    position: 'absolute',
+    position: "absolute",
     left: 0,
     right: 0,
     bottom: 0,
@@ -1230,17 +1301,17 @@ const styles = StyleSheet.create({
   center: {
     flex: 1,
     paddingHorizontal: 24,
-    justifyContent: 'center',
+    justifyContent: "center",
     gap: 28,
   },
   emptyCard: {
     borderWidth: 1.5,
     borderColor: IOSColors.separator,
-    borderStyle: 'dashed',
+    borderStyle: "dashed",
     borderRadius: 28,
     paddingVertical: 40,
     paddingHorizontal: 24,
-    alignItems: 'center',
+    alignItems: "center",
   },
   mascot: {
     width: 88,
@@ -1261,9 +1332,9 @@ const styles = StyleSheet.create({
     fontFamily: IOSFont.rounded,
   },
   thumbnailRow: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 12,
-    justifyContent: 'center',
+    justifyContent: "center",
   },
   thumbnail: {
     width: 72,
@@ -1283,8 +1354,8 @@ const styles = StyleSheet.create({
     gap: 14,
   },
   userImageRow: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
+    flexDirection: "row",
+    justifyContent: "flex-end",
   },
   userImage: {
     width: 96,
@@ -1292,11 +1363,11 @@ const styles = StyleSheet.create({
     borderRadius: 16,
   },
   userTextRow: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
+    flexDirection: "row",
+    justifyContent: "flex-end",
   },
   userBubble: {
-    maxWidth: '80%',
+    maxWidth: "80%",
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 18,
@@ -1325,13 +1396,13 @@ const styles = StyleSheet.create({
     fontFamily: IOSFont.rounded,
   },
   pickerGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: "row",
+    flexWrap: "wrap",
     gap: 8,
   },
   pickerBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 8,
     paddingHorizontal: 14,
     paddingVertical: 10,
@@ -1349,7 +1420,7 @@ const styles = StyleSheet.create({
   },
   pickerLabel: {
     ...IOSText.subhead,
-    fontWeight: '600',
+    fontWeight: "600",
     color: IOSColors.label,
     fontFamily: IOSFont.rounded,
   },
@@ -1357,8 +1428,8 @@ const styles = StyleSheet.create({
     color: IOSColors.systemBackground,
   },
   botStatusRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 10,
     paddingHorizontal: 4,
     marginTop: 4,
@@ -1379,11 +1450,11 @@ const styles = StyleSheet.create({
     gap: 14,
   },
   botBubbleRow: {
-    flexDirection: 'row',
+    flexDirection: "row",
     paddingHorizontal: 4,
   },
   botBubble: {
-    maxWidth: '85%',
+    maxWidth: "85%",
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 18,
@@ -1400,16 +1471,16 @@ const styles = StyleSheet.create({
     width: 140,
     backgroundColor: IOSColors.systemBackground,
     borderRadius: 14,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   streamProductImageWrap: {
     width: 140,
     height: 180,
-    position: 'relative',
+    position: "relative",
   },
   streamProductImage: {
-    width: '100%',
-    height: '100%',
+    width: "100%",
+    height: "100%",
   },
   streamProductCaption: {
     ...IOSText.caption1,
@@ -1418,25 +1489,25 @@ const styles = StyleSheet.create({
     padding: 8,
   },
   streamPinBtn: {
-    position: 'absolute',
+    position: "absolute",
     top: 6,
     right: 6,
     width: 22,
     height: 22,
     borderRadius: 11,
-    backgroundColor: 'rgba(255,255,255,0.92)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "rgba(255,255,255,0.92)",
+    justifyContent: "center",
+    alignItems: "center",
   },
   agentRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     gap: 8,
     paddingHorizontal: 4,
   },
   feedbackTriggerRow: {
-    flexDirection: 'row',
+    flexDirection: "row",
     paddingHorizontal: 4,
     marginTop: -8,
   },
@@ -1451,15 +1522,15 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   moreLink: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 4,
     paddingHorizontal: 4,
     paddingTop: 4,
   },
   moreLinkText: {
     ...IOSText.subhead,
-    fontWeight: '700',
+    fontWeight: "700",
     color: IOSColors.label,
     fontFamily: IOSFont.rounded,
   },
@@ -1475,13 +1546,13 @@ const styles = StyleSheet.create({
   },
   narrowingQ: {
     ...IOSText.subhead,
-    fontWeight: '600',
+    fontWeight: "600",
     color: IOSColors.secondaryLabel,
     fontFamily: IOSFont.rounded,
   },
   narrowingChipRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: "row",
+    flexWrap: "wrap",
     gap: 8,
   },
   narrowChip: {
@@ -1494,7 +1565,7 @@ const styles = StyleSheet.create({
   },
   narrowChipText: {
     ...IOSText.subhead,
-    fontWeight: '600',
+    fontWeight: "600",
     color: IOSColors.label,
     fontFamily: IOSFont.rounded,
   },
@@ -1502,11 +1573,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 9,
     borderRadius: 999,
-    backgroundColor: 'transparent',
+    backgroundColor: "transparent",
   },
   narrowDismissText: {
     ...IOSText.subhead,
-    fontWeight: '500',
+    fontWeight: "500",
     color: IOSColors.tertiaryLabel,
     fontFamily: IOSFont.rounded,
   },
@@ -1521,22 +1592,22 @@ const styles = StyleSheet.create({
     opacity: 0.55,
   },
   chipRow: {
-    flexDirection: 'row',
+    flexDirection: "row",
     paddingHorizontal: 4,
     gap: 8,
   },
   filterChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 8,
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 999,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   filterChipText: {
     ...IOSText.subhead,
-    fontWeight: '500',
+    fontWeight: "500",
     color: IOSColors.label,
     fontFamily: IOSFont.rounded,
   },
@@ -1544,23 +1615,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 999,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   critiqueChipText: {
     ...IOSText.subhead,
-    fontWeight: '500',
+    fontWeight: "500",
     color: IOSColors.label,
     fontFamily: IOSFont.rounded,
   },
 
   // Attachment chip
   attachmentRow: {
-    flexDirection: 'row',
+    flexDirection: "row",
     paddingHorizontal: 4,
   },
   attachmentChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 8,
     paddingLeft: 6,
     paddingRight: 10,
@@ -1575,7 +1646,7 @@ const styles = StyleSheet.create({
   },
   attachmentBrand: {
     ...IOSText.footnote,
-    fontWeight: '700',
+    fontWeight: "700",
     color: IOSColors.label,
     fontFamily: IOSFont.rounded,
   },
@@ -1598,57 +1669,57 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: IOSColors.separator,
     backgroundColor: IOSColors.systemBackground,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   fallbackActionText: {
     ...IOSText.body,
-    fontWeight: '500',
+    fontWeight: "500",
     color: IOSColors.label,
     fontFamily: IOSFont.rounded,
   },
 
   previewRow: {
-    flexDirection: 'row',
+    flexDirection: "row",
     paddingHorizontal: 4,
   },
   previewWrap: {
     width: 64,
     height: 64,
     borderRadius: 14,
-    overflow: 'hidden',
-    position: 'relative',
+    overflow: "hidden",
+    position: "relative",
   },
   preview: {
-    width: '100%',
-    height: '100%',
+    width: "100%",
+    height: "100%",
   },
   previewClose: {
-    position: 'absolute',
+    position: "absolute",
     top: 4,
     right: 4,
     width: 20,
     height: 20,
     borderRadius: 10,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "rgba(0,0,0,0.6)",
+    justifyContent: "center",
+    alignItems: "center",
   },
 
   composer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     height: 56,
     borderRadius: 28,
     paddingLeft: 8,
     paddingRight: 6,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   composerIcon: {
     width: 40,
     height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   input: {
     flex: 1,
@@ -1662,8 +1733,8 @@ const styles = StyleSheet.create({
     height: 44,
     borderRadius: 22,
     backgroundColor: IOSColors.label,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   sendBtnDisabled: {
     opacity: 0.35,
