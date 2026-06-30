@@ -29,6 +29,8 @@ export interface ChatSendOpts {
   gender?: string;
   /** Upper price bound in KRW (원). undefined or 0 = no ceiling. */
   priceMaxKrw?: number;
+  /** Final CloudFront image_url from POST /v1/uploads. */
+  attachedImageUrl?: string;
 }
 
 function buildRequest(message: string, opts?: ChatSendOpts): ChatRequest {
@@ -36,6 +38,7 @@ function buildRequest(message: string, opts?: ChatSendOpts): ChatRequest {
     message,
     gender: opts?.gender ?? null,
     price_max: opts?.priceMaxKrw && opts.priceMaxKrw > 0 ? opts.priceMaxKrw : null,
+    attached_image_url: opts?.attachedImageUrl || null,
   };
 }
 

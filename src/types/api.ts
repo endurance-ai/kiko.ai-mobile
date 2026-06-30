@@ -64,6 +64,13 @@ export interface ChatRequest {
   gender?: string | null;
   /** Upper price bound in KRW (원 단위). <=0 or null = no ceiling. */
   price_max?: number | null;
+  /**
+   * Final image_url from POST /v1/uploads — for image-anchored search.
+   * Server-side ChatRequest schema is pending this field (P1 ask to 재관);
+   * sending it now is a no-op until the server lands the field, then it
+   * wires through with zero client change.
+   */
+  attached_image_url?: string | null;
 }
 
 export interface ApiErrorBody {
@@ -336,4 +343,22 @@ export interface SubscriptionResponse {
   auto_renew: boolean | null;
   will_renew_at: string | null;
   manage_url: string;
+}
+
+export type UploadContentType = 'image/jpeg' | 'image/png' | 'image/webp';
+
+export interface CreateUploadRequest {
+  filename: string;
+  content_type: UploadContentType | string;
+  size_bytes: number;
+}
+
+export interface CreateUploadResponse {
+  upload_id: string;
+  /** Short-lived presigned S3 PUT URL — client uploads bytes here. */
+  upload_url: string;
+  /** Final public (CloudFront) image URL — pass this to chat / search. */
+  image_url: string;
+  expires_at: string;
+  max_size_bytes: number;
 }
