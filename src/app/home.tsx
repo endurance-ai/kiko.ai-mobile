@@ -30,7 +30,7 @@ import {
   getMessages,
   sendMessageStream,
 } from "@/lib/chat";
-import type { ChatStreamController } from "@/lib/sse";
+import type { CapMeta, CapReachedInfo, ChatStreamController } from "@/lib/sse";
 import { useBanner } from "@/state/banner";
 import { buildFilterLabel, PRICE_MAX, useFilter } from "@/state/filter";
 import { MOCK_PRODUCTS, type Product } from "@/state/products";
@@ -229,6 +229,35 @@ function messageItemsToTurns(
 const FASHION_KEYWORDS =
   /옷|셔츠|티셔츠|블라우스|니트|스웨터|가디건|후드|맨투맨|자켓|재킷|코트|아우터|이너|패딩|점퍼|조끼|베스트|원피스|드레스|스커트|치마|바지|팬츠|진|데님|슬랙스|쇼츠|반바지|신발|스니커즈|운동화|구두|로퍼|샌들|부츠|슬리퍼|가방|백|클러치|토트|크로스백|숄더백|모자|캡|비니|버킷햇|선글라스|안경|벨트|시계|악세사리|악세서리|주얼리|목걸이|반지|귀걸이|팔찌|핏|루즈핏|오버핏|슬림핏|와이드|크롭|롱|숏|컬러|색감|색상|브랜드|코디|룩|스타일|무드|빈티지|미니멀|스트릿|캐주얼|포멀|찾아|추천|입을|입고|사고/i;
 
+/**
+ * Format an ISO reset timestamp into a short Korean hint for the cap banner.
+ * Output: '내일 오전 9시' / '오후 3시' / '6/30 오전 9시' depending on distance.
+ * Fail-open: returns empty string if parsing fails.
+ */
+function formatCapResetHint(iso: string): string {
+  if (!iso) return '';
+  const reset = new Date(iso);
+  if (Number.isNaN(reset.getTime())) return '';
+  const now = new Date();
+  const sameDay =
+    reset.getFullYear() === now.getFullYear() &&
+    reset.getMonth() === now.getMonth() &&
+    reset.getDate() === now.getDate();
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const isTomorrow =
+    reset.getFullYear() === tomorrow.getFullYear() &&
+    reset.getMonth() === tomorrow.getMonth() &&
+    reset.getDate() === tomorrow.getDate();
+  const hour = reset.getHours();
+  const ampm = hour < 12 ? '오전' : '오후';
+  const hour12 = hour % 12 === 0 ? 12 : hour % 12;
+  const timeStr = `${ampm} ${hour12}시`;
+  if (sameDay) return timeStr;
+  if (isTomorrow) return `내일 ${timeStr}`;
+  return `${reset.getMonth() + 1}/${reset.getDate()} ${timeStr}`;
+}
+
 function looksLikeFashionQuery(text: string): boolean {
   return FASHION_KEYWORDS.test(text);
 }
@@ -266,6 +295,10 @@ export default function ChatEntryScreen() {
   const nextIdRef = useRef(1);
   const sessionIdRef = useRef<string | null>(null);
   const streamRef = useRef<ChatStreamController | null>(null);
+  // Latest daily-cap meta from the most recent `session` event. Kept around
+  // so future surfaces (e.g. usage chip) can display remaining quota; the
+  // banner itself uses the cap_reached payload directly.
+  const capMetaRef = useRef<CapMeta | null>(null);
 
   useEffect(() => () => streamRef.current?.cancel(), []);
 
@@ -596,8 +629,9 @@ export default function ChatEntryScreen() {
     }
 
     const handlers = {
-      onSession: (sessionId: string) => {
+      onSession: (sessionId: string, cap?: CapMeta) => {
         sessionIdRef.current = sessionId;
+        if (cap) capMetaRef.current = cap;
       },
       onTextDelta: (delta: string) => {
         patch((t) => ({ streamText: (t.streamText ?? "") + delta }));
@@ -609,6 +643,24 @@ export default function ChatEntryScreen() {
       },
       onSearch: (searchId: string) => {
         patch(() => ({ streamSearchId: searchId }));
+      },
+      onCapReached: (info: CapReachedInfo) => {
+        // Server skipped the graph run for this turn; just end the streaming
+        // state cleanly (no assistant reply) and surface a billing banner.
+        patch(() => ({ streamDone: true, status: "results" as const }));
+        streamRef.current = null;
+        Haptic.warning();
+        showBanner({
+          id: "chat-cap-reached",
+          priority: "billing",
+          kicker: "DAILY CAP",
+          title: "오늘 무료 사용량을 다 썼어요",
+          subtitle: `${formatCapResetHint(info.reset_at)} 다시 시작돼요`,
+          action: {
+            label: "업그레이드",
+            onPress: () => router.push("/billing"),
+          },
+        });
       },
       onDone: () => {
         patch(() => ({ streamDone: true, status: "results" as const }));

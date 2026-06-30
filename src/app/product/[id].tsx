@@ -20,7 +20,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GlassSurface } from '@/components/glass-surface';
 import { Haptic, IOSColors, IOSFont, IOSText } from '@/constants/ios';
 import { ApiError } from '@/lib/api';
-import { getProduct, recordProductView } from '@/lib/products';
+import { checkProductLink, getProduct, recordProductView } from '@/lib/products';
 import { useWishlist } from '@/state/wishlist';
 import type { ProductDetail } from '@/types/api';
 
@@ -44,6 +44,9 @@ export default function ProductDetailScreen() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [text, setText] = useState('');
+  // null = not yet checked; true = alive; false = dead. Disables CTA when false.
+  const [linkAlive, setLinkAlive] = useState<boolean | null>(null);
+  const [alternativeUrl, setAlternativeUrl] = useState<string | null>(null);
 
   const { isSaved, toggle: toggleSaved } = useWishlist();
   const productIdStr = product ? String(product.id) : '';
@@ -113,11 +116,35 @@ export default function ProductDetailScreen() {
     });
   }, [product, session]);
 
-  const handleBuy = useCallback(async () => {
-    if (!product?.product_url) return;
-    Haptic.medium();
-    await Linking.openURL(product.product_url);
+  // Background link-check — dead-link / 404 catches stale catalog rows so we
+  // don't dump users into a broken external page. Fail-open: leave the CTA
+  // enabled if the check itself errors.
+  useEffect(() => {
+    if (!product) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await checkProductLink(product.id);
+        if (cancelled) return;
+        setLinkAlive(res.alive);
+        setAlternativeUrl(res.alternative_url ?? null);
+      } catch {
+        if (!cancelled) setLinkAlive(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [product]);
+
+  const handleBuy = useCallback(async () => {
+    // Prefer the freshness-checked alternative when the original is dead.
+    const target =
+      linkAlive === false && alternativeUrl ? alternativeUrl : product?.product_url;
+    if (!target) return;
+    Haptic.medium();
+    await Linking.openURL(target);
+  }, [product, linkAlive, alternativeUrl]);
 
   const heroImages = product?.images && product.images.length > 0
     ? product.images
@@ -218,23 +245,42 @@ export default function ProductDetailScreen() {
             {!product.in_stock && (
               <Text style={styles.staleNotice}>품절 또는 판매 종료</Text>
             )}
+            {linkAlive === false && !alternativeUrl && (
+              <Text style={styles.staleNotice}>
+                판매 페이지를 더는 열 수 없어요
+              </Text>
+            )}
+            {linkAlive === false && alternativeUrl && (
+              <Text style={styles.staleNotice}>
+                대체 페이지로 연결될 거예요
+              </Text>
+            )}
           </View>
 
           {/* CTA */}
           <View style={styles.ctaWrap}>
-            <Pressable
-              style={[styles.cta, !product.product_url && styles.ctaDisabled]}
-              onPress={handleBuy}
-              disabled={!product.product_url}
-            >
-              <Text style={styles.ctaText}>구매하러 가기</Text>
-              <SymbolView
-                name="chevron.right"
-                size={16}
-                tintColor={IOSColors.systemBackground}
-                weight="bold"
-              />
-            </Pressable>
+            {(() => {
+              const targetUrl =
+                linkAlive === false && alternativeUrl
+                  ? alternativeUrl
+                  : product.product_url;
+              const ctaDisabled = !targetUrl || (linkAlive === false && !alternativeUrl);
+              return (
+                <Pressable
+                  style={[styles.cta, ctaDisabled && styles.ctaDisabled]}
+                  onPress={handleBuy}
+                  disabled={ctaDisabled}
+                >
+                  <Text style={styles.ctaText}>구매하러 가기</Text>
+                  <SymbolView
+                    name="chevron.right"
+                    size={16}
+                    tintColor={IOSColors.systemBackground}
+                    weight="bold"
+                  />
+                </Pressable>
+              );
+            })()}
           </View>
 
         </ScrollView>

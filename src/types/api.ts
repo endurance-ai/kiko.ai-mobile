@@ -281,3 +281,15 @@ export interface HistoryResponse {
   items: HistoryItem[];
   next_cursor: string | null;
 }
+
+export interface StyleNodeItem {
+  id: number;
+  code: string;
+  name_en: string | null;
+  keywords_en: string[];
+}
+
+export interface StyleNodesResponse {
+  nodes: StyleNodeItem[];
+  warmed: boolean;
+}
