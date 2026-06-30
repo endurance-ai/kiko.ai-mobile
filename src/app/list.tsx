@@ -175,7 +175,7 @@ export default function ListScreen() {
               onPress={() => Haptic.medium()}
             >
               <SymbolView
-                name="arrow.right"
+                name="arrow.up"
                 size={18}
                 tintColor={IOSColors.systemBackground}
                 weight="bold"

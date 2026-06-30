@@ -24,7 +24,12 @@ export function buildPriceLabel(priceMax: number): string {
 }
 
 export function buildFilterLabel({ gender, priceMax }: FilterValue): string {
-  return `${GENDER_LABEL[gender]} · ${buildPriceLabel(priceMax)}`;
+  // Drop "무관" segments so the chip stays short when filters are open-ended.
+  // Both wide-open → '필터'; one set → only that segment.
+  const parts: string[] = [];
+  if (gender !== 'any') parts.push(GENDER_LABEL[gender]);
+  if (priceMax < PRICE_MAX) parts.push(buildPriceLabel(priceMax));
+  return parts.length === 0 ? '필터' : parts.join(' · ');
 }
 
 const DEFAULT_FILTER: FilterValue = { gender: 'unisex', priceMax: PRICE_MAX };

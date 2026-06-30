@@ -30,6 +30,7 @@ import {
   getMessages,
   sendMessageStream,
 } from "@/lib/chat";
+import { getMe } from "@/lib/me";
 import type { CapMeta, CapReachedInfo, ChatStreamController } from "@/lib/sse";
 import { uploadImage } from "@/lib/uploads";
 import { useBanner } from "@/state/banner";
@@ -83,12 +84,6 @@ type Turn = {
   streamSearchId?: string;
 };
 
-const SAMPLE_MOODS: { id: string; color: string }[] = [
-  { id: "m1", color: "#D8D6D2" },
-  { id: "m2", color: "#BFBDB9" },
-  { id: "m3", color: "#9C9A96" },
-];
-
 const SEARCH_HINT = "인디 · 빈티지 2,900+ 브랜드에서 찾는 중…";
 const ANALYZE_HINT = "사진 분석 중… 아이템 추출하고 있어";
 
@@ -120,6 +115,41 @@ const IDLE_AFTER_RESULTS_HINTS = [
 ];
 const PICK_PROMPT = (n: number) =>
   `이 사진에서 ${n}개 아이템 찾았어. 어떤 거 찾아줄까?`;
+// Empty-state greetings shown in the centered hero before the first turn.
+// One is picked at random per mount. Named variants substitute the user's
+// display_name (skipped when name isn't loaded yet — generic ones still
+// keep the surface from looking blank).
+const EMPTY_GREETINGS_GENERIC = [
+  "머릿속 그 옷,\n마법처럼 찾아드릴게요",
+  "마법같은 쇼핑,\n채팅으로 시작해요",
+];
+// "최윤영" → "윤영", "윤영 최" → "윤영", "John Smith" → "Smith".
+// Heuristic: pure-Hangul names without spaces drop the first character
+// (the family name is one syllable for ~99% of Korean surnames). Anything
+// with a space drops the first space-delimited token. Everything else
+// passes through untouched.
+function stripFamilyName(name: string): string {
+  const trimmed = name.trim();
+  if (!trimmed) return trimmed;
+  if (trimmed.includes(' ')) {
+    const rest = trimmed.split(/\s+/).slice(1).join(' ').trim();
+    return rest || trimmed;
+  }
+  // Pure-Hangul block: U+AC00 ~ U+D7A3 only.
+  if (/^[가-힣]+$/.test(trimmed) && trimmed.length >= 2) {
+    return trimmed.slice(1);
+  }
+  return trimmed;
+}
+
+const buildNamedGreetings = (name: string) => {
+  const given = stripFamilyName(name);
+  return [
+    `${given}님,\n사진 한 장이면 취향 맞는 브랜드만 보여드려요`,
+    `${given}님,\n채팅 한 줄로 옷 구경 시작해요`,
+  ];
+};
+
 const AGENT_INTRO_DEFAULT = "이런 거 어때? · 콕집기로 골라봐";
 const AGENT_INTRO_NARROWING = "이런 거 찾았어 · 근데 좀 갈리네";
 const EMPTY_FALLBACK = "이 무드는 아직 딱 맞는 걸 못 찾았어. 이렇게 해볼까?";
@@ -236,9 +266,9 @@ const FASHION_KEYWORDS =
  * Fail-open: returns empty string if parsing fails.
  */
 function formatCapResetHint(iso: string): string {
-  if (!iso) return '';
+  if (!iso) return "";
   const reset = new Date(iso);
-  if (Number.isNaN(reset.getTime())) return '';
+  if (Number.isNaN(reset.getTime())) return "";
   const now = new Date();
   const sameDay =
     reset.getFullYear() === now.getFullYear() &&
@@ -251,7 +281,7 @@ function formatCapResetHint(iso: string): string {
     reset.getMonth() === tomorrow.getMonth() &&
     reset.getDate() === tomorrow.getDate();
   const hour = reset.getHours();
-  const ampm = hour < 12 ? '오전' : '오후';
+  const ampm = hour < 12 ? "오전" : "오후";
   const hour12 = hour % 12 === 0 ? 12 : hour % 12;
   const timeStr = `${ampm} ${hour12}시`;
   if (sameDay) return timeStr;
@@ -289,10 +319,13 @@ export default function ChatEntryScreen() {
     clear: clearBanner,
   } = useBanner();
   const [text, setText] = useState("");
+  const [displayName, setDisplayName] = useState<string | null>(null);
   const [pickedImage, setPickedImage] = useState<string | null>(null);
   // Metadata needed for POST /v1/uploads — set whenever pickedImage is set,
   // cleared in lockstep. Lives in a ref because rendering doesn't use it.
-  const pickedAssetRef = useRef<{ filename: string; sizeBytes: number } | null>(null);
+  const pickedAssetRef = useRef<{ filename: string; sizeBytes: number } | null>(
+    null,
+  );
   const [uploading, setUploading] = useState(false);
   const [messages, setMessages] = useState<Turn[]>([]);
   const [pinnedId, setPinnedId] = useState<string | null>(null);
@@ -306,6 +339,53 @@ export default function ChatEntryScreen() {
   const capMetaRef = useRef<CapMeta | null>(null);
 
   useEffect(() => () => streamRef.current?.cancel(), []);
+
+  // Fetch display_name once for the personalized empty-state greeting.
+  // Silent on failure — generic greetings still fill the hero.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const me = await getMe();
+        if (!cancelled) setDisplayName(me.display_name?.trim() || null);
+      } catch {
+        // ignore
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Random empty-state greeting. Re-picks once when display_name loads
+  // (so the named variants become eligible) and then stays stable.
+  const emptyGreeting = useMemo(() => {
+    const pool = [
+      ...EMPTY_GREETINGS_GENERIC,
+      ...(displayName ? buildNamedGreetings(displayName) : []),
+    ];
+    return pool[Math.floor(Math.random() * pool.length)];
+  }, [displayName]);
+
+  // Typewriter reveal — one character every ~45ms. Resets when the source
+  // greeting changes (i.e. once when display_name resolves).
+  const [revealedChars, setRevealedChars] = useState(0);
+  useEffect(() => {
+    setRevealedChars(0);
+    if (!emptyGreeting) return;
+    const TICK_MS = 45;
+    const id = setInterval(() => {
+      setRevealedChars((n) => {
+        if (n >= emptyGreeting.length) {
+          clearInterval(id);
+          return n;
+        }
+        return n + 1;
+      });
+    }, TICK_MS);
+    return () => clearInterval(id);
+  }, [emptyGreeting]);
+  const typingDone = revealedChars >= emptyGreeting.length;
 
   // Sticky flag — set when the current send originated from a critique chip
   // so the busy hints can swap to the critique-specific pool. Cleared on
@@ -366,7 +446,10 @@ export default function ChatEntryScreen() {
   const isStreaming =
     lastTurn?.isStream === true && lastTurn.streamDone !== true;
   const isBusy =
-    lastStatus === "searching" || lastStatus === "analyzing" || isStreaming || uploading;
+    lastStatus === "searching" ||
+    lastStatus === "analyzing" ||
+    isStreaming ||
+    uploading;
   const hasResults = lastStatus === "results";
   const isEmpty = lastStatus === "empty";
   const canSend = !isBusy && (text.trim().length > 0 || pickedImage !== null);
@@ -506,7 +589,7 @@ export default function ChatEntryScreen() {
       // Best-effort fallbacks; the server validates again.
       const filename =
         asset.fileName ||
-        asset.uri.split('/').pop()?.split('?')[0] ||
+        asset.uri.split("/").pop()?.split("?")[0] ||
         `image-${Date.now()}.jpg`;
       pickedAssetRef.current = {
         filename,
@@ -616,7 +699,9 @@ export default function ChatEntryScreen() {
         text: trimmed,
         imageUri: attachment?.imageUrl ?? imagePayload?.localImageUri,
         colorHint:
-          !attachment?.imageUrl && !imagePayload?.localImageUri && attachment?.thumbColor
+          !attachment?.imageUrl &&
+          !imagePayload?.localImageUri &&
+          attachment?.thumbColor
             ? attachment.thumbColor
             : undefined,
       },
@@ -739,11 +824,6 @@ export default function ChatEntryScreen() {
         )
       : createSessionStream(serverText, handlers, filterOpts);
     void streamRef.current.promise.catch(() => {});
-  };
-
-  const handleSampleMood = (color: string) => {
-    Haptic.medium();
-    startTurn({ colorHint: color });
   };
 
   const handleCritique = (id: string) => {
@@ -1174,24 +1254,11 @@ export default function ChatEntryScreen() {
           })}
         </ScrollView>
       ) : (
-        <View style={styles.center}>
-          <View style={styles.emptyCard}>
-            <View style={styles.mascot} />
-            <Text style={styles.emptyTitle}>무드 이미지를 올려봐</Text>
-            <Text style={styles.emptySubtitle}>
-              그 느낌의 살 수 있는 옷을 찾아줄게
-            </Text>
-          </View>
-
-          <View style={styles.thumbnailRow}>
-            {SAMPLE_MOODS.map((m) => (
-              <Pressable
-                key={m.id}
-                style={[styles.thumbnail, { backgroundColor: m.color }]}
-                onPress={() => handleSampleMood(m.color)}
-              />
-            ))}
-          </View>
+        <View style={styles.emptyHero}>
+          <Text style={styles.emptyHeadline}>
+            {emptyGreeting.slice(0, revealedChars)}
+            {!typingDone && <Text style={styles.cursor}>▍</Text>}
+          </Text>
         </View>
       )}
 
@@ -1254,7 +1321,11 @@ export default function ChatEntryScreen() {
               contentContainerStyle={styles.chipRow}
             >
               <Pressable onPress={handleOpenFilter} disabled={isBusy}>
-                <GlassSurface variant="pill" isInteractive style={styles.filterChip}>
+                <GlassSurface
+                  variant="pill"
+                  isInteractive
+                  style={styles.filterChip}
+                >
                   <Text style={styles.filterChipText}>
                     {buildFilterLabel(filter)}
                   </Text>
@@ -1390,49 +1461,26 @@ const styles = StyleSheet.create({
     zIndex: 40,
   },
   // Empty state
-  center: {
+  // Empty hero — Claude-browser style: single centered headline, no cards.
+  emptyHero: {
     flex: 1,
-    paddingHorizontal: 24,
+    paddingHorizontal: 28,
+    paddingBottom: 120, // lift above the floating composer
     justifyContent: "center",
-    gap: 28,
-  },
-  emptyCard: {
-    borderWidth: 1.5,
-    borderColor: IOSColors.separator,
-    borderStyle: "dashed",
-    borderRadius: 28,
-    paddingVertical: 40,
-    paddingHorizontal: 24,
     alignItems: "center",
   },
-  mascot: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
-    backgroundColor: IOSColors.tertiarySystemBackground,
-    marginBottom: 20,
-  },
-  emptyTitle: {
-    ...IOSText.title2,
+  emptyHeadline: {
+    fontSize: 26,
+    lineHeight: 34,
+    fontWeight: "400",
+    letterSpacing: -0.5,
+    textAlign: "center",
     color: IOSColors.label,
     fontFamily: IOSFont.rounded,
   },
-  emptySubtitle: {
-    ...IOSText.subhead,
-    color: IOSColors.secondaryLabel,
-    marginTop: 8,
-    fontFamily: IOSFont.rounded,
-  },
-  thumbnailRow: {
-    flexDirection: "row",
-    gap: 12,
-    justifyContent: "center",
-  },
-  thumbnail: {
-    width: 72,
-    height: 72,
-    borderRadius: 14,
-    backgroundColor: IOSColors.tertiarySystemBackground,
+  cursor: {
+    color: IOSColors.label,
+    opacity: 0.65,
   },
 
   // Conversation
