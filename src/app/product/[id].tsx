@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Dimensions,
@@ -20,9 +20,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GlassSurface } from '@/components/glass-surface';
 import { Haptic, IOSColors, IOSFont, IOSText } from '@/constants/ios';
 import { ApiError } from '@/lib/api';
+import { createSessionStream } from '@/lib/chat';
 import { checkProductLink, getProduct, recordProductView } from '@/lib/products';
+import type { ChatStreamController } from '@/lib/sse';
 import { useWishlist } from '@/state/wishlist';
-import type { ProductDetail } from '@/types/api';
+import type { ProductDetail, ProductRef } from '@/types/api';
 
 const SCREEN_W = Dimensions.get('window').width;
 const HERO_HEIGHT = Math.round(SCREEN_W * 0.95);
@@ -37,6 +39,29 @@ function formatPrice(price: number | null): string {
   return `₩${Math.round(price).toLocaleString('ko-KR')}`;
 }
 
+// In-memory cache for similar-product feeds keyed by product id. Lives at
+// module scope so it survives PDP unmount/remount within the same app run —
+// re-opening a PDP shows the previous list instantly while a stale entry
+// past TTL refires the SSE in the background. Cleared on app reload.
+const SIMILAR_CACHE_TTL_MS = 10 * 60_000; // 10 minutes
+type SimilarCacheEntry = { items: ProductRef[]; fetchedAt: number };
+const similarCache = new Map<string, SimilarCacheEntry>();
+
+function readSimilarCache(productId: string): ProductRef[] | null {
+  const entry = similarCache.get(productId);
+  if (!entry) return null;
+  if (Date.now() - entry.fetchedAt > SIMILAR_CACHE_TTL_MS) {
+    similarCache.delete(productId);
+    return null;
+  }
+  return entry.items;
+}
+
+function writeSimilarCache(productId: string, items: ProductRef[]): void {
+  if (items.length === 0) return; // don't memoize empty / failed runs
+  similarCache.set(productId, { items, fetchedAt: Date.now() });
+}
+
 export default function ProductDetailScreen() {
   const insets = useSafeAreaInsets();
   const { id, session } = useLocalSearchParams<{ id: string; session?: string }>();
@@ -47,6 +72,15 @@ export default function ProductDetailScreen() {
   // null = not yet checked; true = alive; false = dead. Disables CTA when false.
   const [linkAlive, setLinkAlive] = useState<boolean | null>(null);
   const [alternativeUrl, setAlternativeUrl] = useState<string | null>(null);
+  // Similar-products feed — sourced from a background SSE chat anchored on
+  // the current product (no dedicated endpoint yet, so we reuse the chat
+  // recommendation pipeline). Stays empty until the first onProduct fires.
+  const [similar, setSimilar] = useState<ProductRef[]>([]);
+  const [similarLoading, setSimilarLoading] = useState(false);
+  // Tracks which similar cards the user has ticked. Tapping the action
+  // button below the grid refires the search with these as anchors.
+  const [selectedSimilar, setSelectedSimilar] = useState<Set<number>>(new Set());
+  const similarStreamRef = useRef<ChatStreamController | null>(null);
 
   const { isSaved, toggle: toggleSaved } = useWishlist();
   const productIdStr = product ? String(product.id) : '';
@@ -137,6 +171,53 @@ export default function ProductDetailScreen() {
     };
   }, [product]);
 
+  // Similar products — fire a hidden chat turn anchored on this product and
+  // collect the SSE `product` events. Reuses the existing recommendation
+  // pipeline so there's no dedicated `/v1/products/{id}/similar` to wait for.
+  // Cache hits short-circuit the SSE so PDP revisits feel instant.
+  // Trade-off: each cache miss creates a session on the server; revisit
+  // when a `silent`/`inline_only` flag lands on /v1/chat.
+  useEffect(() => {
+    if (!product) return;
+    const pid = String(product.id);
+
+    const cached = readSimilarCache(pid);
+    if (cached) {
+      setSimilar(cached);
+      setSelectedSimilar(new Set());
+      setSimilarLoading(false);
+      return;
+    }
+
+    setSimilar([]);
+    setSelectedSimilar(new Set());
+    setSimilarLoading(true);
+    const collected: ProductRef[] = [];
+    const priceLabel = product.price
+      ? ` · ₩${Math.round(product.price).toLocaleString('ko-KR')}`
+      : '';
+    const anchorPrefix = `[#${product.id} · ${product.brand} · ${product.name}${priceLabel}]`;
+    const message = `${anchorPrefix} 이거랑 비슷한 거 보여줘`;
+    const ctrl = createSessionStream(message, {
+      onProduct: (p) => {
+        // Skip the anchor itself if it slips back in the result set.
+        if (p.product_id != null && String(p.product_id) === pid) return;
+        collected.push(p);
+        setSimilar((prev) => [...prev, p]);
+      },
+      onDone: () => {
+        setSimilarLoading(false);
+        writeSimilarCache(pid, collected);
+      },
+      onError: () => setSimilarLoading(false),
+    });
+    similarStreamRef.current = ctrl;
+    return () => {
+      ctrl.cancel();
+      similarStreamRef.current = null;
+    };
+  }, [product]);
+
   const handleBuy = useCallback(async () => {
     // Prefer the freshness-checked alternative when the original is dead.
     const target =
@@ -145,6 +226,66 @@ export default function ProductDetailScreen() {
     Haptic.medium();
     await Linking.openURL(target);
   }, [product, linkAlive, alternativeUrl]);
+
+  const toggleSimilarSelected = useCallback((pid: number) => {
+    Haptic.selection();
+    setSelectedSimilar((prev) => {
+      const next = new Set(prev);
+      if (next.has(pid)) next.delete(pid);
+      else next.add(pid);
+      return next;
+    });
+  }, []);
+
+  // Refire the similar feed using every ticked card as an anchor. The chat
+  // pipeline sees a multi-anchor prefix and converges on items that match
+  // the *combined* feel of the user's picks.
+  const refineWithSelected = useCallback(() => {
+    if (!product || selectedSimilar.size === 0) return;
+    const anchors = similar.filter(
+      (p) => p.product_id != null && selectedSimilar.has(p.product_id),
+    );
+    if (anchors.length === 0) return;
+
+    Haptic.medium();
+    similarStreamRef.current?.cancel();
+
+    const anchorTokens = anchors
+      .map((p) => {
+        const caption = (p.caption || '').replace(/<[^>]+>/g, '').trim();
+        return `#${p.product_id}${caption ? ' · ' + caption : ''}`;
+      })
+      .join(', ');
+    const message = `[${anchorTokens}] 이거랑 비슷한 거 보여줘`;
+
+    setSimilar([]);
+    setSelectedSimilar(new Set());
+    setSimilarLoading(true);
+    const collected: ProductRef[] = [];
+    const ctrl = createSessionStream(message, {
+      onProduct: (p) => {
+        // Skip both the page's product and any anchor that comes back.
+        if (
+          p.product_id != null &&
+          (String(p.product_id) === String(product.id) ||
+            anchors.some((a) => a.product_id === p.product_id))
+        ) {
+          return;
+        }
+        collected.push(p);
+        setSimilar((prev) => [...prev, p]);
+      },
+      onDone: () => {
+        setSimilarLoading(false);
+        // Cache under a synthetic key so the new feed survives a quick
+        // back-and-forth; doesn't collide with the base product's cache.
+        const refineKey = `${product.id}::${[...anchors.map((a) => a.product_id)].sort().join('-')}`;
+        writeSimilarCache(refineKey, collected);
+      },
+      onError: () => setSimilarLoading(false),
+    });
+    similarStreamRef.current = ctrl;
+  }, [product, similar, selectedSimilar]);
 
   const heroImages = product?.images && product.images.length > 0
     ? product.images
@@ -181,45 +322,6 @@ export default function ProductDetailScreen() {
             ) : (
               <View style={[styles.heroImage, styles.heroFallback]} />
             )}
-
-            <View
-              style={[styles.heroOverlay, { top: insets.top + 4 }]}
-              pointerEvents="box-none"
-            >
-              <Pressable
-                hitSlop={8}
-                onPress={() => {
-                  Haptic.light();
-                  router.back();
-                }}
-              >
-                <GlassSurface variant="pill" isInteractive style={styles.heroBtn}>
-                  <SymbolView
-                    name="chevron.left"
-                    size={18}
-                    tintColor={IOSColors.label}
-                    weight="semibold"
-                  />
-                </GlassSurface>
-              </Pressable>
-              <Pressable
-                hitSlop={8}
-                onPress={() => {
-                  if (!productIdStr) return;
-                  Haptic.selection();
-                  void toggleSaved(productIdStr);
-                }}
-              >
-                <GlassSurface variant="pill" isInteractive style={styles.heroBtn}>
-                  <SymbolView
-                    name={saved ? 'heart.fill' : 'heart'}
-                    size={18}
-                    tintColor={saved ? IOSColors.systemRed : IOSColors.label}
-                    weight="medium"
-                  />
-                </GlassSurface>
-              </Pressable>
-            </View>
 
             {heroImages.length > 1 && (
               <View style={styles.dots}>
@@ -283,7 +385,61 @@ export default function ProductDetailScreen() {
             })()}
           </View>
 
+          {/* Similar products — populated from a background SSE chat
+              anchored on this product. Tap a card to navigate, tap the
+              checkmark to refine the feed with that pick. */}
+          <SimilarProducts
+            items={similar}
+            loading={similarLoading}
+            selectedIds={selectedSimilar}
+            onToggle={toggleSimilarSelected}
+            onRefine={refineWithSelected}
+          />
+
         </ScrollView>
+      )}
+
+      {/* Sticky top buttons — outside the ScrollView so they stay anchored
+          to the screen as the user scrolls past the hero. */}
+      {product && (
+        <View
+          style={[styles.heroOverlayFixed, { top: insets.top + 4 }]}
+          pointerEvents="box-none"
+        >
+          <Pressable
+            hitSlop={8}
+            onPress={() => {
+              Haptic.light();
+              router.back();
+            }}
+          >
+            <GlassSurface variant="pill" isInteractive style={styles.heroBtn}>
+              <SymbolView
+                name="chevron.left"
+                size={18}
+                tintColor={IOSColors.label}
+                weight="semibold"
+              />
+            </GlassSurface>
+          </Pressable>
+          <Pressable
+            hitSlop={8}
+            onPress={() => {
+              if (!productIdStr) return;
+              Haptic.selection();
+              void toggleSaved(productIdStr);
+            }}
+          >
+            <GlassSurface variant="pill" isInteractive style={styles.heroBtn}>
+              <SymbolView
+                name={saved ? 'heart.fill' : 'heart'}
+                size={18}
+                tintColor={saved ? IOSColors.systemRed : IOSColors.label}
+                weight="medium"
+              />
+            </GlassSurface>
+          </Pressable>
+        </View>
       )}
 
       {/* Composer */}
@@ -346,7 +502,7 @@ export default function ProductDetailScreen() {
                 onPress={handleComposerSend}
               >
                 <SymbolView
-                  name="arrow.right"
+                  name="arrow.up"
                   size={18}
                   tintColor={IOSColors.systemBackground}
                   weight="bold"
@@ -355,6 +511,123 @@ export default function ProductDetailScreen() {
             </GlassSurface>
           </View>
         </KeyboardAvoidingView>
+      )}
+    </View>
+  );
+}
+
+// ─── Similar products section ────────────────────────────────────────────
+// 3-col grid of cards fed by the background SSE turn fired in the parent.
+// Each card has two tap zones: the body navigates into the card's PDP, the
+// corner check toggle selects the card as an anchor for a refined search.
+// The bottom action button refires the SSE with every ticked card.
+
+function SimilarProducts({
+  items,
+  loading,
+  selectedIds,
+  onToggle,
+  onRefine,
+}: {
+  items: ProductRef[];
+  loading: boolean;
+  selectedIds: Set<number>;
+  onToggle: (productId: number) => void;
+  onRefine: () => void;
+}) {
+  const selectedCount = selectedIds.size;
+  const isEmpty = items.length === 0;
+  // Skeleton tiles during loading (or before the SSE has fired) keep the
+  // grid scaffold visible so the layout doesn't pop in. Six tiles = two
+  // rows in a 3-col grid.
+  if (isEmpty) {
+    return (
+      <View style={styles.similarBlock}>
+        <Text style={styles.similarHeader}>비슷한 제품</Text>
+        <View style={styles.similarGrid}>
+          {Array.from({ length: 6 }).map((_, i) => (
+            <View key={`skeleton-${i}`} style={styles.similarCard}>
+              <View style={[styles.similarThumb, styles.similarSkeleton]} />
+            </View>
+          ))}
+        </View>
+        {!loading && (
+          <Text style={styles.similarEmptyHint}>
+            아직 비슷한 제품을 못 찾았어요
+          </Text>
+        )}
+      </View>
+    );
+  }
+  return (
+    <View style={styles.similarBlock}>
+      <Text style={styles.similarHeader}>비슷한 제품</Text>
+      <View style={styles.similarGrid}>
+        {items.map((p, idx) => {
+              const checked = p.product_id != null && selectedIds.has(p.product_id);
+              return (
+                <Pressable
+                  key={`${p.product_id ?? idx}-${p.image_url}`}
+                  style={styles.similarCard}
+                  disabled={p.product_id == null}
+                  onPress={() => {
+                    if (p.product_id == null) return;
+                    Haptic.light();
+                    router.push(`/product/${p.product_id}` as never);
+                  }}
+                >
+                  <View style={styles.similarThumb}>
+                    {p.image_url ? (
+                      <Image
+                        source={p.image_url}
+                        style={styles.similarFill}
+                        contentFit="cover"
+                      />
+                    ) : (
+                      <View
+                        style={[
+                          styles.similarFill,
+                          { backgroundColor: IOSColors.tertiarySystemBackground },
+                        ]}
+                      />
+                    )}
+                    {p.product_id != null && (
+                      <Pressable
+                        hitSlop={8}
+                        style={[
+                          styles.similarCheck,
+                          checked && styles.similarCheckOn,
+                        ]}
+                        onPress={() => onToggle(p.product_id as number)}
+                      >
+                        {checked && (
+                          <SymbolView
+                            name="checkmark"
+                            size={11}
+                            tintColor="#FFFFFF"
+                            weight="bold"
+                          />
+                        )}
+                      </Pressable>
+                    )}
+                  </View>
+                  <Text style={styles.similarBrand} numberOfLines={1}>
+                    {(p.caption || '').replace(/<[^>]+>/g, '')}
+                  </Text>
+                </Pressable>
+              );
+            })}
+      </View>
+      {selectedCount > 0 && (
+        <Pressable
+          style={styles.similarRefineCta}
+          onPress={onRefine}
+          disabled={loading}
+        >
+          <Text style={styles.similarRefineText}>
+            선택한 {selectedCount}개와 비슷한 거 보기
+          </Text>
+        </Pressable>
       )}
     </View>
   );
@@ -401,7 +674,7 @@ const styles = StyleSheet.create({
   heroFallback: {
     backgroundColor: IOSColors.tertiarySystemBackground,
   },
-  heroOverlay: {
+  heroOverlayFixed: {
     position: 'absolute',
     left: 0,
     right: 0,
@@ -409,7 +682,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    zIndex: 10,
+    zIndex: 60,
   },
   heroBtn: {
     width: 40,
@@ -590,5 +863,97 @@ const styles = StyleSheet.create({
   },
   sendBtnDisabled: {
     opacity: 0.35,
+  },
+
+  // Similar products section (below CTA)
+  similarBlock: {
+    marginTop: 28,
+    marginBottom: 24,
+  },
+  similarHeader: {
+    ...IOSText.headline,
+    color: IOSColors.label,
+    fontFamily: IOSFont.rounded,
+    paddingHorizontal: 20,
+    marginBottom: 12,
+  },
+  similarLoadingRow: {
+    paddingHorizontal: 20,
+    paddingVertical: 24,
+    alignItems: 'flex-start',
+  },
+  // 3-col grid: ~32% width with row + column gaps via `gap`.
+  similarGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingHorizontal: 16,
+    columnGap: 8,
+    rowGap: 16,
+  },
+  similarCard: {
+    // 3-col grid: 16 side padding + 8 col gap × 2
+    width: (SCREEN_W - 16 * 2 - 8 * 2) / 3,
+  },
+  similarThumb: {
+    width: '100%',
+    aspectRatio: 0.82, // ~130:160 — same proportion as the old horizontal card
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: IOSColors.tertiarySystemBackground,
+    marginBottom: 8,
+    position: 'relative',
+  },
+  similarFill: { width: '100%', height: '100%' },
+  similarSkeleton: {
+    backgroundColor: IOSColors.tertiarySystemBackground,
+  },
+  similarEmptyHint: {
+    ...IOSText.footnote,
+    color: IOSColors.tertiaryLabel,
+    fontFamily: IOSFont.rounded,
+    textAlign: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 12,
+  },
+  // Check toggle (top-right of thumb). Empty circle when off, solid + check
+  // when on. Sits above the image with a subtle translucent halo.
+  similarCheck: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.95)',
+    backgroundColor: 'rgba(0,0,0,0.22)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  similarCheckOn: {
+    backgroundColor: IOSColors.label,
+    borderColor: IOSColors.label,
+  },
+  similarBrand: {
+    ...IOSText.footnote,
+    fontWeight: '600',
+    color: IOSColors.label,
+    fontFamily: IOSFont.rounded,
+  },
+  // Refine CTA shown below the grid when at least one card is ticked.
+  similarRefineCta: {
+    marginTop: 16,
+    marginHorizontal: 20,
+    height: 46,
+    borderRadius: 14,
+    backgroundColor: IOSColors.label,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  similarRefineText: {
+    ...IOSText.subhead,
+    fontWeight: '700',
+    color: IOSColors.systemBackground,
+    fontFamily: IOSFont.rounded,
   },
 });

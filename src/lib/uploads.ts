@@ -30,42 +30,48 @@ export function detectContentType(filename: string): UploadContentType {
 }
 
 /**
- * Upload the local file at `uri` to the presigned S3 URL via PUT.
- * Resolves on 2xx, throws ApiError otherwise so the caller can show a
- * banner / retry. Body is sent as a blob — works with expo-image-picker
- * file:// URIs because RN's fetch resolves them transparently.
- */
-export async function uploadFile(
-  localUri: string,
-  uploadUrl: string,
-  contentType: string,
-): Promise<void> {
-  const fileRes = await fetch(localUri);
-  const blob = await fileRes.blob();
-  const res = await fetch(uploadUrl, {
-    method: 'PUT',
-    headers: { 'Content-Type': contentType },
-    body: blob,
-  });
-  if (!res.ok) {
-    throw new ApiError(res.status, `S3 PUT failed: ${res.statusText || res.status}`);
-  }
-}
-
-/**
- * End-to-end helper: reserve presigned URL, PUT bytes, return the final
- * image_url. Throws on either step; caller decides how to surface failure.
+ * End-to-end image upload helper:
+ *   1) Read the local file once to derive real size_bytes (expo-image-picker
+ *      omits fileSize on iOS in many cases, and the server enforces gt=0).
+ *   2) Reserve a presigned S3 URL with the accurate metadata.
+ *   3) PUT the same blob to that URL.
+ *   4) Return the canonical CloudFront image_url.
+ * Throws ApiError on either step; caller decides how to surface failure.
  */
 export async function uploadImage(
   localUri: string,
-  meta: { filename: string; size_bytes: number },
+  filename: string,
 ): Promise<string> {
-  const contentType = detectContentType(meta.filename);
+  const contentType = detectContentType(filename);
+
+  // RN's fetch resolves file:// URIs transparently. Read as ArrayBuffer
+  // (NOT Blob) — RN's XHR layer rejects Blob as a PUT body with
+  // "Only ArrayBuffer and ArrayBufferView supported for binary data".
+  // ArrayBuffer is what S3's presigned PUT actually expects anyway.
+  const fileRes = await fetch(localUri);
+  const buffer = await fileRes.arrayBuffer();
+  const sizeBytes = buffer.byteLength;
+  if (!sizeBytes) {
+    throw new ApiError(0, 'empty file');
+  }
+
   const reservation = await createUpload({
-    filename: meta.filename,
+    filename,
     content_type: contentType,
-    size_bytes: meta.size_bytes,
+    size_bytes: sizeBytes,
   });
-  await uploadFile(localUri, reservation.upload_url, contentType);
+
+  const putRes = await fetch(reservation.upload_url, {
+    method: 'PUT',
+    headers: { 'Content-Type': contentType },
+    body: buffer,
+  });
+  if (!putRes.ok) {
+    throw new ApiError(
+      putRes.status,
+      `S3 PUT failed: ${putRes.statusText || putRes.status}`,
+    );
+  }
+
   return reservation.image_url;
 }

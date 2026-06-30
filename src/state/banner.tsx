@@ -30,6 +30,8 @@ export interface BannerSpec {
   subtitle?: string;
   /** Action button. Triggering it doesn't auto-clear — handler decides. */
   action?: BannerAction;
+  /** Auto-clear after this many ms (Banner runs the timer). Sticky if absent. */
+  autoDismissMs?: number;
 }
 
 interface Ctx {

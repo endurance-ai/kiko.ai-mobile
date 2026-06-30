@@ -1,6 +1,7 @@
 import {
   GlassView,
   isLiquidGlassAvailable,
+  type GlassColorScheme,
   type GlassStyle,
 } from 'expo-glass-effect';
 import { type ReactNode } from 'react';
@@ -26,6 +27,8 @@ type Props = ViewProps & {
   tintColor?: string;
   /** Forwarded to GlassView; gives a subtle press response. */
   isInteractive?: boolean;
+  /** Override the glass appearance (default 'auto' follows system theme). */
+  colorScheme?: GlassColorScheme;
   children?: ReactNode;
 };
 
@@ -45,6 +48,7 @@ export function GlassSurface({
   glassStyle = 'regular',
   tintColor,
   isInteractive,
+  colorScheme,
   style,
   children,
   ...rest
@@ -55,6 +59,7 @@ export function GlassSurface({
         glassEffectStyle={glassStyle}
         tintColor={tintColor}
         isInteractive={isInteractive}
+        colorScheme={colorScheme}
         style={style}
         {...rest}
       >

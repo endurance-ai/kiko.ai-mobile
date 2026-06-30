@@ -8,11 +8,13 @@ import {
   Animated,
   Dimensions,
   Easing,
+  Image,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  useColorScheme,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -21,6 +23,7 @@ import { Haptic, IOSColors, IOSFont, IOSText } from "@/constants/ios";
 import { ApiError } from "@/lib/api";
 import { deleteSession, listSessions, renameSession } from "@/lib/chat";
 import { getMe } from "@/lib/me";
+import { stripFamilyName } from "@/lib/name";
 import type { SessionSummary, UserProfile } from "@/types/api";
 
 const SCREEN_W = Dimensions.get("window").width;
@@ -33,6 +36,8 @@ export default function SidebarScreen() {
   const { current: currentSessionId } = useLocalSearchParams<{
     current?: string;
   }>();
+  const scheme = useColorScheme();
+  const wordmarkTint = scheme === "dark" ? "#FFFFFF" : "#0A0A0A";
   const [sessions, setSessions] = useState<SessionSummary[] | null>(null);
   const [me, setMe] = useState<UserProfile | null>(null);
 
@@ -256,12 +261,23 @@ export default function SidebarScreen() {
   );
 
   const displayName = me?.display_name?.trim() || "";
-  const avatarChar = (
-    displayName.charAt(0) ||
-    me?.email?.charAt(0) ||
-    me?.provider?.charAt(0) ||
-    "?"
-  ).toUpperCase();
+  // Use the given name (이름) for the avatar — Korean surnames are
+  // one-syllable, so showing display_name as-is would put 성 in the circle.
+  const givenName = displayName ? stripFamilyName(displayName) : "";
+  const avatarLabelText =
+    givenName ||
+    me?.email?.charAt(0).toUpperCase() ||
+    me?.provider?.charAt(0).toUpperCase() ||
+    "?";
+  // Auto-scale: longer text → smaller glyph so it fits the 44pt circle.
+  const avatarFontSize =
+    avatarLabelText.length >= 4
+      ? 10
+      : avatarLabelText.length === 3
+        ? 12
+        : avatarLabelText.length === 2
+          ? 14
+          : 18;
   const avatarLabel = displayName || me?.email?.split("@")[0] || "프로필";
 
   return (
@@ -275,7 +291,11 @@ export default function SidebarScreen() {
       >
         <SafeAreaView edges={["top"]} style={styles.panelInner}>
           <View style={styles.body}>
-            <Text style={styles.brand}>Kiko.</Text>
+            <Image
+              source={require("../../assets/brand/kiko-wordmark.png")}
+              style={[styles.brand, { tintColor: wordmarkTint }]}
+              resizeMode="contain"
+            />
 
             <Text style={styles.sectionLabel}>최근 항목</Text>
 
@@ -326,7 +346,12 @@ export default function SidebarScreen() {
                 onPress={goProfile}
                 accessibilityLabel={`${avatarLabel} 프로필 설정`}
               >
-                <Text style={styles.avatarText}>{avatarChar}</Text>
+                <Text
+                  style={[styles.avatarText, { fontSize: avatarFontSize }]}
+                  numberOfLines={1}
+                >
+                  {avatarLabelText}
+                </Text>
               </Pressable>
 
               <Pressable style={styles.newChatBtn} onPress={goNewChat}>
@@ -378,12 +403,14 @@ const styles = StyleSheet.create({
     paddingTop: 8,
   },
 
+  // Kiko wordmark PNG (alpha-mask, 964×411). tintColor swaps it black/white
+  // by theme so the same asset works on both light and dark surfaces.
+  // marginLeft matches the sectionLabel / historyRow paddingHorizontal so
+  // the wordmark sits flush with the '최근 항목' header and the row titles.
   brand: {
-    fontSize: 30,
-    fontWeight: "800",
-    color: IOSColors.label,
-    fontFamily: IOSFont.rounded,
-    letterSpacing: -0.5,
+    height: 24,
+    width: 24 * (964 / 411),
+    marginLeft: 12,
     marginTop: 6,
     marginBottom: 24,
   },
@@ -391,7 +418,7 @@ const styles = StyleSheet.create({
   sectionLabel: {
     ...IOSText.subhead,
     color: IOSColors.secondaryLabel,
-    marginBottom: 8,
+    marginBottom: 2,
     paddingHorizontal: 12,
     fontFamily: IOSFont.rounded,
   },
@@ -454,10 +481,10 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   avatarText: {
-    ...IOSText.body,
     fontWeight: "700",
     color: IOSColors.label,
     fontFamily: IOSFont.rounded,
+    letterSpacing: -0.3,
   },
 
   newChatBtn: {
