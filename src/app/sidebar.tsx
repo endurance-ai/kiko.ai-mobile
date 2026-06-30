@@ -1,11 +1,14 @@
 import { router, useLocalSearchParams } from "expo-router";
 import { SymbolView } from "expo-symbols";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  ActionSheetIOS,
   ActivityIndicator,
+  Alert,
   Animated,
   Dimensions,
   Easing,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -15,7 +18,8 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Haptic, IOSColors, IOSFont, IOSText } from "@/constants/ios";
-import { listSessions } from "@/lib/chat";
+import { ApiError } from "@/lib/api";
+import { deleteSession, listSessions, renameSession } from "@/lib/chat";
 import { getMe } from "@/lib/me";
 import type { SessionSummary, UserProfile } from "@/types/api";
 
@@ -124,6 +128,133 @@ export default function SidebarScreen() {
     });
   };
 
+  const promptRename = useCallback(
+    (session: SessionSummary) => {
+      const current = session.title || "";
+      Alert.prompt(
+        "제목 변경",
+        undefined,
+        [
+          { text: "취소", style: "cancel" },
+          {
+            text: "저장",
+            onPress: async (input?: string) => {
+              const next = (input ?? "").trim();
+              if (!next || next === current) return;
+              setSessions((prev) =>
+                prev
+                  ? prev.map((s) =>
+                      s.session_id === session.session_id
+                        ? { ...s, title: next }
+                        : s,
+                    )
+                  : prev,
+              );
+              try {
+                await renameSession(session.session_id, next);
+                Haptic.success();
+              } catch (e) {
+                setSessions((prev) =>
+                  prev
+                    ? prev.map((s) =>
+                        s.session_id === session.session_id
+                          ? { ...s, title: session.title }
+                          : s,
+                      )
+                    : prev,
+                );
+                Haptic.error();
+                Alert.alert(
+                  "이름 변경 실패",
+                  e instanceof ApiError ? e.detail : "잠시 후 다시 시도해주세요.",
+                );
+              }
+            },
+          },
+        ],
+        "plain-text",
+        current,
+      );
+    },
+    [],
+  );
+
+  const confirmDelete = useCallback(
+    (session: SessionSummary) => {
+      Haptic.warning();
+      Alert.alert(
+        "대화 삭제",
+        "이 대화와 모든 메시지가 영구히 지워져요.",
+        [
+          { text: "취소", style: "cancel" },
+          {
+            text: "삭제",
+            style: "destructive",
+            onPress: async () => {
+              const snapshot = sessions;
+              const wasActive = currentSessionId === session.session_id;
+              setSessions((prev) =>
+                prev ? prev.filter((s) => s.session_id !== session.session_id) : prev,
+              );
+              try {
+                await deleteSession(session.session_id);
+                Haptic.success();
+                // If the active chat was the one deleted, drop the user back
+                // into a fresh home surface so they're not looking at stale messages.
+                if (wasActive) {
+                  animateClose(() => {
+                    router.back();
+                    setTimeout(() => router.replace("/home" as never), 30);
+                  });
+                }
+              } catch (e) {
+                setSessions(snapshot);
+                Haptic.error();
+                Alert.alert(
+                  "삭제 실패",
+                  e instanceof ApiError ? e.detail : "잠시 후 다시 시도해주세요.",
+                );
+              }
+            },
+          },
+        ],
+      );
+    },
+    [sessions, currentSessionId],
+  );
+
+  const openSessionActions = useCallback(
+    (session: SessionSummary) => {
+      Haptic.medium();
+      const title = session.title || "제목 없음";
+      if (Platform.OS === "ios") {
+        ActionSheetIOS.showActionSheetWithOptions(
+          {
+            title,
+            options: ["취소", "제목 변경", "삭제"],
+            destructiveButtonIndex: 2,
+            cancelButtonIndex: 0,
+          },
+          (idx) => {
+            if (idx === 1) promptRename(session);
+            else if (idx === 2) confirmDelete(session);
+          },
+        );
+      } else {
+        Alert.alert(title, undefined, [
+          { text: "취소", style: "cancel" },
+          { text: "제목 변경", onPress: () => promptRename(session) },
+          {
+            text: "삭제",
+            style: "destructive",
+            onPress: () => confirmDelete(session),
+          },
+        ]);
+      }
+    },
+    [promptRename, confirmDelete],
+  );
+
   const displayName = me?.display_name?.trim() || "";
   const avatarChar = (
     displayName.charAt(0) ||
@@ -169,6 +300,8 @@ export default function SidebarScreen() {
                         active && styles.historyRowActive,
                       ]}
                       onPress={() => goSession(s.session_id)}
+                      onLongPress={() => openSessionActions(s)}
+                      delayLongPress={350}
                     >
                       <Text
                         style={[

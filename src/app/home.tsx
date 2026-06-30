@@ -31,6 +31,7 @@ import {
   sendMessageStream,
 } from "@/lib/chat";
 import type { CapMeta, CapReachedInfo, ChatStreamController } from "@/lib/sse";
+import { uploadImage } from "@/lib/uploads";
 import { useBanner } from "@/state/banner";
 import { buildFilterLabel, PRICE_MAX, useFilter } from "@/state/filter";
 import { MOCK_PRODUCTS, type Product } from "@/state/products";
@@ -289,6 +290,10 @@ export default function ChatEntryScreen() {
   } = useBanner();
   const [text, setText] = useState("");
   const [pickedImage, setPickedImage] = useState<string | null>(null);
+  // Metadata needed for POST /v1/uploads — set whenever pickedImage is set,
+  // cleared in lockstep. Lives in a ref because rendering doesn't use it.
+  const pickedAssetRef = useRef<{ filename: string; sizeBytes: number } | null>(null);
+  const [uploading, setUploading] = useState(false);
   const [messages, setMessages] = useState<Turn[]>([]);
   const [pinnedId, setPinnedId] = useState<string | null>(null);
   const scrollRef = useRef<ScrollView | null>(null);
@@ -361,7 +366,7 @@ export default function ChatEntryScreen() {
   const isStreaming =
     lastTurn?.isStream === true && lastTurn.streamDone !== true;
   const isBusy =
-    lastStatus === "searching" || lastStatus === "analyzing" || isStreaming;
+    lastStatus === "searching" || lastStatus === "analyzing" || isStreaming || uploading;
   const hasResults = lastStatus === "results";
   const isEmpty = lastStatus === "empty";
   const canSend = !isBusy && (text.trim().length > 0 || pickedImage !== null);
@@ -461,6 +466,7 @@ export default function ChatEntryScreen() {
     setMessages((prev) => [...prev, turn]);
     setText("");
     setPickedImage(null);
+    pickedAssetRef.current = null;
     setPinnedId(null);
 
     if (hasImageInput) {
@@ -495,7 +501,17 @@ export default function ChatEntryScreen() {
       allowsEditing: false,
     });
     if (!result.canceled && result.assets[0]) {
-      setPickedImage(result.assets[0].uri);
+      const asset = result.assets[0];
+      setPickedImage(asset.uri);
+      // Best-effort fallbacks; the server validates again.
+      const filename =
+        asset.fileName ||
+        asset.uri.split('/').pop()?.split('?')[0] ||
+        `image-${Date.now()}.jpg`;
+      pickedAssetRef.current = {
+        filename,
+        sizeBytes: asset.fileSize ?? 0,
+      };
     }
   };
 
@@ -534,26 +550,42 @@ export default function ChatEntryScreen() {
   };
 
   const handleSend = async () => {
-    if (!canSend) return;
+    if (!canSend || uploading) return;
     const trimmed = text.trim();
     const hasImage = pickedImage !== null;
     Haptic.medium();
     lastSendFromCritiqueRef.current = false;
 
-    // Gallery uploads still need /v1/uploads (not deployed yet) — keep the
-    // mock pipeline for now. Plain text (including Pinterest / Instagram
-    // links) is forwarded to /v1/chat — the server's ReAct agent has its
-    // own link_resolver tool to fetch og:image and route to vision.
-    if (hasImage || !trimmed) {
-      startTurn({
-        text: trimmed || undefined,
-        imageUri: pickedImage ?? undefined,
-      });
-      return;
+    // If the user attached a photo, materialize it via POST /v1/uploads
+    // before opening the SSE turn so the server can anchor on a stable
+    // image_url instead of a transient local URI.
+    let serverImageUrl: string | undefined;
+    const localUri = pickedImage;
+    if (hasImage && localUri && pickedAssetRef.current) {
+      setUploading(true);
+      try {
+        serverImageUrl = await uploadImage(localUri, pickedAssetRef.current);
+      } catch {
+        Haptic.error();
+        setUploading(false);
+        showBanner({
+          id: "upload-failure",
+          priority: "error",
+          title: "이미지 업로드 실패",
+          subtitle: "잠시 후 다시 시도해주세요.",
+        });
+        return;
+      }
+      setUploading(false);
     }
 
     setText("");
-    runStreamingTurn(trimmed);
+    setPickedImage(null);
+    pickedAssetRef.current = null;
+    runStreamingTurn(trimmed, undefined, {
+      localImageUri: localUri ?? undefined,
+      serverImageUrl,
+    });
   };
 
   const runStreamingTurn = (
@@ -566,6 +598,12 @@ export default function ChatEntryScreen() {
       productName?: string;
       productPrice?: string;
     },
+    imagePayload?: {
+      /** Local file URI used for instant bubble preview. */
+      localImageUri?: string;
+      /** Final CloudFront URL from /v1/uploads — sent to chat as attached_image_url. */
+      serverImageUrl?: string;
+    },
   ) => {
     clearBanner("request-failure");
     // Explicit override wins (e.g. handoff from PDP). Otherwise use the
@@ -576,9 +614,9 @@ export default function ChatEntryScreen() {
       id: turnId,
       user: {
         text: trimmed,
-        imageUri: attachment?.imageUrl,
+        imageUri: attachment?.imageUrl ?? imagePayload?.localImageUri,
         colorHint:
-          !attachment?.imageUrl && attachment?.thumbColor
+          !attachment?.imageUrl && !imagePayload?.localImageUri && attachment?.thumbColor
             ? attachment.thumbColor
             : undefined,
       },
@@ -689,6 +727,7 @@ export default function ChatEntryScreen() {
       gender: filter.gender === "any" ? undefined : filter.gender,
       priceMaxKrw:
         filter.priceMax >= PRICE_MAX ? undefined : filter.priceMax * 10_000,
+      attachedImageUrl: imagePayload?.serverImageUrl,
     };
 
     streamRef.current = sessionIdRef.current
@@ -735,6 +774,7 @@ export default function ChatEntryScreen() {
   const handleRemovePreview = () => {
     Haptic.light();
     setPickedImage(null);
+    pickedAssetRef.current = null;
   };
 
   const topPad = insets.top + 52;
