@@ -146,6 +146,25 @@ export interface BrandNode {
   brand_name_normalized: string | null;
 }
 
+/**
+ * Lightweight reference returned in `ProductDetail.similar` — distinct from
+ * the chat `ProductRef`. Server computes these via direct cosine distance
+ * on `public.product_embeddings` (bypasses the v6 RPC), so the shape matches
+ * the raw product row rather than chat-card metadata.
+ */
+export interface SimilarProduct {
+  id: number;
+  brand: string;
+  name: string;
+  price: number | null;
+  /** Optional discount fields — present when the row has both. The PDP
+   * card strikes through `original_price` and shows `sale_price` below. */
+  original_price?: number | null;
+  sale_price?: number | null;
+  image_url: string;
+  product_url: string;
+}
+
 export interface ProductDetail {
   id: number;
   brand: string;
@@ -165,6 +184,7 @@ export interface ProductDetail {
   color: string | null;
   tags: string[] | null;
   brand_node: BrandNode | null;
+  similar: SimilarProduct[];
 }
 
 export interface RecordViewRequest {
