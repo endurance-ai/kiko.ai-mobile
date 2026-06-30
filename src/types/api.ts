@@ -293,3 +293,47 @@ export interface StyleNodesResponse {
   nodes: StyleNodeItem[];
   warmed: boolean;
 }
+
+export type LegalDocumentType = 'tos' | 'privacy';
+
+export interface LegalVersionSet {
+  tos: string;
+  privacy: string;
+}
+
+export interface ConsentRecord {
+  document_type: LegalDocumentType;
+  version: string;
+  consented_at: string;
+}
+
+export interface LegalVersionsResponse {
+  current: LegalVersionSet;
+  latest: LegalVersionSet;
+  my_consents: ConsentRecord[];
+}
+
+export interface RecordConsentRequest {
+  document_type: LegalDocumentType;
+  version: string;
+}
+
+export interface RecordConsentResponse {
+  consented_at: string;
+}
+
+export type SubscriptionStatus =
+  | 'active'
+  | 'grace'
+  | 'expired'
+  | 'revoked'
+  | 'none';
+
+export interface SubscriptionResponse {
+  status: SubscriptionStatus;
+  product_id: string | null;
+  expires_at: string | null;
+  auto_renew: boolean | null;
+  will_renew_at: string | null;
+  manage_url: string;
+}

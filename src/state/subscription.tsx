@@ -1,48 +1,100 @@
-import { createContext, ReactNode, useCallback, useContext, useMemo, useState } from 'react';
+import {
+  createContext,
+  ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 
+import { getSubscription } from '@/lib/subscription';
+import { useAuth } from '@/state/auth';
+import type { SubscriptionResponse, SubscriptionStatus } from '@/types/api';
+
+/**
+ * Client projection of /v1/subscription. `active` is true for both
+ * `active` and `grace` statuses so paywalled features stay accessible
+ * during the App Store retry window.
+ */
 export type Subscription = {
+  status: SubscriptionStatus;
   active: boolean;
-  /** Auto-renewing monthly product id (StoreKit2 productID, mock 값). */
-  productId: string;
-  /** ISO date string for next billing — backend `subscription.next_billing_at`. */
-  nextBillingAt: string;
-  /** When user first subscribed — `subscription.started_at`. */
-  startedAt: string;
+  productId: string | null;
+  expiresAt: string | null;
+  willRenewAt: string | null;
+  autoRenew: boolean | null;
+  manageUrl: string;
 };
 
-const MOCK_INACTIVE: Subscription = {
+const DEFAULT_MANAGE_URL = 'https://apps.apple.com/account/subscriptions';
+
+const EMPTY: Subscription = {
+  status: 'none',
   active: false,
-  productId: 'kiko.membership.monthly',
-  nextBillingAt: '',
-  startedAt: '',
+  productId: null,
+  expiresAt: null,
+  willRenewAt: null,
+  autoRenew: null,
+  manageUrl: DEFAULT_MANAGE_URL,
 };
 
-const MOCK_ACTIVE: Subscription = {
-  active: true,
-  productId: 'kiko.membership.monthly',
-  nextBillingAt: '2026-07-18',
-  startedAt: '2026-06-18',
-};
+function project(res: SubscriptionResponse): Subscription {
+  return {
+    status: res.status,
+    active: res.status === 'active' || res.status === 'grace',
+    productId: res.product_id,
+    expiresAt: res.expires_at,
+    willRenewAt: res.will_renew_at,
+    autoRenew: res.auto_renew,
+    manageUrl: res.manage_url || DEFAULT_MANAGE_URL,
+  };
+}
 
 type Ctx = {
   subscription: Subscription;
-  /** Stub for StoreKit2 purchase → POST /iap/verify path. */
-  activate: () => void;
-  /** Local-only flip (App Store cancel happens externally; we wait for ASN v2). */
-  deactivate: () => void;
+  loading: boolean;
+  /** Refresh from /v1/subscription. Call after StoreKit verify or restore. */
+  refresh: () => Promise<void>;
 };
 
 const SubCtx = createContext<Ctx | null>(null);
 
 export function SubscriptionProvider({ children }: { children: ReactNode }) {
-  const [sub, setSub] = useState<Subscription>(MOCK_INACTIVE);
+  const { status } = useAuth();
+  const [sub, setSub] = useState<Subscription>(EMPTY);
+  const [loading, setLoading] = useState(false);
+  const fetchedRef = useRef(false);
 
-  const activate = useCallback(() => setSub(MOCK_ACTIVE), []);
-  const deactivate = useCallback(() => setSub(MOCK_INACTIVE), []);
+  const refresh = useCallback(async () => {
+    if (status !== 'authenticated') return;
+    setLoading(true);
+    try {
+      const res = await getSubscription();
+      setSub(project(res));
+    } catch {
+      // leave previous projection in place
+    } finally {
+      setLoading(false);
+    }
+  }, [status]);
+
+  // Fetch once when the session becomes authenticated; reset on sign-out.
+  useEffect(() => {
+    if (status === 'authenticated' && !fetchedRef.current) {
+      fetchedRef.current = true;
+      void refresh();
+    }
+    if (status === 'unauthenticated') {
+      fetchedRef.current = false;
+      setSub(EMPTY);
+    }
+  }, [status, refresh]);
 
   const ctx = useMemo(
-    () => ({ subscription: sub, activate, deactivate }),
-    [sub, activate, deactivate],
+    () => ({ subscription: sub, loading, refresh }),
+    [sub, loading, refresh],
   );
   return <SubCtx.Provider value={ctx}>{children}</SubCtx.Provider>;
 }
@@ -53,8 +105,9 @@ export function useSubscription(): Ctx {
   return ctx;
 }
 
-export function formatKoreanDate(iso: string): string {
+export function formatKoreanDate(iso: string | null): string {
   if (!iso) return '';
-  const [y, m, d] = iso.split('-');
-  return `${y}. ${parseInt(m, 10)}. ${parseInt(d, 10)}.`;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return `${d.getFullYear()}. ${d.getMonth() + 1}. ${d.getDate()}.`;
 }
