@@ -7,12 +7,34 @@ import {
 } from '@/lib/api';
 import type { ApiErrorBody, ProductRef } from '@/types/api';
 
+/** Daily-cap quota meta returned on every `session` event (PR #102). */
+export interface CapMeta {
+  user_tier: string;
+  daily_cap: number;
+  cap_used: number;
+  cap_remaining: number;
+  cap_reset_at: string;
+}
+
+/** Payload of the `cap_reached` event — terminates the turn. */
+export interface CapReachedInfo {
+  code: string;
+  user_tier: string;
+  used: number;
+  cap: number;
+  remaining: number;
+  reset_at: string;
+  cta: string;
+}
+
 export interface ChatStreamHandlers {
-  onSession?: (sessionId: string) => void;
+  onSession?: (sessionId: string, cap?: CapMeta) => void;
   onTextDelta?: (delta: string) => void;
   onProduct?: (product: ProductRef) => void;
   /** Emitted after products are persisted as a result set (server PR #96). */
   onSearch?: (searchId: string) => void;
+  /** Daily token cap hit — server skips graph run and doesn't save the turn. */
+  onCapReached?: (info: CapReachedInfo) => void;
   onDone?: () => void;
   onError?: (detail: string) => void;
 }
@@ -69,7 +91,20 @@ function dispatch(event: SseEvent, handlers: ChatStreamHandlers): boolean {
   switch (event.name) {
     case 'session': {
       const id = data.session_id;
-      if (typeof id === 'string') handlers.onSession?.(id);
+      if (typeof id !== 'string') return false;
+      const cap: CapMeta | undefined =
+        typeof data.daily_cap === 'number'
+          ? {
+              user_tier: typeof data.user_tier === 'string' ? data.user_tier : 'free',
+              daily_cap: data.daily_cap,
+              cap_used: typeof data.cap_used === 'number' ? data.cap_used : 0,
+              cap_remaining:
+                typeof data.cap_remaining === 'number' ? data.cap_remaining : 0,
+              cap_reset_at:
+                typeof data.cap_reset_at === 'string' ? data.cap_reset_at : '',
+            }
+          : undefined;
+      handlers.onSession?.(id, cap);
       return false;
     }
     case 'text_delta': {
@@ -89,6 +124,20 @@ function dispatch(event: SseEvent, handlers: ChatStreamHandlers): boolean {
     case 'search': {
       const id = data.search_id;
       if (typeof id === 'string') handlers.onSearch?.(id);
+      return false;
+    }
+    case 'cap_reached': {
+      const info: CapReachedInfo = {
+        code: typeof data.code === 'string' ? data.code : 'daily_token_cap_reached',
+        user_tier: typeof data.user_tier === 'string' ? data.user_tier : 'free',
+        used: typeof data.used === 'number' ? data.used : 0,
+        cap: typeof data.cap === 'number' ? data.cap : 0,
+        remaining: typeof data.remaining === 'number' ? data.remaining : 0,
+        reset_at: typeof data.reset_at === 'string' ? data.reset_at : '',
+        cta: typeof data.cta === 'string' ? data.cta : '',
+      };
+      handlers.onCapReached?.(info);
+      // Don't terminate — server still sends `done` after this.
       return false;
     }
     case 'done':
