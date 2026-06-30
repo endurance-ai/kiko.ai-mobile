@@ -8,11 +8,13 @@ import {
   Animated,
   Dimensions,
   Easing,
+  Image,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  useColorScheme,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -33,6 +35,8 @@ export default function SidebarScreen() {
   const { current: currentSessionId } = useLocalSearchParams<{
     current?: string;
   }>();
+  const scheme = useColorScheme();
+  const wordmarkTint = scheme === "dark" ? "#FFFFFF" : "#0A0A0A";
   const [sessions, setSessions] = useState<SessionSummary[] | null>(null);
   const [me, setMe] = useState<UserProfile | null>(null);
 
@@ -275,7 +279,11 @@ export default function SidebarScreen() {
       >
         <SafeAreaView edges={["top"]} style={styles.panelInner}>
           <View style={styles.body}>
-            <Text style={styles.brand}>Kiko.</Text>
+            <Image
+              source={require("../../assets/brand/kiko-wordmark.png")}
+              style={[styles.brand, { tintColor: wordmarkTint }]}
+              resizeMode="contain"
+            />
 
             <Text style={styles.sectionLabel}>최근 항목</Text>
 
@@ -378,12 +386,14 @@ const styles = StyleSheet.create({
     paddingTop: 8,
   },
 
+  // Kiko wordmark PNG (alpha-mask, 964×411). tintColor swaps it black/white
+  // by theme so the same asset works on both light and dark surfaces.
+  // marginLeft matches the sectionLabel / historyRow paddingHorizontal so
+  // the wordmark sits flush with the '최근 항목' header and the row titles.
   brand: {
-    fontSize: 30,
-    fontWeight: "800",
-    color: IOSColors.label,
-    fontFamily: IOSFont.rounded,
-    letterSpacing: -0.5,
+    height: 24,
+    width: 24 * (964 / 411),
+    marginLeft: 12,
     marginTop: 6,
     marginBottom: 24,
   },
@@ -391,7 +401,7 @@ const styles = StyleSheet.create({
   sectionLabel: {
     ...IOSText.subhead,
     color: IOSColors.secondaryLabel,
-    marginBottom: 8,
+    marginBottom: 2,
     paddingHorizontal: 12,
     fontFamily: IOSFont.rounded,
   },

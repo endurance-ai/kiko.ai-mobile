@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { StatusBar, StyleSheet, Text, View } from 'react-native';
+import { StatusBar, StyleSheet, Text, UIManager, View } from 'react-native';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -12,8 +12,47 @@ import Animated, {
 import { Haptic, IOSFont } from '@/constants/ios';
 import { useAuth } from '@/state/auth';
 
+// ─── Lottie module (optional native dep) ─────────────────────────────────
+// lottie-react-native is bundled into the next EAS build but isn't in the
+// current dev client. Require it dynamically so the missing native module
+// doesn't crash the splash — we fall back to the letter animation below
+// when LottieView is unavailable.
+type LottieModule = {
+  default: React.ComponentType<{
+    source: unknown;
+    autoPlay?: boolean;
+    loop?: boolean;
+    resizeMode?: 'cover' | 'contain' | 'center';
+    style?: object;
+    onAnimationFinish?: () => void;
+  }>;
+};
+let LottieView: LottieModule['default'] | null = null;
+let SPLASH_SOURCE: unknown = null;
+// Probe for the *native* view manager — require()'ing the JS module always
+// succeeds, but the native CALayer wrapper has to be linked into the host
+// app. UIManager.hasViewManagerConfig returns false on the current dev
+// client so we route to the letter-animation fallback instead of rendering
+// the RN "Unimplemented component" placeholder.
+const LOTTIE_NATIVE_READY =
+  typeof UIManager.hasViewManagerConfig === 'function' &&
+  UIManager.hasViewManagerConfig('LottieAnimationView');
+if (LOTTIE_NATIVE_READY) {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    LottieView = (require('lottie-react-native') as LottieModule).default;
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    SPLASH_SOURCE = require('../../assets/lottie/kiko-splash.json');
+  } catch {
+    LottieView = null;
+  }
+}
+
+// Haptic timing — synced with kiko-splash Lottie frames 28/32/36/40 @60fps.
+const HAPTIC_DELAYS_MS = [467, 533, 600, 667];
+
+// ─── Fallback letter animation (used until next native build) ────────────
 const LETTERS = ['k', 'i', 'k', 'o'] as const;
-// 4 letters × 100ms stagger + 400ms rise → last letter lands at ~700ms.
 const STAGGER_MS = 100;
 const RISE_MS = 400;
 const HOLD_MS = 350;
@@ -43,16 +82,30 @@ function Letter({ char, delay }: { char: string; delay: number }) {
   );
 }
 
+// ─── Screen ──────────────────────────────────────────────────────────────
+
 export default function SplashScreen() {
   const { status } = useAuth();
   const [animationDone, setAnimationDone] = useState(false);
   const navigatedRef = useRef(false);
+  const useLottie = LottieView !== null && SPLASH_SOURCE !== null;
 
+  // Lottie path: haptic punches synced to the timeline.
   useEffect(() => {
+    if (!useLottie) return;
+    const timers = HAPTIC_DELAYS_MS.map((delay) =>
+      setTimeout(Haptic.light, delay),
+    );
+    return () => timers.forEach(clearTimeout);
+  }, [useLottie]);
+
+  // Fallback path: finish marker based on the letter-animation total length.
+  useEffect(() => {
+    if (useLottie) return;
     const total = LETTERS.length * STAGGER_MS + RISE_MS + HOLD_MS + EXIT_MS;
     const timer = setTimeout(() => setAnimationDone(true), total);
     return () => clearTimeout(timer);
-  }, []);
+  }, [useLottie]);
 
   useEffect(() => {
     if (!animationDone || status === 'loading' || navigatedRef.current) return;
@@ -60,8 +113,24 @@ export default function SplashScreen() {
     router.replace(status === 'authenticated' ? '/home' : '/login');
   }, [animationDone, status]);
 
+  if (useLottie && LottieView) {
+    return (
+      <View style={[styles.root, styles.rootLight]}>
+        <StatusBar barStyle="dark-content" />
+        <LottieView
+          source={SPLASH_SOURCE}
+          autoPlay
+          loop={false}
+          resizeMode="contain"
+          style={styles.lottie}
+          onAnimationFinish={() => setAnimationDone(true)}
+        />
+      </View>
+    );
+  }
+
   return (
-    <View style={styles.root}>
+    <View style={[styles.root, styles.rootDark]}>
       <StatusBar barStyle="light-content" />
       <View style={styles.word}>
         {LETTERS.map((char, i) => (
@@ -75,13 +144,16 @@ export default function SplashScreen() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#000',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  word: {
-    flexDirection: 'row',
+  rootLight: { backgroundColor: '#FFFFFF' },
+  rootDark: { backgroundColor: '#000' },
+  lottie: {
+    width: '100%',
+    aspectRatio: 9 / 16,
   },
+  word: { flexDirection: 'row' },
   letter: {
     fontSize: 56,
     fontWeight: '800',
