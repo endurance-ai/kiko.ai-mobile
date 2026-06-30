@@ -1,10 +1,10 @@
-import { GlassView } from 'expo-glass-effect';
 import { router } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { GlassSurface } from '@/components/glass-surface';
 import { Haptic, IOSColors, IOSFont, IOSText } from '@/constants/ios';
 
 type Props = {
@@ -33,8 +33,9 @@ export function FloatingHeader({ title, onBack, backLabel, rightSlot }: Props) {
               else router.back();
             }}
           >
-            <GlassView
-              glassEffectStyle="clear"
+            <GlassSurface
+              variant="pill"
+              isInteractive
               style={[styles.pill, backLabel ? styles.pillLabeled : null]}
             >
               <SymbolView
@@ -46,7 +47,7 @@ export function FloatingHeader({ title, onBack, backLabel, rightSlot }: Props) {
               {backLabel ? (
                 <Text style={styles.backLabel}>{backLabel}</Text>
               ) : null}
-            </GlassView>
+            </GlassSurface>
           </Pressable>
 
           {title ? (

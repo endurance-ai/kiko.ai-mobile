@@ -1,4 +1,3 @@
-import { GlassView } from 'expo-glass-effect';
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
@@ -18,6 +17,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { GlassSurface } from '@/components/glass-surface';
 import { Haptic, IOSColors, IOSFont, IOSText } from '@/constants/ios';
 import { ApiError } from '@/lib/api';
 import { getProduct, recordProductView } from '@/lib/products';
@@ -26,11 +26,6 @@ import type { ProductDetail } from '@/types/api';
 
 const SCREEN_W = Dimensions.get('window').width;
 const HERO_HEIGHT = Math.round(SCREEN_W * 0.95);
-
-// Product photos are predominantly white-bg, so dark-mode would render
-// the back/heart icons in white-on-white. Force light-mode label color
-// here so the glass buttons remain readable on the hero regardless of theme.
-const HERO_BTN_TINT = '#1C1C1E';
 
 const CRITIQUE = [
   { id: 'sim', label: '더 비슷하게' },
@@ -171,14 +166,14 @@ export default function ProductDetailScreen() {
                   router.back();
                 }}
               >
-                <GlassView glassEffectStyle="clear" style={styles.heroBtn}>
+                <GlassSurface variant="pill" isInteractive style={styles.heroBtn}>
                   <SymbolView
                     name="chevron.left"
                     size={18}
-                    tintColor={HERO_BTN_TINT}
+                    tintColor={IOSColors.label}
                     weight="semibold"
                   />
-                </GlassView>
+                </GlassSurface>
               </Pressable>
               <Pressable
                 hitSlop={8}
@@ -188,14 +183,14 @@ export default function ProductDetailScreen() {
                   void toggleSaved(productIdStr);
                 }}
               >
-                <GlassView glassEffectStyle="clear" style={styles.heroBtn}>
+                <GlassSurface variant="pill" isInteractive style={styles.heroBtn}>
                   <SymbolView
                     name={saved ? 'heart.fill' : 'heart'}
                     size={18}
-                    tintColor={saved ? IOSColors.systemRed : HERO_BTN_TINT}
+                    tintColor={saved ? IOSColors.systemRed : IOSColors.label}
                     weight="medium"
                   />
-                </GlassView>
+                </GlassSurface>
               </Pressable>
             </View>
 
@@ -269,14 +264,14 @@ export default function ProductDetailScreen() {
               </View>
               {CRITIQUE.map((c) => (
                 <Pressable key={c.id} onPress={() => handleCritique(c.label)}>
-                  <GlassView glassEffectStyle="clear" style={styles.critiqueChip}>
+                  <GlassSurface variant="pill" isInteractive style={styles.critiqueChip}>
                     <Text style={styles.critiqueText}>{c.label}</Text>
-                  </GlassView>
+                  </GlassSurface>
                 </Pressable>
               ))}
             </View>
 
-            <GlassView glassEffectStyle="clear" style={styles.composer}>
+            <GlassSurface variant="composer" style={styles.composer}>
               <Pressable
                 hitSlop={6}
                 style={styles.composerIcon}
@@ -311,7 +306,7 @@ export default function ProductDetailScreen() {
                   weight="bold"
                 />
               </Pressable>
-            </GlassView>
+            </GlassSurface>
           </View>
         </KeyboardAvoidingView>
       )}

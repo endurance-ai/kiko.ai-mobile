@@ -1,4 +1,3 @@
-import { GlassView } from 'expo-glass-effect';
 import { router } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { useState } from 'react';
@@ -16,6 +15,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FLOATING_HEADER_OFFSET, FloatingHeader } from '@/components/floating-header';
+import { GlassSurface } from '@/components/glass-surface';
 import { Haptic, IOSColors, IOSFont, IOSText } from '@/constants/ios';
 import { buildFilterLabel, useFilter } from '@/state/filter';
 import { formatPrice, MOCK_PRODUCTS, type Product } from '@/state/products';
@@ -132,7 +132,7 @@ export default function ListScreen() {
                 router.push('/filter');
               }}
             >
-              <GlassView glassEffectStyle="clear" style={styles.filterChip}>
+              <GlassSurface variant="pill" isInteractive style={styles.filterChip}>
                 <Text style={styles.filterChipText}>{buildFilterLabel(filter)}</Text>
                 <SymbolView
                   name="chevron.up"
@@ -140,18 +140,18 @@ export default function ListScreen() {
                   tintColor={IOSColors.secondaryLabel}
                   weight="semibold"
                 />
-              </GlassView>
+              </GlassSurface>
             </Pressable>
             {CRITIQUE.map((c) => (
               <Pressable key={c.id} onPress={() => Haptic.light()}>
-                <GlassView glassEffectStyle="clear" style={styles.critiqueChip}>
+                <GlassSurface variant="pill" isInteractive style={styles.critiqueChip}>
                   <Text style={styles.critiqueChipText}>{c.label}</Text>
-                </GlassView>
+                </GlassSurface>
               </Pressable>
             ))}
           </ScrollView>
 
-          <GlassView glassEffectStyle="clear" style={styles.composer}>
+          <GlassSurface variant="composer" style={styles.composer}>
             <Pressable hitSlop={6} style={styles.composerIcon} onPress={() => Haptic.light()}>
               <SymbolView
                 name="plus"
@@ -181,7 +181,7 @@ export default function ListScreen() {
                 weight="bold"
               />
             </Pressable>
-          </GlassView>
+          </GlassSurface>
         </View>
       </KeyboardAvoidingView>
 

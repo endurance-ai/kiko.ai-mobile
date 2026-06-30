@@ -1,6 +1,9 @@
+import * as Notifications from "expo-notifications";
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
+  Linking,
   ScrollView,
   StyleSheet,
   Text,
@@ -65,9 +68,41 @@ export default function NotificationsScreen() {
     }
   }, []);
 
-  const onEnabledChange = (v: boolean) => {
-    setEnabled(v);
-    void persist({ system: v });
+  // Turning the master toggle ON only makes sense if iOS itself allows
+  // notifications. If the user previously denied at the system prompt,
+  // requestPermissionsAsync immediately resolves with status=denied
+  // (it cannot re-prompt) — so we deep-link to the Settings app where
+  // they can flip it back on.
+  const onEnabledChange = async (v: boolean) => {
+    if (!v) {
+      setEnabled(false);
+      void persist({ system: false });
+      return;
+    }
+    const current = await Notifications.getPermissionsAsync();
+    if (current.status === "granted") {
+      setEnabled(true);
+      void persist({ system: true });
+      return;
+    }
+    if (current.status === "undetermined" || current.canAskAgain) {
+      const next = await Notifications.requestPermissionsAsync({
+        ios: { allowAlert: true, allowBadge: true, allowSound: true },
+      });
+      if (next.status === "granted") {
+        setEnabled(true);
+        void persist({ system: true });
+      }
+      return;
+    }
+    Alert.alert(
+      "알림 권한이 필요해요",
+      "iOS 설정에서 키코 앱의 알림을 켜 주세요.",
+      [
+        { text: "취소", style: "cancel" },
+        { text: "설정 열기", onPress: () => void Linking.openSettings() },
+      ],
+    );
   };
   const onMarketingChange = (v: boolean) => {
     setMarketing(v);
