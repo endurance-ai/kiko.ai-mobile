@@ -1,5 +1,5 @@
 import Slider from '@react-native-community/slider';
-import { GlassView } from 'expo-glass-effect';
+import { GlassSurface } from '@/components/glass-surface';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -42,14 +42,16 @@ export default function FilterScreen() {
             const active = gender === g;
             return (
               <Pressable key={g} onPress={() => pickGender(g)}>
-                <GlassView
-                  glassEffectStyle={active ? 'none' : 'clear'}
+                <GlassSurface
+                  variant="pill"
+                  isInteractive={!active}
+                  glassStyle={active ? 'none' : 'clear'}
                   style={[styles.chip, active && styles.chipActive]}
                 >
                   <Text style={[styles.chipText, active && styles.chipTextActive]}>
                     {GENDER_LABEL[g]}
                   </Text>
-                </GlassView>
+                </GlassSurface>
               </Pressable>
             );
           })}

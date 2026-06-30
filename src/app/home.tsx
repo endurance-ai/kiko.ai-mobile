@@ -1,4 +1,3 @@
-import { GlassView } from "expo-glass-effect";
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
 import { router, useLocalSearchParams } from "expo-router";
@@ -22,6 +21,7 @@ import { Image as ExpoImage } from "expo-image";
 
 import { Banner } from "@/components/banner";
 import { FeedbackTrigger } from "@/components/feedback-trigger";
+import { GlassSurface } from "@/components/glass-surface";
 import { PRODUCT_CARD_WIDTH, ProductCard } from "@/components/product-card";
 import { TopBar } from "@/components/top-bar";
 import { Haptic, IOSColors, IOSFont, IOSText } from "@/constants/ios";
@@ -1162,7 +1162,7 @@ export default function ChatEntryScreen() {
               contentContainerStyle={styles.chipRow}
             >
               <Pressable onPress={handleOpenFilter} disabled={isBusy}>
-                <GlassView glassEffectStyle="clear" style={styles.filterChip}>
+                <GlassSurface variant="pill" isInteractive style={styles.filterChip}>
                   <Text style={styles.filterChipText}>
                     {buildFilterLabel(filter)}
                   </Text>
@@ -1172,7 +1172,7 @@ export default function ChatEntryScreen() {
                     tintColor={IOSColors.secondaryLabel}
                     weight="semibold"
                   />
-                </GlassView>
+                </GlassSurface>
               </Pressable>
               {hasResults &&
                 critiqueChips.map((c) => (
@@ -1181,12 +1181,13 @@ export default function ChatEntryScreen() {
                     onPress={() => handleCritique(c.id)}
                     disabled={isBusy}
                   >
-                    <GlassView
-                      glassEffectStyle="clear"
+                    <GlassSurface
+                      variant="pill"
+                      isInteractive
                       style={styles.critiqueChip}
                     >
                       <Text style={styles.critiqueChipText}>{c.label}</Text>
-                    </GlassView>
+                    </GlassSurface>
                   </Pressable>
                 ))}
             </ScrollView>
@@ -1216,7 +1217,7 @@ export default function ChatEntryScreen() {
             </View>
           )}
 
-          <GlassView glassEffectStyle="clear" style={styles.composer}>
+          <GlassSurface variant="composer" style={styles.composer}>
             <Pressable
               hitSlop={6}
               style={styles.composerIcon}
@@ -1253,7 +1254,7 @@ export default function ChatEntryScreen() {
                 weight="bold"
               />
             </Pressable>
-          </GlassView>
+          </GlassSurface>
         </View>
       </KeyboardAvoidingView>
 
@@ -1296,7 +1297,6 @@ const styles = StyleSheet.create({
     bottom: 0,
     zIndex: 40,
   },
-
   // Empty state
   center: {
     flex: 1,

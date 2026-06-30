@@ -1,4 +1,3 @@
-import { GlassView } from "expo-glass-effect";
 import { Image } from "expo-image";
 import { useLocalSearchParams } from "expo-router";
 import { SymbolView } from "expo-symbols";
@@ -17,6 +16,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Banner } from "@/components/banner";
+import { GlassSurface } from "@/components/glass-surface";
 import {
   FLOATING_HEADER_OFFSET,
   FloatingHeader,
@@ -280,7 +280,7 @@ export default function ChatDetailScreen() {
       >
         <View style={[styles.composerWrap, { paddingBottom: composerBottom }]}>
           <Banner />
-          <GlassView glassEffectStyle="clear" style={styles.composer}>
+          <GlassSurface variant="composer" style={styles.composer}>
             <TextInput
               value={text}
               onChangeText={setText}
@@ -314,7 +314,7 @@ export default function ChatDetailScreen() {
                 />
               )}
             </Pressable>
-          </GlassView>
+          </GlassSurface>
         </View>
       </KeyboardAvoidingView>
 

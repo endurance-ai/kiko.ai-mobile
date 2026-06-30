@@ -1,8 +1,8 @@
-import { GlassView } from 'expo-glass-effect';
 import { SymbolView } from 'expo-symbols';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { GlassSurface } from '@/components/glass-surface';
 import { Haptic, IOSColors, IOSFont, IOSText } from '@/constants/ios';
 
 type Props = {
@@ -20,22 +20,20 @@ export function TopBar({ onOpenMenu, onOpenList, onOpenWishlist }: Props) {
   return (
     <SafeAreaView edges={['top']} style={styles.safe}>
       <View style={styles.row}>
-        {/* Left: hamburger / sidebar */}
         <Pressable hitSlop={6} onPress={tap(onOpenMenu)}>
-          <GlassView glassEffectStyle="clear" style={styles.iconPill}>
+          <GlassSurface variant="pill" isInteractive style={styles.iconPill}>
             <SymbolView
               name="line.3.horizontal"
               size={20}
               tintColor={IOSColors.label}
               weight="medium"
             />
-          </GlassView>
+          </GlassSurface>
         </Pressable>
 
-        {/* Right group */}
         <View style={styles.rightGroup}>
           <Pressable hitSlop={6} onPress={tap(onOpenList)}>
-            <GlassView glassEffectStyle="clear" style={styles.textPill}>
+            <GlassSurface variant="pill" isInteractive style={styles.textPill}>
               <SymbolView
                 name="list.bullet"
                 size={16}
@@ -43,11 +41,11 @@ export function TopBar({ onOpenMenu, onOpenList, onOpenWishlist }: Props) {
                 weight="medium"
               />
               <Text style={styles.pillText}>리스트</Text>
-            </GlassView>
+            </GlassSurface>
           </Pressable>
 
           <Pressable hitSlop={6} onPress={tap(onOpenWishlist)}>
-            <GlassView glassEffectStyle="clear" style={styles.textPill}>
+            <GlassSurface variant="pill" isInteractive style={styles.textPill}>
               <SymbolView
                 name="heart"
                 size={16}
@@ -55,7 +53,7 @@ export function TopBar({ onOpenMenu, onOpenList, onOpenWishlist }: Props) {
                 weight="medium"
               />
               <Text style={styles.pillText}>찜</Text>
-            </GlassView>
+            </GlassSurface>
           </Pressable>
         </View>
       </View>
@@ -66,26 +64,21 @@ export function TopBar({ onOpenMenu, onOpenList, onOpenWishlist }: Props) {
 const PILL_HEIGHT = 40;
 
 const styles = StyleSheet.create({
-  safe: {
-    paddingHorizontal: 16,
-  },
+  safe: { paddingHorizontal: 16 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingTop: 4,
   },
-  rightGroup: {
-    flexDirection: 'row',
-    gap: 8,
-  },
+  rightGroup: { flexDirection: 'row', gap: 8 },
   iconPill: {
     width: PILL_HEIGHT,
     height: PILL_HEIGHT,
     borderRadius: PILL_HEIGHT / 2,
-    overflow: 'hidden',
     justifyContent: 'center',
     alignItems: 'center',
+    overflow: 'hidden',
   },
   textPill: {
     flexDirection: 'row',
