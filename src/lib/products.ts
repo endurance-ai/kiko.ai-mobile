@@ -7,8 +7,14 @@ import type {
   ViewedListResponse,
 } from '@/types/api';
 
-export function getProduct(productId: string | number): Promise<ProductDetail> {
-  return api.get<ProductDetail>(`/v1/products/${encodeURIComponent(String(productId))}`);
+export function getProduct(
+  productId: string | number,
+  opts: { searchId?: string } = {},
+): Promise<ProductDetail> {
+  return api.get<ProductDetail>(
+    `/v1/products/${encodeURIComponent(String(productId))}`,
+    opts.searchId ? { search_id: opts.searchId } : undefined,
+  );
 }
 
 export function recordProductView(

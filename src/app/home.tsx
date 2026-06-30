@@ -455,6 +455,9 @@ export default function ChatEntryScreen() {
     thumbColor?: string;
     imageUrl?: string;
     label: string;
+    productId?: string;
+    productName?: string;
+    productPrice?: string;
   } | null = (() => {
     if (!pinnedId) return null;
     const mockHit = lastTurn?.results?.find((p) => p.id === pinnedId);
@@ -469,7 +472,14 @@ export default function ChatEntryScreen() {
         // caption is HTML-ish; the brand line is usually the bold prefix.
         const stripped = sse.caption.replace(/<[^>]+>/g, "").trim();
         const label = stripped.split("\n")[0] || "선택한 상품";
-        return { imageUrl: sse.image_url, label: label.slice(0, 20) };
+        // Carry the product_id so the ReAct agent can deep-link via `#id`
+        // instead of inferring from the label (which it then misreads as a
+        // request for the product page and refuses).
+        return {
+          imageUrl: sse.image_url,
+          label: label.slice(0, 20),
+          productId: sse.product_id != null ? String(sse.product_id) : undefined,
+        };
       }
     }
     return null;
@@ -713,9 +723,18 @@ export default function ChatEntryScreen() {
       streamText: "",
       streamProducts: [],
       streamDone: false,
-      streamPlaceholder: looksLikeFashionQuery(trimmed)
-        ? "카탈로그에서 찾는 중…"
-        : "키코가 생각 중…",
+      streamPlaceholder: (() => {
+        // Image attached → vision phase reads the picture first; pin the
+        // matching hint. Critique chip ("더 비슷하게"/"더 저렴하게") swaps
+        // into the refine pool. Everything else rolls the general pool.
+        if (imagePayload?.localImageUri || attachment?.imageUrl) {
+          return "이미지에서 핏 · 색 · 무드를 읽는 중…";
+        }
+        const pool = lastSendFromCritiqueRef.current
+          ? BUSY_CRITIQUE_HINTS
+          : BUSY_GENERAL_HINTS;
+        return pool[Math.floor(Math.random() * pool.length)];
+      })(),
     };
     setMessages((prev) => [...prev, turn]);
     if (attachment) setPinnedId(null);
@@ -724,7 +743,19 @@ export default function ChatEntryScreen() {
     // Build a context-rich prefix the server's ReAct agent can anchor on.
     // We try product_id first (deterministic lookup), then brand + name + price
     // for human-readable fallback. The user only sees `trimmed` in the bubble.
-    let serverText = trimmed;
+    //
+    // Image-only send (no typed text) hits the server's `message cannot be
+    // empty` 422 guard. Substitute a sensible default for the server payload
+    // while leaving the user bubble blank — the photo alone speaks for the
+    // user, and we don't want a system-generated string to look like theirs.
+    const hasAttachedImage = Boolean(
+      attachment?.imageUrl || imagePayload?.localImageUri,
+    );
+    const baseText =
+      trimmed.length === 0 && hasAttachedImage
+        ? '이 사진이랑 비슷한 거 찾아줘'
+        : trimmed;
+    let serverText = baseText;
     if (attachment) {
       const parts: string[] = [];
       const pid = (attachment as { productId?: string }).productId;
@@ -734,7 +765,7 @@ export default function ChatEntryScreen() {
       parts.push(attachment.label);
       if (pname) parts.push(pname);
       if (pprice) parts.push(`₩${Number(pprice).toLocaleString("ko-KR")}`);
-      serverText = `[${parts.join(" · ")}] ${trimmed}`;
+      serverText = `[${parts.join(" · ")}] ${baseText}`;
     }
 
     const patch = (mut: (t: Turn) => Partial<Turn>) =>
@@ -1057,7 +1088,7 @@ export default function ChatEntryScreen() {
                 {/* SSE streaming assistant — real /v1/chat */}
                 {turn.isStream && (
                   <View style={styles.streamBlock}>
-                    {turn.streamText ? (
+                    {turn.streamText && (
                       <View style={styles.botBubbleRow}>
                         <View style={styles.botBubble}>
                           <Text style={styles.botBubbleText}>
@@ -1065,21 +1096,24 @@ export default function ChatEntryScreen() {
                           </Text>
                         </View>
                       </View>
-                    ) : (
-                      !turn.streamDone && (
+                    )}
+                    {/* Keep the searching indicator alive until the first
+                        product card arrives — the assistant's prose lands
+                        well before the search RPC returns, so the bubble
+                        alone makes it look like the turn is finished. */}
+                    {!turn.streamDone &&
+                      (!turn.streamProducts ||
+                        turn.streamProducts.length === 0) && (
                         <View style={styles.botStatusRow}>
                           <ActivityIndicator
                             size="small"
                             color={IOSColors.secondaryLabel}
                           />
-                          {turn.streamPlaceholder && (
-                            <Text style={styles.botStatusText}>
-                              {turn.streamPlaceholder}
-                            </Text>
-                          )}
+                          <Text style={styles.botStatusText}>
+                            {turn.streamPlaceholder ?? '비슷한 거 찾는 중…'}
+                          </Text>
                         </View>
-                      )
-                    )}
+                      )}
                     {turn.streamProducts && turn.streamProducts.length > 0 && (
                       <ScrollView
                         horizontal
@@ -1098,7 +1132,7 @@ export default function ChatEntryScreen() {
                             const params = [
                               sid ? `session=${encodeURIComponent(sid)}` : "",
                               search
-                                ? `source=${encodeURIComponent(search)}`
+                                ? `search_id=${encodeURIComponent(search)}`
                                 : "",
                             ]
                               .filter(Boolean)

@@ -24,7 +24,7 @@ import { createSessionStream } from '@/lib/chat';
 import { checkProductLink, getProduct, recordProductView } from '@/lib/products';
 import type { ChatStreamController } from '@/lib/sse';
 import { useWishlist } from '@/state/wishlist';
-import type { ProductDetail, ProductRef } from '@/types/api';
+import type { ProductDetail, ProductRef, SimilarProduct } from '@/types/api';
 
 const SCREEN_W = Dimensions.get('window').width;
 const HERO_HEIGHT = Math.round(SCREEN_W * 0.95);
@@ -39,32 +39,50 @@ function formatPrice(price: number | null): string {
   return `₩${Math.round(price).toLocaleString('ko-KR')}`;
 }
 
-// In-memory cache for similar-product feeds keyed by product id. Lives at
-// module scope so it survives PDP unmount/remount within the same app run —
-// re-opening a PDP shows the previous list instantly while a stale entry
-// past TTL refires the SSE in the background. Cleared on app reload.
-const SIMILAR_CACHE_TTL_MS = 10 * 60_000; // 10 minutes
-type SimilarCacheEntry = { items: ProductRef[]; fetchedAt: number };
-const similarCache = new Map<string, SimilarCacheEntry>();
+// Display shape for the PDP similar grid. Initial set ships brand + price
+// inline from the server (cosine endpoint); refine results come back as
+// generic chat ProductRefs where only the caption is available, so we strip
+// HTML and use the first segment as the brand fallback (price stays null).
+type SimilarItem = {
+  product_id: number | null;
+  image_url: string;
+  brand: string;
+  price: number | null;
+  original_price: number | null;
+  sale_price: number | null;
+};
 
-function readSimilarCache(productId: string): ProductRef[] | null {
-  const entry = similarCache.get(productId);
-  if (!entry) return null;
-  if (Date.now() - entry.fetchedAt > SIMILAR_CACHE_TTL_MS) {
-    similarCache.delete(productId);
-    return null;
-  }
-  return entry.items;
+function similarToItem(p: SimilarProduct): SimilarItem {
+  return {
+    product_id: p.id,
+    image_url: p.image_url,
+    brand: p.brand,
+    price: p.price,
+    original_price: p.original_price ?? null,
+    sale_price: p.sale_price ?? null,
+  };
 }
 
-function writeSimilarCache(productId: string, items: ProductRef[]): void {
-  if (items.length === 0) return; // don't memoize empty / failed runs
-  similarCache.set(productId, { items, fetchedAt: Date.now() });
+function refToItem(p: ProductRef): SimilarItem {
+  const plain = (p.caption || '').replace(/<[^>]+>/g, '').trim();
+  const brand = plain.split('·')[0]?.trim() || plain || '';
+  return {
+    product_id: p.product_id,
+    image_url: p.image_url,
+    brand,
+    price: null,
+    original_price: null,
+    sale_price: null,
+  };
 }
 
 export default function ProductDetailScreen() {
   const insets = useSafeAreaInsets();
-  const { id, session } = useLocalSearchParams<{ id: string; session?: string }>();
+  const { id, session, search_id } = useLocalSearchParams<{
+    id: string;
+    session?: string;
+    search_id?: string;
+  }>();
   const [product, setProduct] = useState<ProductDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -72,15 +90,20 @@ export default function ProductDetailScreen() {
   // null = not yet checked; true = alive; false = dead. Disables CTA when false.
   const [linkAlive, setLinkAlive] = useState<boolean | null>(null);
   const [alternativeUrl, setAlternativeUrl] = useState<string | null>(null);
-  // Similar-products feed — sourced from a background SSE chat anchored on
-  // the current product (no dedicated endpoint yet, so we reuse the chat
-  // recommendation pipeline). Stays empty until the first onProduct fires.
-  const [similar, setSimilar] = useState<ProductRef[]>([]);
+  // Similar-products feed — initial set lands inline on ProductDetail.similar
+  // (server computes cosine distance directly on product_embeddings). The grid
+  // can be refined by selecting cards and refiring an SSE chat anchored on
+  // those picks, which is when `similarLoading` flips back on.
+  const [similar, setSimilar] = useState<SimilarItem[]>([]);
   const [similarLoading, setSimilarLoading] = useState(false);
   // Tracks which similar cards the user has ticked. Tapping the action
   // button below the grid refires the search with these as anchors.
   const [selectedSimilar, setSelectedSimilar] = useState<Set<number>>(new Set());
   const similarStreamRef = useRef<ChatStreamController | null>(null);
+  // Hero image natural aspect ratio (width / height). Falls back to the
+  // historical 1:0.95 frame until the image reports its intrinsic size, so
+  // the layout doesn't jump as drastically when the image finally loads.
+  const [heroAspect, setHeroAspect] = useState<number>(SCREEN_W / HERO_HEIGHT);
 
   const { isSaved, toggle: toggleSaved } = useWishlist();
   const productIdStr = product ? String(product.id) : '';
@@ -129,14 +152,14 @@ export default function ProductDetailScreen() {
     try {
       setError(null);
       setLoading(true);
-      const data = await getProduct(id);
+      const data = await getProduct(id, search_id ? { searchId: search_id } : undefined);
       setProduct(data);
     } catch (e) {
       setError(e instanceof ApiError ? e.detail : '상품을 불러오지 못했어요.');
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [id, search_id]);
 
   useEffect(() => {
     void load();
@@ -171,51 +194,14 @@ export default function ProductDetailScreen() {
     };
   }, [product]);
 
-  // Similar products — fire a hidden chat turn anchored on this product and
-  // collect the SSE `product` events. Reuses the existing recommendation
-  // pipeline so there's no dedicated `/v1/products/{id}/similar` to wait for.
-  // Cache hits short-circuit the SSE so PDP revisits feel instant.
-  // Trade-off: each cache miss creates a session on the server; revisit
-  // when a `silent`/`inline_only` flag lands on /v1/chat.
+  // Initial similar products come inline on the PDP response — no extra
+  // round trip. Selecting cards + tapping the refine CTA below the grid
+  // refires an SSE chat to anchor the next batch on those picks.
   useEffect(() => {
     if (!product) return;
-    const pid = String(product.id);
-
-    const cached = readSimilarCache(pid);
-    if (cached) {
-      setSimilar(cached);
-      setSelectedSimilar(new Set());
-      setSimilarLoading(false);
-      return;
-    }
-
-    setSimilar([]);
     setSelectedSimilar(new Set());
-    setSimilarLoading(true);
-    const collected: ProductRef[] = [];
-    const priceLabel = product.price
-      ? ` · ₩${Math.round(product.price).toLocaleString('ko-KR')}`
-      : '';
-    const anchorPrefix = `[#${product.id} · ${product.brand} · ${product.name}${priceLabel}]`;
-    const message = `${anchorPrefix} 이거랑 비슷한 거 보여줘`;
-    const ctrl = createSessionStream(message, {
-      onProduct: (p) => {
-        // Skip the anchor itself if it slips back in the result set.
-        if (p.product_id != null && String(p.product_id) === pid) return;
-        collected.push(p);
-        setSimilar((prev) => [...prev, p]);
-      },
-      onDone: () => {
-        setSimilarLoading(false);
-        writeSimilarCache(pid, collected);
-      },
-      onError: () => setSimilarLoading(false),
-    });
-    similarStreamRef.current = ctrl;
-    return () => {
-      ctrl.cancel();
-      similarStreamRef.current = null;
-    };
+    setSimilar((product.similar ?? []).map(similarToItem));
+    setSimilarLoading(false);
   }, [product]);
 
   const handleBuy = useCallback(async () => {
@@ -251,17 +237,13 @@ export default function ProductDetailScreen() {
     similarStreamRef.current?.cancel();
 
     const anchorTokens = anchors
-      .map((p) => {
-        const caption = (p.caption || '').replace(/<[^>]+>/g, '').trim();
-        return `#${p.product_id}${caption ? ' · ' + caption : ''}`;
-      })
+      .map((p) => `#${p.product_id}${p.brand ? ' · ' + p.brand : ''}`)
       .join(', ');
     const message = `[${anchorTokens}] 이거랑 비슷한 거 보여줘`;
 
     setSimilar([]);
     setSelectedSimilar(new Set());
     setSimilarLoading(true);
-    const collected: ProductRef[] = [];
     const ctrl = createSessionStream(message, {
       onProduct: (p) => {
         // Skip both the page's product and any anchor that comes back.
@@ -272,16 +254,9 @@ export default function ProductDetailScreen() {
         ) {
           return;
         }
-        collected.push(p);
-        setSimilar((prev) => [...prev, p]);
+        setSimilar((prev) => [...prev, refToItem(p)]);
       },
-      onDone: () => {
-        setSimilarLoading(false);
-        // Cache under a synthetic key so the new feed survives a quick
-        // back-and-forth; doesn't collide with the base product's cache.
-        const refineKey = `${product.id}::${[...anchors.map((a) => a.product_id)].sort().join('-')}`;
-        writeSimilarCache(refineKey, collected);
-      },
+      onDone: () => setSimilarLoading(false),
       onError: () => setSimilarLoading(false),
     });
     similarStreamRef.current = ctrl;
@@ -315,10 +290,22 @@ export default function ProductDetailScreen() {
           contentContainerStyle={{ paddingBottom: insets.bottom + 180 }}
           showsVerticalScrollIndicator={false}
         >
-          {/* Hero */}
-          <View style={styles.hero}>
+          {/* Hero — width matches the screen, height follows the image's
+              own aspect ratio so nothing is cropped. */}
+          <View style={[styles.hero, { height: SCREEN_W / heroAspect }]}>
             {heroImages[0] ? (
-              <Image source={heroImages[0]} style={styles.heroImage} contentFit="cover" />
+              <Image
+                source={heroImages[0]}
+                style={styles.heroImage}
+                contentFit="contain"
+                onLoad={(e) => {
+                  const src = (e as { source?: { width?: number; height?: number } })
+                    ?.source;
+                  if (src?.width && src?.height) {
+                    setHeroAspect(src.width / src.height);
+                  }
+                }}
+              />
             ) : (
               <View style={[styles.heroImage, styles.heroFallback]} />
             )}
@@ -529,7 +516,7 @@ function SimilarProducts({
   onToggle,
   onRefine,
 }: {
-  items: ProductRef[];
+  items: SimilarItem[];
   loading: boolean;
   selectedIds: Set<number>;
   onToggle: (productId: number) => void;
@@ -611,9 +598,27 @@ function SimilarProducts({
                       </Pressable>
                     )}
                   </View>
-                  <Text style={styles.similarBrand} numberOfLines={1}>
-                    {(p.caption || '').replace(/<[^>]+>/g, '')}
-                  </Text>
+                  <View style={styles.similarMeta}>
+                    <Text style={styles.similarBrand} numberOfLines={1}>
+                      {p.brand}
+                    </Text>
+                    {p.sale_price != null && p.original_price != null ? (
+                      <>
+                        <Text style={styles.similarPriceOriginal} numberOfLines={1}>
+                          {formatPrice(p.original_price)}
+                        </Text>
+                        <Text style={styles.similarPriceSale} numberOfLines={1}>
+                          {formatPrice(p.sale_price)}
+                        </Text>
+                      </>
+                    ) : (
+                      p.price != null && (
+                        <Text style={styles.similarPrice} numberOfLines={1}>
+                          {formatPrice(p.price)}
+                        </Text>
+                      )
+                    )}
+                  </View>
                 </Pressable>
               );
             })}
@@ -665,7 +670,7 @@ const styles = StyleSheet.create({
   // Hero
   hero: {
     width: SCREEN_W,
-    height: HERO_HEIGHT,
+    backgroundColor: IOSColors.systemBackground,
   },
   heroImage: {
     width: '100%',
@@ -882,25 +887,22 @@ const styles = StyleSheet.create({
     paddingVertical: 24,
     alignItems: 'flex-start',
   },
-  // 3-col grid: ~32% width with row + column gaps via `gap`.
+  // 3-col grid edge-to-edge — no side padding, no column gap. Cards butt up
+  // against each other and the screen edges.
   similarGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    paddingHorizontal: 16,
-    columnGap: 8,
     rowGap: 16,
   },
   similarCard: {
-    // 3-col grid: 16 side padding + 8 col gap × 2
-    width: (SCREEN_W - 16 * 2 - 8 * 2) / 3,
+    width: SCREEN_W / 3,
   },
   similarThumb: {
     width: '100%',
-    aspectRatio: 0.82, // ~130:160 — same proportion as the old horizontal card
-    borderRadius: 12,
+    aspectRatio: 0.82,
     overflow: 'hidden',
     backgroundColor: IOSColors.tertiarySystemBackground,
-    marginBottom: 8,
+    marginBottom: 2,
     position: 'relative',
   },
   similarFill: { width: '100%', height: '100%' },
@@ -934,10 +936,31 @@ const styles = StyleSheet.create({
     backgroundColor: IOSColors.label,
     borderColor: IOSColors.label,
   },
+  similarMeta: {
+    paddingHorizontal: 8,
+    gap: 1,
+  },
   similarBrand: {
     ...IOSText.footnote,
     fontWeight: '600',
     color: IOSColors.label,
+    fontFamily: IOSFont.rounded,
+  },
+  similarPrice: {
+    ...IOSText.footnote,
+    color: IOSColors.secondaryLabel,
+    fontFamily: IOSFont.rounded,
+  },
+  similarPriceOriginal: {
+    ...IOSText.caption1,
+    color: IOSColors.tertiaryLabel,
+    textDecorationLine: 'line-through',
+    fontFamily: IOSFont.rounded,
+  },
+  similarPriceSale: {
+    ...IOSText.footnote,
+    fontWeight: '600',
+    color: IOSColors.systemRed,
     fontFamily: IOSFont.rounded,
   },
   // Refine CTA shown below the grid when at least one card is ticked.
