@@ -23,6 +23,7 @@ import { Haptic, IOSColors, IOSFont, IOSText } from "@/constants/ios";
 import { ApiError } from "@/lib/api";
 import { deleteSession, listSessions, renameSession } from "@/lib/chat";
 import { getMe } from "@/lib/me";
+import { stripFamilyName } from "@/lib/name";
 import type { SessionSummary, UserProfile } from "@/types/api";
 
 const SCREEN_W = Dimensions.get("window").width;
@@ -260,12 +261,23 @@ export default function SidebarScreen() {
   );
 
   const displayName = me?.display_name?.trim() || "";
-  const avatarChar = (
-    displayName.charAt(0) ||
-    me?.email?.charAt(0) ||
-    me?.provider?.charAt(0) ||
-    "?"
-  ).toUpperCase();
+  // Use the given name (이름) for the avatar — Korean surnames are
+  // one-syllable, so showing display_name as-is would put 성 in the circle.
+  const givenName = displayName ? stripFamilyName(displayName) : "";
+  const avatarLabelText =
+    givenName ||
+    me?.email?.charAt(0).toUpperCase() ||
+    me?.provider?.charAt(0).toUpperCase() ||
+    "?";
+  // Auto-scale: longer text → smaller glyph so it fits the 44pt circle.
+  const avatarFontSize =
+    avatarLabelText.length >= 4
+      ? 10
+      : avatarLabelText.length === 3
+        ? 12
+        : avatarLabelText.length === 2
+          ? 14
+          : 18;
   const avatarLabel = displayName || me?.email?.split("@")[0] || "프로필";
 
   return (
@@ -334,7 +346,12 @@ export default function SidebarScreen() {
                 onPress={goProfile}
                 accessibilityLabel={`${avatarLabel} 프로필 설정`}
               >
-                <Text style={styles.avatarText}>{avatarChar}</Text>
+                <Text
+                  style={[styles.avatarText, { fontSize: avatarFontSize }]}
+                  numberOfLines={1}
+                >
+                  {avatarLabelText}
+                </Text>
               </Pressable>
 
               <Pressable style={styles.newChatBtn} onPress={goNewChat}>
@@ -464,10 +481,10 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   avatarText: {
-    ...IOSText.body,
     fontWeight: "700",
     color: IOSColors.label,
     fontFamily: IOSFont.rounded,
+    letterSpacing: -0.3,
   },
 
   newChatBtn: {

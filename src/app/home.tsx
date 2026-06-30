@@ -30,7 +30,9 @@ import {
   getMessages,
   sendMessageStream,
 } from "@/lib/chat";
+import { ApiError } from "@/lib/api";
 import { getMe } from "@/lib/me";
+import { stripFamilyName } from "@/lib/name";
 import type { CapMeta, CapReachedInfo, ChatStreamController } from "@/lib/sse";
 import { uploadImage } from "@/lib/uploads";
 import { useBanner } from "@/state/banner";
@@ -123,25 +125,6 @@ const EMPTY_GREETINGS_GENERIC = [
   "머릿속 그 옷,\n마법처럼 찾아드릴게요",
   "마법같은 쇼핑,\n채팅으로 시작해요",
 ];
-// "최윤영" → "윤영", "윤영 최" → "윤영", "John Smith" → "Smith".
-// Heuristic: pure-Hangul names without spaces drop the first character
-// (the family name is one syllable for ~99% of Korean surnames). Anything
-// with a space drops the first space-delimited token. Everything else
-// passes through untouched.
-function stripFamilyName(name: string): string {
-  const trimmed = name.trim();
-  if (!trimmed) return trimmed;
-  if (trimmed.includes(' ')) {
-    const rest = trimmed.split(/\s+/).slice(1).join(' ').trim();
-    return rest || trimmed;
-  }
-  // Pure-Hangul block: U+AC00 ~ U+D7A3 only.
-  if (/^[가-힣]+$/.test(trimmed) && trimmed.length >= 2) {
-    return trimmed.slice(1);
-  }
-  return trimmed;
-}
-
 const buildNamedGreetings = (name: string) => {
   const given = stripFamilyName(name);
   return [
@@ -323,9 +306,9 @@ export default function ChatEntryScreen() {
   const [pickedImage, setPickedImage] = useState<string | null>(null);
   // Metadata needed for POST /v1/uploads — set whenever pickedImage is set,
   // cleared in lockstep. Lives in a ref because rendering doesn't use it.
-  const pickedAssetRef = useRef<{ filename: string; sizeBytes: number } | null>(
-    null,
-  );
+  // Filename is the only piece we need to capture at pick time — uploadImage
+  // reads the file itself to derive size_bytes (avoids the iOS fileSize gap).
+  const pickedAssetRef = useRef<{ filename: string } | null>(null);
   const [uploading, setUploading] = useState(false);
   const [messages, setMessages] = useState<Turn[]>([]);
   const [pinnedId, setPinnedId] = useState<string | null>(null);
@@ -337,8 +320,20 @@ export default function ChatEntryScreen() {
   // so future surfaces (e.g. usage chip) can display remaining quota; the
   // banner itself uses the cap_reached payload directly.
   const capMetaRef = useRef<CapMeta | null>(null);
+  // Cap-reached lockout — flips on when the server signals daily-cap hit.
+  // Locks the composer (input + send + photo) until reset_at OR until a
+  // later `session` event reports cap_remaining > 0 (e.g. day rolled over
+  // while the app was foregrounded). resetAt drives an auto-unlock timer.
+  const [capLocked, setCapLocked] = useState(false);
+  const capResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => () => streamRef.current?.cancel(), []);
+  useEffect(
+    () => () => {
+      if (capResetTimerRef.current) clearTimeout(capResetTimerRef.current);
+    },
+    [],
+  );
 
   // Fetch display_name once for the personalized empty-state greeting.
   // Silent on failure — generic greetings still fill the hero.
@@ -452,7 +447,8 @@ export default function ChatEntryScreen() {
     uploading;
   const hasResults = lastStatus === "results";
   const isEmpty = lastStatus === "empty";
-  const canSend = !isBusy && (text.trim().length > 0 || pickedImage !== null);
+  const canSend =
+    !isBusy && !capLocked && (text.trim().length > 0 || pickedImage !== null);
   // Unified pinned attachment: works for both mock products and SSE products.
   // SSE pins use a composite id "<turnId>:<index>" so we look up by parsing it.
   const pinnedAttachment: {
@@ -488,6 +484,7 @@ export default function ChatEntryScreen() {
   // only when the relevant state combo changes (busy ↔ idle, results ↔ empty),
   // so the user doesn't see it jitter mid-typing.
   const composerPlaceholder = useMemo(() => {
+    if (capLocked) return "오늘 사용량이 다 소진됐어요";
     if (isBusy) {
       const pool = lastSendFromCritiqueRef.current
         ? BUSY_CRITIQUE_HINTS
@@ -497,7 +494,7 @@ export default function ChatEntryScreen() {
     if (pinnedProduct) return "또는 직접 입력...";
     const pool = hasResults ? IDLE_AFTER_RESULTS_HINTS : IDLE_INITIAL_HINTS;
     return pool[Math.floor(Math.random() * pool.length)];
-  }, [isBusy, hasResults, pinnedProduct]);
+  }, [capLocked, isBusy, hasResults, pinnedProduct]);
 
   // Auto-scroll to bottom whenever messages or status change.
   useEffect(() => {
@@ -591,10 +588,7 @@ export default function ChatEntryScreen() {
         asset.fileName ||
         asset.uri.split("/").pop()?.split("?")[0] ||
         `image-${Date.now()}.jpg`;
-      pickedAssetRef.current = {
-        filename,
-        sizeBytes: asset.fileSize ?? 0,
-      };
+      pickedAssetRef.current = { filename };
     }
   };
 
@@ -647,15 +641,24 @@ export default function ChatEntryScreen() {
     if (hasImage && localUri && pickedAssetRef.current) {
       setUploading(true);
       try {
-        serverImageUrl = await uploadImage(localUri, pickedAssetRef.current);
-      } catch {
+        serverImageUrl = await uploadImage(
+          localUri,
+          pickedAssetRef.current.filename,
+        );
+      } catch (e) {
         Haptic.error();
         setUploading(false);
+        // Surface the actual reason — 413 (too large) deserves a different
+        // hint than a generic network failure.
+        const detail = e instanceof ApiError ? e.detail : '';
+        const isTooLarge = detail.includes('upload_too_large');
         showBanner({
           id: "upload-failure",
           priority: "error",
-          title: "이미지 업로드 실패",
-          subtitle: "잠시 후 다시 시도해주세요.",
+          title: isTooLarge ? "이미지가 너무 커요" : "이미지 업로드 실패",
+          subtitle: isTooLarge
+            ? "1MB 이하로 줄여서 다시 시도해주세요."
+            : "잠시 후 다시 시도해주세요.",
         });
         return;
       }
@@ -754,7 +757,17 @@ export default function ChatEntryScreen() {
     const handlers = {
       onSession: (sessionId: string, cap?: CapMeta) => {
         sessionIdRef.current = sessionId;
-        if (cap) capMetaRef.current = cap;
+        if (cap) {
+          capMetaRef.current = cap;
+          // Day rolled over (or server reset the bucket) — clear the lock.
+          if (cap.cap_remaining > 0 && capLocked) {
+            setCapLocked(false);
+            if (capResetTimerRef.current) {
+              clearTimeout(capResetTimerRef.current);
+              capResetTimerRef.current = null;
+            }
+          }
+        }
       },
       onTextDelta: (delta: string) => {
         patch((t) => ({ streamText: (t.streamText ?? "") + delta }));
@@ -770,19 +783,32 @@ export default function ChatEntryScreen() {
       onCapReached: (info: CapReachedInfo) => {
         // Server skipped the graph run for this turn; just end the streaming
         // state cleanly (no assistant reply) and surface a billing banner.
+        // 업그레이드 CTA 는 IAP 도입 전까지 비활성 — 안내만 표시.
         patch(() => ({ streamDone: true, status: "results" as const }));
         streamRef.current = null;
         Haptic.warning();
+        // Lock the composer until reset_at so we don't spam the server.
+        setCapLocked(true);
+        if (capResetTimerRef.current) clearTimeout(capResetTimerRef.current);
+        const resetMs = new Date(info.reset_at).getTime() - Date.now();
+        if (resetMs > 0 && Number.isFinite(resetMs)) {
+          capResetTimerRef.current = setTimeout(() => {
+            setCapLocked(false);
+            capResetTimerRef.current = null;
+          }, resetMs);
+        }
         showBanner({
           id: "chat-cap-reached",
           priority: "billing",
           kicker: "DAILY CAP",
           title: "오늘 무료 사용량을 다 썼어요",
           subtitle: `${formatCapResetHint(info.reset_at)} 다시 시작돼요`,
-          action: {
-            label: "업그레이드",
-            onPress: () => router.push("/billing"),
-          },
+          autoDismissMs: 5000,
+          // action 비활성: IAP 들어오면 다시 활성화
+          // action: {
+          //   label: "업그레이드",
+          //   onPress: () => router.push("/billing"),
+          // },
         });
       },
       onDone: () => {
@@ -1385,7 +1411,7 @@ export default function ChatEntryScreen() {
               hitSlop={6}
               style={styles.composerIcon}
               onPress={handlePickPhoto}
-              disabled={isBusy}
+              disabled={isBusy || capLocked}
             >
               <SymbolView
                 name="plus"
@@ -1402,7 +1428,7 @@ export default function ChatEntryScreen() {
               style={styles.input}
               returnKeyType="send"
               onSubmitEditing={handleSend}
-              editable={!isBusy}
+              editable={!isBusy && !capLocked}
             />
             <Pressable
               hitSlop={6}
