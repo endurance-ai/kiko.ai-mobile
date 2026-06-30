@@ -2,6 +2,7 @@ import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import { ReactNode } from 'react';
 import { useColorScheme } from 'react-native';
 
+import { useConsentGate } from '@/hooks/use-consent-gate';
 import { useRegisterDevice } from '@/hooks/use-register-device';
 import { AuthProvider } from '@/state/auth';
 import { BannerProvider } from '@/state/banner';
@@ -12,6 +13,7 @@ import { WishlistProvider } from '@/state/wishlist';
 
 function AuthSideEffects({ children }: { children: ReactNode }) {
   useRegisterDevice();
+  useConsentGate();
   return <>{children}</>;
 }
 
@@ -57,6 +59,10 @@ export default function RootLayout() {
                           }}
                         />
                         <Stack.Screen name="settings" />
+                        <Stack.Screen
+                          name="consent"
+                          options={{ gestureEnabled: false }}
+                        />
                         <Stack.Screen
                           name="feedback"
                           options={{

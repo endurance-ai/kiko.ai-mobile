@@ -47,13 +47,12 @@ export default function BillingScreen() {
 
 function UpgradeView() {
   const insets = useSafeAreaInsets();
-  const { activate } = useSubscription();
 
   const handleUpgrade = () => {
     Haptic.medium();
-    // TODO: StoreKit2 purchase -> POST /v1/iap/verify
-    activate();
-    Haptic.success();
+    // StoreKit2 purchase + /v1/iap/verify wiring lands in the IAP phase;
+    // for now surface the intent without faking activation.
+    Alert.alert('Pro 구독', '곧 결제 기능이 추가돼요.');
   };
 
   return (
@@ -164,7 +163,9 @@ function ManageView() {
 
   const handleManage = async () => {
     Haptic.light();
-    await Linking.openURL("itms-apps://apps.apple.com/account/subscriptions");
+    // Prefer the server-provided manage URL so the redirect can be tuned
+    // (e.g. universal-link → App Store) without a client release.
+    await Linking.openURL(subscription.manageUrl);
   };
 
   const handleRestore = () => {
@@ -187,9 +188,15 @@ function ManageView() {
             <Text style={styles.planLeft}>계정 플랜</Text>
             <Text style={styles.planRight}>Pro</Text>
           </View>
-          {subscription.nextBillingAt && (
+          {subscription.willRenewAt && (
             <Text style={styles.planSub}>
-              다음 결제일 {formatKoreanDate(subscription.nextBillingAt)}
+              다음 결제일 {formatKoreanDate(subscription.willRenewAt)}
+            </Text>
+          )}
+          {!subscription.willRenewAt && subscription.expiresAt && (
+            <Text style={styles.planSub}>
+              {subscription.status === 'grace' ? '결제 보류 — ' : '만료 예정 '}
+              {formatKoreanDate(subscription.expiresAt)}
             </Text>
           )}
         </View>
