@@ -63,9 +63,13 @@ export function GlassSurface({
   ...rest
 }: Props) {
   if (isLiquidGlassAvailable()) {
+    // When bordered=false the caller wants a minimal chip that lets a
+    // colored background show through — force the see-through glass style
+    // unless the caller supplied an explicit override.
+    const effectiveGlassStyle = bordered ? glassStyle : 'clear';
     return (
       <GlassView
-        glassEffectStyle={glassStyle}
+        glassEffectStyle={effectiveGlassStyle}
         tintColor={tintColor}
         isInteractive={isInteractive}
         colorScheme={colorScheme}
@@ -114,11 +118,15 @@ const fallbackStyles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 3,
   },
-  // No border + no shadow — for surfaces that float over a colored background
-  // (e.g. login marquee) where the hairline reads as an outline.
+  // No border + no shadow + no background — for surfaces that float over a
+  // colored background (e.g. login marquee) where the base pill/composer
+  // white fill would otherwise show as a gray/off-white box against the
+  // gradient. Caller is responsible for setting an explicit background when
+  // one is desired (e.g. a subtle rgba white).
   bareEdge: {
     borderWidth: 0,
     shadowOpacity: 0,
     elevation: 0,
+    backgroundColor: 'transparent',
   },
 });
