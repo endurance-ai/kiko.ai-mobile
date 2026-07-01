@@ -73,6 +73,30 @@ export interface ChatRequest {
   attached_image_url?: string | null;
 }
 
+/**
+ * Server `clarify` SSE event — an inline-keyboard prompt (pick_item carousel,
+ * gender ask, category pick, ...). The client renders `prompt` above the
+ * `options` as tappable buttons; on tap POST /v1/chat/sessions/{sid}/callback
+ * with the option's `callback` string.
+ */
+export interface ClarifyOption {
+  label: string;
+  callback: string;
+}
+
+export interface ClarifyPayload {
+  axis: string;
+  prompt: string;
+  options: ClarifyOption[];
+}
+
+/** Body for POST /v1/chat/sessions/{sid}/callback — button tap. */
+export interface ChatCallbackRequest {
+  callback_data: string;
+  /** Tapped button label — persisted as the user turn (mirrors what the user "said"). */
+  label?: string | null;
+}
+
 export interface ApiErrorBody {
   detail: string;
 }

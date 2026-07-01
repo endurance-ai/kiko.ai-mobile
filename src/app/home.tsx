@@ -28,6 +28,7 @@ import { Haptic, IOSColors, IOSFont, IOSText } from "@/constants/ios";
 import {
   createSessionStream,
   getMessages,
+  sendCallbackStream,
   sendMessageStream,
 } from "@/lib/chat";
 import { ApiError } from "@/lib/api";
@@ -38,7 +39,7 @@ import { uploadImage } from "@/lib/uploads";
 import { useBanner } from "@/state/banner";
 import { buildFilterLabel, PRICE_MAX, useFilter } from "@/state/filter";
 import { MOCK_PRODUCTS, type Product } from "@/state/products";
-import type { ProductRef } from "@/types/api";
+import type { ClarifyPayload, ProductRef } from "@/types/api";
 
 type TurnStatus = "analyzing" | "picking" | "searching" | "results" | "empty";
 
@@ -84,6 +85,9 @@ type Turn = {
   streamPlaceholder?: string;
   /** search_id from the server (SSE 'search' event) — tags feedback / view records. */
   streamSearchId?: string;
+  /** Pending inline-keyboard prompt (pick_item / gender / category_pick / ...).
+   *  Cleared on button tap (which fires POST /callback and resumes the stream). */
+  streamClarify?: ClarifyPayload | null;
 };
 
 const SEARCH_HINT = "인디 · 빈티지 2,900+ 브랜드에서 찾는 중…";
@@ -811,6 +815,12 @@ export default function ChatEntryScreen() {
       onSearch: (searchId: string) => {
         patch(() => ({ streamSearchId: searchId }));
       },
+      onClarify: (payload: ClarifyPayload) => {
+        // Inline-keyboard prompt (pick_item carousel / gender ask /
+        // category pick / ...). Render as buttons in the assistant bubble;
+        // handleClarifyPick resumes the turn via POST /callback.
+        patch(() => ({ streamClarify: payload }));
+      },
       onCapReached: (info: CapReachedInfo) => {
         // Server skipped the graph run for this turn; just end the streaming
         // state cleanly (no assistant reply) and surface a billing banner.
@@ -880,6 +890,62 @@ export default function ChatEntryScreen() {
           filterOpts,
         )
       : createSessionStream(serverText, handlers, filterOpts);
+    void streamRef.current.promise.catch(() => {});
+  };
+
+  /**
+   * User tapped a `clarify` event option (pick_item card, gender pill, ...).
+   * Fires POST /v1/chat/sessions/{sid}/callback and pipes the resumed stream
+   * back into the SAME turn's assistant bubble so text/products continue
+   * accumulating instead of spawning a new turn.
+   */
+  const handleClarifyPick = (turnId: number, callback: string, label: string) => {
+    const sid = sessionIdRef.current;
+    if (!sid) return;
+    Haptic.medium();
+
+    const patch = (mut: (t: Turn) => Partial<Turn>) =>
+      setMessages((prev) =>
+        prev.map((t) => (t.id === turnId ? { ...t, ...mut(t) } : t)),
+      );
+
+    // Clear the buttons + reset the done flag so the "searching" indicator
+    // reappears while the resumed stream fetches results.
+    patch(() => ({ streamClarify: null, streamDone: false }));
+
+    streamRef.current = sendCallbackStream(sid, callback, label, {
+      onTextDelta: (delta) => {
+        patch((t) => ({ streamText: (t.streamText ?? "") + delta }));
+      },
+      onProduct: (product) => {
+        patch((t) => ({
+          streamProducts: [...(t.streamProducts ?? []), product],
+        }));
+      },
+      onSearch: (searchId) => {
+        patch(() => ({ streamSearchId: searchId }));
+      },
+      onClarify: (payload) => {
+        patch(() => ({ streamClarify: payload }));
+      },
+      onDone: () => {
+        patch(() => ({ streamDone: true, status: "results" as const }));
+        streamRef.current = null;
+      },
+      onError: () => {
+        Haptic.error();
+        streamRef.current = null;
+        showBanner({
+          id: "request-failure",
+          priority: "error",
+          title: "요청을 처리하지 못했어요",
+          action: {
+            label: "다시 시도",
+            onPress: () => handleClarifyPick(turnId, callback, label),
+          },
+        });
+      },
+    });
     void streamRef.current.promise.catch(() => {});
   };
 
@@ -1188,7 +1254,30 @@ export default function ChatEntryScreen() {
                         })}
                       </ScrollView>
                     )}
-                    {turn.streamDone && (
+                    {/* Inline-keyboard prompt (pick_item / gender / ...).
+                        Server sent SSE `clarify`; render as tappable pills.
+                        Tap → sendCallbackStream resumes into the same bubble. */}
+                    {turn.streamClarify && turn.streamClarify.options.length > 0 && (
+                      <View style={styles.clarifyBlock}>
+                        {turn.streamClarify.options.map((opt) => (
+                          <Pressable
+                            key={opt.callback}
+                            style={styles.clarifyOption}
+                            onPress={() =>
+                              handleClarifyPick(turn.id, opt.callback, opt.label)
+                            }
+                          >
+                            <Text
+                              style={styles.clarifyOptionText}
+                              numberOfLines={2}
+                            >
+                              {opt.label}
+                            </Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    )}
+                    {turn.streamDone && !turn.streamClarify && (
                       <View style={styles.feedbackTriggerRow}>
                         <FeedbackTrigger
                           turnKey={`stream:${turn.id}`}
@@ -1710,6 +1799,24 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     paddingHorizontal: 4,
     marginTop: -8,
+  },
+  clarifyBlock: {
+    paddingHorizontal: 4,
+    marginTop: 4,
+    gap: 8,
+  },
+  clarifyOption: {
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    backgroundColor: IOSColors.tertiarySystemBackground,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: IOSColors.separator,
+  },
+  clarifyOptionText: {
+    ...IOSText.subhead,
+    color: IOSColors.label,
+    fontFamily: IOSFont.rounded,
   },
   agentText: {
     ...IOSText.body,

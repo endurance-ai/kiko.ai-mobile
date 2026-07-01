@@ -1,6 +1,7 @@
 import { api } from '@/lib/api';
 import { streamChatSSE, type ChatStreamController, type ChatStreamHandlers } from '@/lib/sse';
 import type {
+  ChatCallbackRequest,
   ChatRequest,
   MessageListResponse,
   SessionSummary,
@@ -66,6 +67,26 @@ export function sendMessageStream(
   return streamChatSSE(
     `/v1/chat/sessions/${encodeURIComponent(sessionId)}/messages`,
     buildRequest(message, opts),
+    handlers,
+  );
+}
+
+/**
+ * Send a button tap from a `clarify` SSE event. `callbackData` is the option's
+ * `callback` string (e.g. `item:0`, `clarify:gender:women`). `label` is the
+ * button's display text — persisted as the user turn so chat history mirrors
+ * what the user "said" by tapping. Returns the same SSE stream shape.
+ */
+export function sendCallbackStream(
+  sessionId: string,
+  callbackData: string,
+  label: string | null | undefined,
+  handlers: ChatStreamHandlers,
+): ChatStreamController {
+  const body: ChatCallbackRequest = { callback_data: callbackData, label: label ?? null };
+  return streamChatSSE(
+    `/v1/chat/sessions/${encodeURIComponent(sessionId)}/callback`,
+    body,
     handlers,
   );
 }
