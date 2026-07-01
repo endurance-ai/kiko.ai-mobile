@@ -333,6 +333,28 @@ export interface HistoryResponse {
   next_cursor: string | null;
 }
 
+/**
+ * Server `ResultProduct` from `GET /v1/results/{search_id}`. Full grid page
+ * for one search — ranked cosine order.
+ */
+export interface ResultProduct {
+  rank: number;
+  product_id: number;
+  brand: string;
+  name: string;
+  price: number | null;
+  image_url: string;
+  product_url: string;
+}
+
+export interface ResultSetPageResponse {
+  search_id: string;
+  title: string | null;
+  result_count: number;
+  items: ResultProduct[];
+  next_cursor: string | null;
+}
+
 export interface StyleNodeItem {
   id: number;
   code: string;
