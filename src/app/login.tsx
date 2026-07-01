@@ -220,6 +220,7 @@ function MarqueeRow({
     <GlassSurface
       key={`${chip.label}-${idx}`}
       variant="pill"
+      bordered={false}
       style={styles.chip}
     >
       <Text style={[styles.chipText, chipTextStyle(chip.s)]}>{chip.label}</Text>
@@ -403,16 +404,14 @@ export default function LoginScreen() {
             accessibilityLabel="Google로 시작"
             disabled={busy !== null}
             onPress={onGoogle}
-            style={({ pressed }) => [pressed && styles.btnPressed]}
+            style={({ pressed }) => [
+              styles.googleBtn,
+              pressed && styles.btnPressed,
+              busy === 'google' && styles.btnBusy,
+            ]}
           >
-            <GlassSurface
-              variant="composer"
-              isInteractive
-              style={[styles.googleBtn, busy === 'google' && styles.btnBusy]}
-            >
-              <Text style={styles.googleG}>G</Text>
-              <Text style={styles.googleBtnText}>Google로 시작</Text>
-            </GlassSurface>
+            <Text style={styles.googleG}>G</Text>
+            <Text style={styles.googleBtnText}>Google로 시작</Text>
           </Pressable>
         </View>
 
@@ -477,11 +476,12 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
 
-  // Title block
+  // Title block. Reduced bottom padding pushes the entire actions+terms
+  // footer stack down toward the safe-area edge.
   middle: {
     flex: 1,
     paddingHorizontal: 22,
-    paddingBottom: 70,
+    paddingBottom: 24,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -515,9 +515,12 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     letterSpacing: -0.15,
   },
+  // White in both light + dark mode per design — never tinted by system
+  // theme. Text/logo stay ink (readable on white).
   googleBtn: {
     height: 50,
     borderRadius: 50,
+    backgroundColor: '#FFFFFF',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',

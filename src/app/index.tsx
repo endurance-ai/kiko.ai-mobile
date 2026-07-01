@@ -53,9 +53,11 @@ const HAPTIC_DELAYS_MS = [467, 533, 600, 667];
 
 // ─── Fallback letter animation (used until next native build) ────────────
 const LETTERS = ['k', 'i', 'k', 'o'] as const;
-const STAGGER_MS = 100;
-const RISE_MS = 400;
-const HOLD_MS = 350;
+// Slightly slower cadence per design feedback — reads more deliberate.
+// Total = 4*STAGGER + RISE + HOLD + EXIT.
+const STAGGER_MS = 130;
+const RISE_MS = 500;
+const HOLD_MS = 400;
 const EXIT_MS = 600;
 
 function Letter({ char, delay }: { char: string; delay: number }) {
@@ -162,10 +164,10 @@ const styles = StyleSheet.create({
   },
   word: { flexDirection: 'row' },
   letter: {
-    fontSize: 56,
+    fontSize: 48,
     fontWeight: '800',
     color: '#FFFFFF',
     fontFamily: IOSFont.rounded,
-    letterSpacing: -2,
+    letterSpacing: -1.7,
   },
 });

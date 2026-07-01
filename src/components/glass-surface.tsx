@@ -29,6 +29,14 @@ type Props = ViewProps & {
   isInteractive?: boolean;
   /** Override the glass appearance (default 'auto' follows system theme). */
   colorScheme?: GlassColorScheme;
+  /**
+   * Whether the pre-iOS26 fallback should draw its hairline border + shadow.
+   * Default true (matches the header/composer bars where the border reads as
+   * elevation). Set to false for surfaces that should float over a colored
+   * background — e.g. the login marquee, where the border shows through as
+   * a gray outline against the gradient.
+   */
+  bordered?: boolean;
   children?: ReactNode;
 };
 
@@ -49,6 +57,7 @@ export function GlassSurface({
   tintColor,
   isInteractive,
   colorScheme,
+  bordered = true,
   style,
   children,
   ...rest
@@ -67,10 +76,14 @@ export function GlassSurface({
       </GlassView>
     );
   }
-  const fallback =
-    variant === 'composer' ? fallbackStyles.composer : fallbackStyles.pill;
+  const base = variant === 'composer' ? fallbackStyles.composer : fallbackStyles.pill;
+  const edge = bordered
+    ? variant === 'composer'
+      ? fallbackStyles.composerEdge
+      : fallbackStyles.pillEdge
+    : fallbackStyles.bareEdge;
   return (
-    <View style={[style, fallback]} {...rest}>
+    <View style={[style, base, edge]} {...rest}>
       {children}
     </View>
   );
@@ -79,6 +92,8 @@ export function GlassSurface({
 const fallbackStyles = StyleSheet.create({
   pill: {
     backgroundColor: IOSColors.systemBackground,
+  },
+  pillEdge: {
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: IOSColors.separator,
     shadowColor: '#000',
@@ -89,6 +104,8 @@ const fallbackStyles = StyleSheet.create({
   },
   composer: {
     backgroundColor: IOSColors.systemBackground,
+  },
+  composerEdge: {
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: IOSColors.separator,
     shadowColor: '#000',
@@ -96,5 +113,12 @@ const fallbackStyles = StyleSheet.create({
     shadowOpacity: 0.10,
     shadowRadius: 6,
     elevation: 3,
+  },
+  // No border + no shadow — for surfaces that float over a colored background
+  // (e.g. login marquee) where the hairline reads as an outline.
+  bareEdge: {
+    borderWidth: 0,
+    shadowOpacity: 0,
+    elevation: 0,
   },
 });
