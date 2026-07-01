@@ -6,7 +6,6 @@ import {
   ActivityIndicator,
   Alert,
   Animated,
-  Dimensions,
   Easing,
   Image,
   Platform,
@@ -15,6 +14,7 @@ import {
   StyleSheet,
   Text,
   useColorScheme,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -26,13 +26,16 @@ import { getMe } from "@/lib/me";
 import { stripFamilyName } from "@/lib/name";
 import type { SessionSummary, UserProfile } from "@/types/api";
 
-const SCREEN_W = Dimensions.get("window").width;
-const PANEL_W = Math.min(SCREEN_W * 0.82, 360);
-
 const OPEN_MS = 260;
 const CLOSE_MS = 200;
 
 export default function SidebarScreen() {
+  // Live window dimensions — Dimensions.get() at module init returned the
+  // pre-modal size on first open of the transparentModal, so panel width
+  // ended up wrong and the whole layout re-flowed only on the SECOND open
+  // (once cached). Using the hook forces a re-measure per mount.
+  const window = useWindowDimensions();
+  const PANEL_W = Math.min(window.width * 0.82, 360);
   const { current: currentSessionId } = useLocalSearchParams<{
     current?: string;
   }>();
@@ -287,7 +290,19 @@ export default function SidebarScreen() {
       </Animated.View>
 
       <Animated.View
-        style={[styles.panel, { transform: [{ translateX: slide }] }]}
+        style={[
+          styles.panel,
+          {
+            // Explicit dims — the top/bottom:0 approach re-flowed only on the
+            // second mount because the transparentModal container hadn't
+            // finished measuring on the first open. Locking to the live
+            // window dimensions fixes both the initial vertical overflow
+            // and the width mismatch.
+            width: PANEL_W,
+            height: window.height,
+            transform: [{ translateX: slide }],
+          },
+        ]}
       >
         <SafeAreaView edges={["top"]} style={styles.panelInner}>
           <View style={styles.body}>
@@ -384,9 +399,8 @@ const styles = StyleSheet.create({
   panel: {
     position: "absolute",
     top: 0,
-    bottom: 0,
     left: 0,
-    width: PANEL_W,
+    // width + height applied inline from useWindowDimensions
     backgroundColor: IOSColors.systemBackground,
     shadowColor: "#000",
     shadowOffset: { width: 2, height: 0 },
