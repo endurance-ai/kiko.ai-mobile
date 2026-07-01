@@ -464,26 +464,12 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingHorizontal: 5,
   },
-  // Marquee chips render as translucent bubbles on the peach gradient.
-  // A soft translucent white + subtle border + drop shadow reads as
-  // floating glass. Real Liquid Glass is iOS 26+ only (dev-client on
-  // iOS 18 uses this fallback); when GlassSurface's iOS26+ path IS
-  // active it applies glassStyle='clear' (bordered=false) which gives
-  // a similar effect via the native material.
   chip: {
     height: 40,
     paddingHorizontal: 16,
-    borderRadius: 20,
+    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.55)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.9)',
-    shadowColor: '#5a2a12',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.14,
-    shadowRadius: 6,
-    elevation: 2,
   },
   chipText: {
     color: INK,
