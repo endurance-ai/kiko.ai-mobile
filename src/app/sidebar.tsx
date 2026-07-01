@@ -1,3 +1,4 @@
+import { Image as ExpoImage } from "expo-image";
 import { router, useLocalSearchParams } from "expo-router";
 import { SymbolView } from "expo-symbols";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -7,7 +8,6 @@ import {
   Alert,
   Animated,
   Easing,
-  Image,
   Platform,
   Pressable,
   ScrollView,
@@ -25,6 +25,12 @@ import { deleteSession, listSessions, renameSession } from "@/lib/chat";
 import { getMe } from "@/lib/me";
 import { stripFamilyName } from "@/lib/name";
 import type { SessionSummary, UserProfile } from "@/types/api";
+
+// Hoist the require out of the render path so the bundler resolves the
+// asset once at module load. expo-image then reads it from its native
+// memory + disk cache on every subsequent mount → the wordmark appears
+// instantly on sidebar open instead of decoding after mount.
+const WORDMARK_SOURCE = require("../../assets/brand/kiko-wordmark.png");
 
 const OPEN_MS = 260;
 const CLOSE_MS = 200;
@@ -306,10 +312,12 @@ export default function SidebarScreen() {
       >
         <SafeAreaView edges={["top"]} style={styles.panelInner}>
           <View style={styles.body}>
-            <Image
-              source={require("../../assets/brand/kiko-wordmark.png")}
+            <ExpoImage
+              source={WORDMARK_SOURCE}
               style={[styles.brand, { tintColor: wordmarkTint }]}
-              resizeMode="contain"
+              contentFit="contain"
+              cachePolicy="memory-disk"
+              transition={0}
             />
 
             <Text style={styles.sectionLabel}>최근 항목</Text>

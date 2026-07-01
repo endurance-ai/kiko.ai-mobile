@@ -1,5 +1,6 @@
+import { Image as ExpoImage } from 'expo-image';
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
-import { ReactNode } from 'react';
+import { ReactNode, useEffect } from 'react';
 import { useColorScheme } from 'react-native';
 
 import { useConsentGate } from '@/hooks/use-consent-gate';
@@ -11,9 +12,17 @@ import { FilterProvider } from '@/state/filter';
 import { SubscriptionProvider } from '@/state/subscription';
 import { WishlistProvider } from '@/state/wishlist';
 
+// Brand assets used across screens (sidebar wordmark, etc). Preloading at
+// app start warms expo-image's native memory cache so the first render on
+// each surface is instant instead of decode-on-mount.
+const PRELOAD_ASSETS = [require('../../assets/brand/kiko-wordmark.png')];
+
 function AuthSideEffects({ children }: { children: ReactNode }) {
   useRegisterDevice();
   useConsentGate();
+  useEffect(() => {
+    void ExpoImage.prefetch(PRELOAD_ASSETS, 'memory-disk');
+  }, []);
   return <>{children}</>;
 }
 

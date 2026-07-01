@@ -216,15 +216,14 @@ function MarqueeRow({
     return () => loop.stop();
   }, [halfWidth, direction, durationMs, translateX]);
 
+  // Plain View — no GlassSurface. expo-glass-effect renders a system blur
+  // that reads as gray on the peach gradient even on iOS 18, and the user
+  // does NOT want any surface treatment behind the wordmarks. Just text
+  // floating on the gradient.
   const renderChip = (chip: Chip, idx: number) => (
-    <GlassSurface
-      key={`${chip.label}-${idx}`}
-      variant="pill"
-      bordered={false}
-      style={styles.chip}
-    >
+    <View key={`${chip.label}-${idx}`} style={styles.chip}>
       <Text style={[styles.chipText, chipTextStyle(chip.s)]}>{chip.label}</Text>
-    </GlassSurface>
+    </View>
   );
 
   return (
