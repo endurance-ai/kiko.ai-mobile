@@ -895,23 +895,49 @@ export default function ChatEntryScreen() {
 
   /**
    * User tapped a `clarify` event option (pick_item card, gender pill, ...).
-   * Fires POST /v1/chat/sessions/{sid}/callback and pipes the resumed stream
-   * back into the SAME turn's assistant bubble so text/products continue
-   * accumulating instead of spawning a new turn.
+   * Clears the prior turn's buttons (a decision was made) and SPAWNS A NEW
+   * TURN whose user bubble shows the tapped `label` — this mirrors the
+   * server, which persists `label` as a user chat turn. The resumed callback
+   * stream fills the new turn's assistant portion.
    */
-  const handleClarifyPick = (turnId: number, callback: string, label: string) => {
+  const handleClarifyPick = (
+    priorTurnId: number,
+    callback: string,
+    label: string,
+  ) => {
     const sid = sessionIdRef.current;
     if (!sid) return;
     Haptic.medium();
 
+    // Clear the buttons on the prior turn (decision recorded, no re-tap).
+    setMessages((prev) =>
+      prev.map((t) =>
+        t.id === priorTurnId ? { ...t, streamClarify: null } : t,
+      ),
+    );
+
+    // Spawn a new turn whose user bubble echoes what the user "said" by
+    // tapping. The stream that follows fills its assistant portion.
+    const newTurnId = nextIdRef.current++;
+    const newTurn: Turn = {
+      id: newTurnId,
+      user: { text: label },
+      status: "searching",
+      isStream: true,
+      streamText: "",
+      streamProducts: [],
+      streamDone: false,
+      streamPlaceholder:
+        BUSY_GENERAL_HINTS[
+          Math.floor(Math.random() * BUSY_GENERAL_HINTS.length)
+        ],
+    };
+    setMessages((prev) => [...prev, newTurn]);
+
     const patch = (mut: (t: Turn) => Partial<Turn>) =>
       setMessages((prev) =>
-        prev.map((t) => (t.id === turnId ? { ...t, ...mut(t) } : t)),
+        prev.map((t) => (t.id === newTurnId ? { ...t, ...mut(t) } : t)),
       );
-
-    // Clear the buttons + reset the done flag so the "searching" indicator
-    // reappears while the resumed stream fetches results.
-    patch(() => ({ streamClarify: null, streamDone: false }));
 
     streamRef.current = sendCallbackStream(sid, callback, label, {
       onTextDelta: (delta) => {
@@ -934,6 +960,9 @@ export default function ChatEntryScreen() {
       },
       onError: () => {
         Haptic.error();
+        // Drop the placeholder turn on failure so the user isn't left with an
+        // orphan bubble.
+        setMessages((prev) => prev.filter((t) => t.id !== newTurnId));
         streamRef.current = null;
         showBanner({
           id: "request-failure",
@@ -941,7 +970,7 @@ export default function ChatEntryScreen() {
           title: "요청을 처리하지 못했어요",
           action: {
             label: "다시 시도",
-            onPress: () => handleClarifyPick(turnId, callback, label),
+            onPress: () => handleClarifyPick(priorTurnId, callback, label),
           },
         });
       },
