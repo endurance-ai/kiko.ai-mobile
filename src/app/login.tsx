@@ -216,14 +216,20 @@ function MarqueeRow({
     return () => loop.stop();
   }, [halfWidth, direction, durationMs, translateX]);
 
-  // Plain View — no GlassSurface. expo-glass-effect renders a system blur
-  // that reads as gray on the peach gradient even on iOS 18, and the user
-  // does NOT want any surface treatment behind the wordmarks. Just text
-  // floating on the gradient.
+  // Liquid Glass on iOS 26+ — GlassSurface with bordered={false} forces
+  // glassStyle='clear' (see-through refraction, no tint) so the chip
+  // reads as a real floating bubble on the peach gradient. On older iOS
+  // the fallback path is a transparent View (bareEdge in GlassSurface),
+  // matching what the user wanted: no gray box either way.
   const renderChip = (chip: Chip, idx: number) => (
-    <View key={`${chip.label}-${idx}`} style={styles.chip}>
+    <GlassSurface
+      key={`${chip.label}-${idx}`}
+      variant="pill"
+      bordered={false}
+      style={styles.chip}
+    >
       <Text style={[styles.chipText, chipTextStyle(chip.s)]}>{chip.label}</Text>
-    </View>
+    </GlassSurface>
   );
 
   return (
