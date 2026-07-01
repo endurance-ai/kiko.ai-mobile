@@ -51,18 +51,14 @@ if (LOTTIE_NATIVE_READY) {
 // Haptic timing — synced with kiko-splash Lottie frames 28/32/36/40 @60fps.
 const HAPTIC_DELAYS_MS = [467, 533, 600, 667];
 
-// ─── Letter animation ────────────────────────────────────────────────────
-// 260701: force the letter path even when lottie-react-native is bundled —
-// the current `kiko-splash.json` is a minimal placeholder that renders as
-// an empty white screen on device. Switch back once the real Lottie asset
-// lands. Letter cadence tuned per live feedback: readable, deliberate,
-// slightly smaller than the original 56pt.
+// ─── Fallback letter animation ────────────────────────────────────────────
+// Only used when lottie-react-native native module isn't linked. The main
+// splash is the Lottie file bundled with the EAS build.
 const LETTERS = ['k', 'i', 'k', 'o'] as const;
-const STAGGER_MS = 140;
-const RISE_MS = 550;
-const HOLD_MS = 450;
+const STAGGER_MS = 130;
+const RISE_MS = 500;
+const HOLD_MS = 400;
 const EXIT_MS = 600;
-const FORCE_LETTER_PATH = true;
 
 function Letter({ char, delay }: { char: string; delay: number }) {
   const progress = useSharedValue(0);
@@ -94,8 +90,7 @@ export default function SplashScreen() {
   const { status } = useAuth();
   const [animationDone, setAnimationDone] = useState(false);
   const navigatedRef = useRef(false);
-  const useLottie =
-    !FORCE_LETTER_PATH && LottieView !== null && SPLASH_SOURCE !== null;
+  const useLottie = LottieView !== null && SPLASH_SOURCE !== null;
 
   // Lottie path: haptic punches synced to the timeline, plus a safety timer
   // that force-completes if `onAnimationFinish` never fires (bad JSON, native
