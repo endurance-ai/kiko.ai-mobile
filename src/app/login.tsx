@@ -375,24 +375,29 @@ export default function LoginScreen() {
 
         {/* Actions */}
         <View style={styles.actions}>
-          <Pressable
-            accessibilityLabel="Apple로 시작"
-            disabled={busy !== null}
-            onPress={onApple}
-            style={({ pressed }) => [
-              styles.appleBtn,
-              pressed && styles.appleBtnPressed,
-              busy === 'apple' && styles.btnBusy,
-            ]}
-          >
-            <SymbolView
-              name="applelogo"
-              size={17}
-              tintColor="#FFFFFF"
-              weight="medium"
-            />
-            <Text style={styles.appleBtnText}>Apple로 시작</Text>
-          </Pressable>
+          {/* Sign in with Apple is iOS-only per Apple's platform policy.
+              Hide on Android so users don't tap a button that immediately
+              throws a "iOS only" alert. */}
+          {Platform.OS === 'ios' && (
+            <Pressable
+              accessibilityLabel="Apple로 시작"
+              disabled={busy !== null}
+              onPress={onApple}
+              style={({ pressed }) => [
+                styles.appleBtn,
+                pressed && styles.appleBtnPressed,
+                busy === 'apple' && styles.btnBusy,
+              ]}
+            >
+              <SymbolView
+                name="applelogo"
+                size={17}
+                tintColor="#FFFFFF"
+                weight="medium"
+              />
+              <Text style={styles.appleBtnText}>Apple로 시작</Text>
+            </Pressable>
+          )}
 
           <Pressable
             accessibilityLabel="Google로 시작"

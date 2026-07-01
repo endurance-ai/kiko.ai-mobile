@@ -90,13 +90,20 @@ export default function SplashScreen() {
   const navigatedRef = useRef(false);
   const useLottie = LottieView !== null && SPLASH_SOURCE !== null;
 
-  // Lottie path: haptic punches synced to the timeline.
+  // Lottie path: haptic punches synced to the timeline, plus a safety timer
+  // that force-completes if `onAnimationFinish` never fires (bad JSON, native
+  // module glitch, etc.). Without this the splash would hang forever.
   useEffect(() => {
     if (!useLottie) return;
     const timers = HAPTIC_DELAYS_MS.map((delay) =>
       setTimeout(Haptic.light, delay),
     );
-    return () => timers.forEach(clearTimeout);
+    // Lottie animation is ~1.2s; give it 3s headroom before we bail.
+    const safety = setTimeout(() => setAnimationDone(true), 3000);
+    return () => {
+      timers.forEach(clearTimeout);
+      clearTimeout(safety);
+    };
   }, [useLottie]);
 
   // Fallback path: finish marker based on the letter-animation total length.
