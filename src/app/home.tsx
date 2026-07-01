@@ -85,9 +85,11 @@ type Turn = {
   streamPlaceholder?: string;
   /** search_id from the server (SSE 'search' event) — tags feedback / view records. */
   streamSearchId?: string;
-  /** Pending inline-keyboard prompt (pick_item / gender / category_pick / ...).
-   *  Cleared on button tap (which fires POST /callback and resumes the stream). */
+  /** Inline-keyboard prompt (pick_item / gender / category_pick / ...).
+   *  Retained across tap so the chat log preserves the choice history.
+   *  `streamClarifyPicked` records which option was tapped (buttons freeze after). */
   streamClarify?: ClarifyPayload | null;
+  streamClarifyPicked?: string | null;
 };
 
 const SEARCH_HINT = "인디 · 빈티지 2,900+ 브랜드에서 찾는 중…";
@@ -909,10 +911,12 @@ export default function ChatEntryScreen() {
     if (!sid) return;
     Haptic.medium();
 
-    // Clear the buttons on the prior turn (decision recorded, no re-tap).
+    // Freeze the prior turn's buttons and mark which one was picked so the
+    // chat log preserves the choice visually (buttons stay, tapped one is
+    // highlighted, others fade + become non-tappable).
     setMessages((prev) =>
       prev.map((t) =>
-        t.id === priorTurnId ? { ...t, streamClarify: null } : t,
+        t.id === priorTurnId ? { ...t, streamClarifyPicked: callback } : t,
       ),
     );
 
@@ -1285,25 +1289,39 @@ export default function ChatEntryScreen() {
                     )}
                     {/* Inline-keyboard prompt (pick_item / gender / ...).
                         Server sent SSE `clarify`; render as tappable pills.
-                        Tap → sendCallbackStream resumes into the same bubble. */}
+                        After a pick, buttons freeze — the picked one is
+                        highlighted, the rest fade — so chat history
+                        preserves what was chosen. */}
                     {turn.streamClarify && turn.streamClarify.options.length > 0 && (
                       <View style={styles.clarifyBlock}>
-                        {turn.streamClarify.options.map((opt) => (
-                          <Pressable
-                            key={opt.callback}
-                            style={styles.clarifyOption}
-                            onPress={() =>
-                              handleClarifyPick(turn.id, opt.callback, opt.label)
-                            }
-                          >
-                            <Text
-                              style={styles.clarifyOptionText}
-                              numberOfLines={2}
+                        {turn.streamClarify.options.map((opt) => {
+                          const anyPicked = turn.streamClarifyPicked != null;
+                          const isPicked = turn.streamClarifyPicked === opt.callback;
+                          return (
+                            <Pressable
+                              key={opt.callback}
+                              disabled={anyPicked}
+                              style={[
+                                styles.clarifyOption,
+                                isPicked && styles.clarifyOptionPicked,
+                                anyPicked && !isPicked && styles.clarifyOptionFaded,
+                              ]}
+                              onPress={() =>
+                                handleClarifyPick(turn.id, opt.callback, opt.label)
+                              }
                             >
-                              {opt.label}
-                            </Text>
-                          </Pressable>
-                        ))}
+                              <Text
+                                style={[
+                                  styles.clarifyOptionText,
+                                  isPicked && styles.clarifyOptionTextPicked,
+                                ]}
+                                numberOfLines={2}
+                              >
+                                {opt.label}
+                              </Text>
+                            </Pressable>
+                          );
+                        })}
                       </View>
                     )}
                     {turn.streamDone && !turn.streamClarify && (
@@ -1846,6 +1864,19 @@ const styles = StyleSheet.create({
     ...IOSText.subhead,
     color: IOSColors.label,
     fontFamily: IOSFont.rounded,
+  },
+  // After a decision: chosen option gets a filled dark treatment; the
+  // rest fade so it's obvious which one was picked without hiding history.
+  clarifyOptionPicked: {
+    backgroundColor: IOSColors.label,
+    borderColor: IOSColors.label,
+  },
+  clarifyOptionTextPicked: {
+    color: IOSColors.systemBackground,
+    fontWeight: "600",
+  },
+  clarifyOptionFaded: {
+    opacity: 0.4,
   },
   agentText: {
     ...IOSText.body,
