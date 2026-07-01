@@ -28,6 +28,7 @@ import { Haptic, IOSColors, IOSFont, IOSText } from "@/constants/ios";
 import {
   createSessionStream,
   getMessages,
+  sendCallbackStream,
   sendMessageStream,
 } from "@/lib/chat";
 import { ApiError } from "@/lib/api";
@@ -38,7 +39,7 @@ import { uploadImage } from "@/lib/uploads";
 import { useBanner } from "@/state/banner";
 import { buildFilterLabel, PRICE_MAX, useFilter } from "@/state/filter";
 import { MOCK_PRODUCTS, type Product } from "@/state/products";
-import type { ProductRef } from "@/types/api";
+import type { ClarifyPayload, ProductRef } from "@/types/api";
 
 type TurnStatus = "analyzing" | "picking" | "searching" | "results" | "empty";
 
@@ -84,6 +85,13 @@ type Turn = {
   streamPlaceholder?: string;
   /** search_id from the server (SSE 'search' event) — tags feedback / view records. */
   streamSearchId?: string;
+  /** Inline-keyboard prompt (pick_item / gender / category_pick / ...).
+   *  Retained across tap so the chat log preserves the choice history.
+   *  `streamClarifyPicks` — set of already-searched option callbacks.
+   *  Already-searched buttons stay visible but non-tappable + muted; the
+   *  rest remain interactive so the user can scroll back and try another. */
+  streamClarify?: ClarifyPayload | null;
+  streamClarifyPicks?: string[];
 };
 
 const SEARCH_HINT = "인디 · 빈티지 2,900+ 브랜드에서 찾는 중…";
@@ -811,6 +819,12 @@ export default function ChatEntryScreen() {
       onSearch: (searchId: string) => {
         patch(() => ({ streamSearchId: searchId }));
       },
+      onClarify: (payload: ClarifyPayload) => {
+        // Inline-keyboard prompt (pick_item carousel / gender ask /
+        // category pick / ...). Render as buttons in the assistant bubble;
+        // handleClarifyPick resumes the turn via POST /callback.
+        patch(() => ({ streamClarify: payload }));
+      },
       onCapReached: (info: CapReachedInfo) => {
         // Server skipped the graph run for this turn; just end the streaming
         // state cleanly (no assistant reply) and surface a billing banner.
@@ -880,6 +894,96 @@ export default function ChatEntryScreen() {
           filterOpts,
         )
       : createSessionStream(serverText, handlers, filterOpts);
+    void streamRef.current.promise.catch(() => {});
+  };
+
+  /**
+   * User tapped a `clarify` event option (pick_item card, gender pill, ...).
+   * Clears the prior turn's buttons (a decision was made) and SPAWNS A NEW
+   * TURN whose user bubble shows the tapped `label` — this mirrors the
+   * server, which persists `label` as a user chat turn. The resumed callback
+   * stream fills the new turn's assistant portion.
+   */
+  const handleClarifyPick = (
+    priorTurnId: number,
+    callback: string,
+    label: string,
+  ) => {
+    const sid = sessionIdRef.current;
+    if (!sid) return;
+    Haptic.medium();
+
+    // Append this option to the prior turn's "already searched" set. Other
+    // options stay interactive so the user can scroll back and try another
+    // item from the same detection.
+    setMessages((prev) =>
+      prev.map((t) => {
+        if (t.id !== priorTurnId) return t;
+        const prevPicks = t.streamClarifyPicks ?? [];
+        if (prevPicks.includes(callback)) return t;
+        return { ...t, streamClarifyPicks: [...prevPicks, callback] };
+      }),
+    );
+
+    // Spawn a new turn whose user bubble echoes what the user "said" by
+    // tapping. The stream that follows fills its assistant portion.
+    const newTurnId = nextIdRef.current++;
+    const newTurn: Turn = {
+      id: newTurnId,
+      user: { text: label },
+      status: "searching",
+      isStream: true,
+      streamText: "",
+      streamProducts: [],
+      streamDone: false,
+      streamPlaceholder:
+        BUSY_GENERAL_HINTS[
+          Math.floor(Math.random() * BUSY_GENERAL_HINTS.length)
+        ],
+    };
+    setMessages((prev) => [...prev, newTurn]);
+
+    const patch = (mut: (t: Turn) => Partial<Turn>) =>
+      setMessages((prev) =>
+        prev.map((t) => (t.id === newTurnId ? { ...t, ...mut(t) } : t)),
+      );
+
+    streamRef.current = sendCallbackStream(sid, callback, label, {
+      onTextDelta: (delta) => {
+        patch((t) => ({ streamText: (t.streamText ?? "") + delta }));
+      },
+      onProduct: (product) => {
+        patch((t) => ({
+          streamProducts: [...(t.streamProducts ?? []), product],
+        }));
+      },
+      onSearch: (searchId) => {
+        patch(() => ({ streamSearchId: searchId }));
+      },
+      onClarify: (payload) => {
+        patch(() => ({ streamClarify: payload }));
+      },
+      onDone: () => {
+        patch(() => ({ streamDone: true, status: "results" as const }));
+        streamRef.current = null;
+      },
+      onError: () => {
+        Haptic.error();
+        // Drop the placeholder turn on failure so the user isn't left with an
+        // orphan bubble.
+        setMessages((prev) => prev.filter((t) => t.id !== newTurnId));
+        streamRef.current = null;
+        showBanner({
+          id: "request-failure",
+          priority: "error",
+          title: "요청을 처리하지 못했어요",
+          action: {
+            label: "다시 시도",
+            onPress: () => handleClarifyPick(priorTurnId, callback, label),
+          },
+        });
+      },
+    });
     void streamRef.current.promise.catch(() => {});
   };
 
@@ -1188,7 +1292,44 @@ export default function ChatEntryScreen() {
                         })}
                       </ScrollView>
                     )}
-                    {turn.streamDone && (
+                    {/* Inline-keyboard prompt (pick_item / gender / ...).
+                        Server sent SSE `clarify`; render as tappable pills.
+                        After a pick, buttons freeze — the picked one is
+                        highlighted, the rest fade — so chat history
+                        preserves what was chosen. */}
+                    {turn.streamClarify && turn.streamClarify.options.length > 0 && (
+                      <View style={styles.clarifyBlock}>
+                        {turn.streamClarify.options.map((opt) => {
+                          const isPicked =
+                            turn.streamClarifyPicks?.includes(opt.callback) ??
+                            false;
+                          return (
+                            <Pressable
+                              key={opt.callback}
+                              disabled={isPicked}
+                              style={[
+                                styles.clarifyOption,
+                                isPicked && styles.clarifyOptionPicked,
+                              ]}
+                              onPress={() =>
+                                handleClarifyPick(turn.id, opt.callback, opt.label)
+                              }
+                            >
+                              <Text
+                                style={[
+                                  styles.clarifyOptionText,
+                                  isPicked && styles.clarifyOptionTextPicked,
+                                ]}
+                                numberOfLines={2}
+                              >
+                                {opt.label}
+                              </Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                    )}
+                    {turn.streamDone && !turn.streamClarify && (
                       <View style={styles.feedbackTriggerRow}>
                         <FeedbackTrigger
                           turnKey={`stream:${turn.id}`}
@@ -1710,6 +1851,35 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     paddingHorizontal: 4,
     marginTop: -8,
+  },
+  clarifyBlock: {
+    paddingHorizontal: 4,
+    marginTop: 4,
+    gap: 8,
+  },
+  clarifyOption: {
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    backgroundColor: IOSColors.tertiarySystemBackground,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: IOSColors.separator,
+  },
+  clarifyOptionText: {
+    ...IOSText.subhead,
+    color: IOSColors.label,
+    fontFamily: IOSFont.rounded,
+  },
+  // Already-searched option: subtle gray fill (systemGray5 auto-adapts to
+  // dark mode via IOSColors palette lookup) + muted secondary-label text.
+  // Non-picked options stay in their default appearance so the user can
+  // scroll back and tap another item they didn't try yet.
+  clarifyOptionPicked: {
+    backgroundColor: IOSColors.systemGray5,
+    borderColor: IOSColors.systemGray5,
+  },
+  clarifyOptionTextPicked: {
+    color: IOSColors.secondaryLabel,
   },
   agentText: {
     ...IOSText.body,

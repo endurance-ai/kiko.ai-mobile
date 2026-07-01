@@ -5,7 +5,7 @@ import {
   notifyUnauthorized,
   refreshAccessToken,
 } from '@/lib/api';
-import type { ApiErrorBody, ProductRef } from '@/types/api';
+import type { ApiErrorBody, ClarifyPayload, ProductRef } from '@/types/api';
 
 /** Daily-cap quota meta returned on every `session` event (PR #102). */
 export interface CapMeta {
@@ -31,6 +31,13 @@ export interface ChatStreamHandlers {
   onSession?: (sessionId: string, cap?: CapMeta) => void;
   onTextDelta?: (delta: string) => void;
   onProduct?: (product: ProductRef) => void;
+  /**
+   * Server `clarify` event — inline-keyboard prompt (pick_item carousel,
+   * gender pick, category pick, ...). The client should render the options
+   * as buttons; on tap call sendCallbackStream(sessionId, option.callback,
+   * option.label) which resumes the turn.
+   */
+  onClarify?: (payload: ClarifyPayload) => void;
   /** Emitted after products are persisted as a result set (server PR #96). */
   onSearch?: (searchId: string) => void;
   /** Daily token cap hit — server skips graph run and doesn't save the turn. */
@@ -124,6 +131,24 @@ function dispatch(event: SseEvent, handlers: ChatStreamHandlers): boolean {
     case 'search': {
       const id = data.search_id;
       if (typeof id === 'string') handlers.onSearch?.(id);
+      return false;
+    }
+    case 'clarify': {
+      const axis = typeof data.axis === 'string' ? data.axis : 'unknown';
+      const prompt = typeof data.prompt === 'string' ? data.prompt : '';
+      const rawOptions = Array.isArray(data.options) ? data.options : [];
+      const options = rawOptions
+        .map((o: unknown) => {
+          if (typeof o !== 'object' || o === null) return null;
+          const rec = o as Record<string, unknown>;
+          const label = typeof rec.label === 'string' ? rec.label : '';
+          const callback = typeof rec.callback === 'string' ? rec.callback : '';
+          if (!label || !callback) return null;
+          return { label, callback };
+        })
+        .filter((o): o is { label: string; callback: string } => o !== null);
+      if (options.length === 0) return false;
+      handlers.onClarify?.({ axis, prompt, options });
       return false;
     }
     case 'cap_reached': {
