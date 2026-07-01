@@ -25,9 +25,10 @@ import type { HistoryItem, HistoryResultSetItem } from "@/types/api";
 
 const SCREEN_W = Dimensions.get("window").width;
 const COLS = 3;
-const GRID_GAP = 6;
-const SIDE_PAD = 0;
-const TILE_W = (SCREEN_W - SIDE_PAD * 2 - GRID_GAP * (COLS - 1)) / COLS;
+// Edge-to-edge grid: no side padding, no inter-tile gap, no tile corners —
+// tiles butt against each other and the screen edges (mirrors the PDP
+// similar grid).
+const TILE_W = SCREEN_W / COLS;
 
 export default function HistoryScreen() {
   const insets = useSafeAreaInsets();
@@ -211,17 +212,17 @@ function CountBadge({ count }: { count: number }) {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: IOSColors.secondarySystemBackground },
   body: {
-    paddingHorizontal: SIDE_PAD,
+    paddingHorizontal: 0,
   },
   grid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: GRID_GAP,
+    columnGap: 0,
+    rowGap: 0,
   },
   tile: {
     width: TILE_W,
     height: TILE_W,
-    borderRadius: 14,
     overflow: "hidden",
     backgroundColor: IOSColors.tertiarySystemBackground,
     position: "relative",
