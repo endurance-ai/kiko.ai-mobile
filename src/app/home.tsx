@@ -1292,6 +1292,33 @@ export default function ChatEntryScreen() {
                         })}
                       </ScrollView>
                     )}
+                    {/* "더보기" CTA — opens the full ranked result-set grid.
+                        Only rendered once the SSE `search` event delivered a
+                        server-persisted search_id (before that, tapping
+                        would land on an unresolvable route). */}
+                    {turn.streamProducts &&
+                      turn.streamProducts.length > 0 &&
+                      turn.streamSearchId && (
+                        <Pressable
+                          style={styles.seeMoreCta}
+                          onPress={() => {
+                            Haptic.light();
+                            router.push(
+                              `/list?search=${encodeURIComponent(
+                                turn.streamSearchId as string,
+                              )}` as never,
+                            );
+                          }}
+                        >
+                          <Text style={styles.seeMoreText}>더보기</Text>
+                          <SymbolView
+                            name="chevron.right"
+                            size={13}
+                            tintColor={IOSColors.secondaryLabel}
+                            weight="semibold"
+                          />
+                        </Pressable>
+                      )}
                     {/* Inline-keyboard prompt (pick_item / gender / ...).
                         Server sent SSE `clarify`; render as tappable pills.
                         After a pick, buttons freeze — the picked one is
@@ -1851,6 +1878,21 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     paddingHorizontal: 4,
     marginTop: -8,
+  },
+  seeMoreCta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    alignSelf: "flex-start",
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    marginTop: 4,
+  },
+  seeMoreText: {
+    ...IOSText.subhead,
+    fontWeight: "600",
+    color: IOSColors.secondaryLabel,
+    fontFamily: IOSFont.rounded,
   },
   clarifyBlock: {
     paddingHorizontal: 4,
