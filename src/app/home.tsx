@@ -87,9 +87,11 @@ type Turn = {
   streamSearchId?: string;
   /** Inline-keyboard prompt (pick_item / gender / category_pick / ...).
    *  Retained across tap so the chat log preserves the choice history.
-   *  `streamClarifyPicked` records which option was tapped (buttons freeze after). */
+   *  `streamClarifyPicks` — set of already-searched option callbacks.
+   *  Already-searched buttons stay visible but non-tappable + muted; the
+   *  rest remain interactive so the user can scroll back and try another. */
   streamClarify?: ClarifyPayload | null;
-  streamClarifyPicked?: string | null;
+  streamClarifyPicks?: string[];
 };
 
 const SEARCH_HINT = "인디 · 빈티지 2,900+ 브랜드에서 찾는 중…";
@@ -911,13 +913,16 @@ export default function ChatEntryScreen() {
     if (!sid) return;
     Haptic.medium();
 
-    // Freeze the prior turn's buttons and mark which one was picked so the
-    // chat log preserves the choice visually (buttons stay, tapped one is
-    // highlighted, others fade + become non-tappable).
+    // Append this option to the prior turn's "already searched" set. Other
+    // options stay interactive so the user can scroll back and try another
+    // item from the same detection.
     setMessages((prev) =>
-      prev.map((t) =>
-        t.id === priorTurnId ? { ...t, streamClarifyPicked: callback } : t,
-      ),
+      prev.map((t) => {
+        if (t.id !== priorTurnId) return t;
+        const prevPicks = t.streamClarifyPicks ?? [];
+        if (prevPicks.includes(callback)) return t;
+        return { ...t, streamClarifyPicks: [...prevPicks, callback] };
+      }),
     );
 
     // Spawn a new turn whose user bubble echoes what the user "said" by
@@ -1295,16 +1300,16 @@ export default function ChatEntryScreen() {
                     {turn.streamClarify && turn.streamClarify.options.length > 0 && (
                       <View style={styles.clarifyBlock}>
                         {turn.streamClarify.options.map((opt) => {
-                          const anyPicked = turn.streamClarifyPicked != null;
-                          const isPicked = turn.streamClarifyPicked === opt.callback;
+                          const isPicked =
+                            turn.streamClarifyPicks?.includes(opt.callback) ??
+                            false;
                           return (
                             <Pressable
                               key={opt.callback}
-                              disabled={anyPicked}
+                              disabled={isPicked}
                               style={[
                                 styles.clarifyOption,
                                 isPicked && styles.clarifyOptionPicked,
-                                anyPicked && !isPicked && styles.clarifyOptionFaded,
                               ]}
                               onPress={() =>
                                 handleClarifyPick(turn.id, opt.callback, opt.label)
@@ -1865,18 +1870,16 @@ const styles = StyleSheet.create({
     color: IOSColors.label,
     fontFamily: IOSFont.rounded,
   },
-  // After a decision: chosen option gets a filled dark treatment; the
-  // rest fade so it's obvious which one was picked without hiding history.
+  // Already-searched option: subtle gray fill (systemGray5 auto-adapts to
+  // dark mode via IOSColors palette lookup) + muted secondary-label text.
+  // Non-picked options stay in their default appearance so the user can
+  // scroll back and tap another item they didn't try yet.
   clarifyOptionPicked: {
-    backgroundColor: IOSColors.label,
-    borderColor: IOSColors.label,
+    backgroundColor: IOSColors.systemGray5,
+    borderColor: IOSColors.systemGray5,
   },
   clarifyOptionTextPicked: {
-    color: IOSColors.systemBackground,
-    fontWeight: "600",
-  },
-  clarifyOptionFaded: {
-    opacity: 0.4,
+    color: IOSColors.secondaryLabel,
   },
   agentText: {
     ...IOSText.body,
