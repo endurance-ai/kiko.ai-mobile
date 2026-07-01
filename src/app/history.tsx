@@ -32,11 +32,12 @@ const TILE_W = SCREEN_W / COLS;
 
 export default function HistoryScreen() {
   const insets = useSafeAreaInsets();
+  // History is user-scoped (aggregates all chat sessions). The `session`
+  // query param, when present, is only carried into downstream navigation
+  // URLs so a tap from the history tab lands in the right chat context.
   const params = useLocalSearchParams<{ session?: string }>();
   const rawSession = params.session as string | undefined;
-  // Empty / placeholder session id → treat as "no history yet". Server
-  // requires a UUID, so hitting /v1/history with a placeholder returns 422.
-  const sessionId =
+  const navSessionId =
     rawSession && rawSession !== "mock-session" ? rawSession : null;
 
   const [items, setItems] = useState<HistoryItem[] | null>(null);
@@ -44,16 +45,11 @@ export default function HistoryScreen() {
   const { show: showBanner } = useBanner();
 
   const load = useCallback(async () => {
-    if (!sessionId) {
-      setItems([]);
-      return;
-    }
     try {
-      const res = await listHistory(sessionId, { limit: 50 });
+      const res = await listHistory({ limit: 50 });
       setItems(res.items);
     } catch (err) {
       if (err instanceof ApiError && err.status === 404) {
-        // Session doesn't exist / no longer accessible — show empty state.
         setItems([]);
         return;
       }
@@ -65,7 +61,7 @@ export default function HistoryScreen() {
         action: { label: "다시 시도", onPress: () => void load() },
       });
     }
-  }, [sessionId, showBanner]);
+  }, [showBanner]);
 
   useEffect(() => {
     void load();
@@ -80,17 +76,20 @@ export default function HistoryScreen() {
   const onTileTap = useCallback(
     (item: HistoryItem) => {
       Haptic.light();
+      // Downstream screens still take an optional session for scoped
+      // navigation context; carry it forward when we have one.
+      const sq = navSessionId
+        ? `session=${encodeURIComponent(navSessionId)}&`
+        : "";
       if (item.type === "result_set") {
-        router.push(
-          `/list?session=${sessionId}&search=${item.search_id}` as never,
-        );
+        router.push(`/list?${sq}search=${item.search_id}` as never);
       } else {
         router.push(
-          `/product/${item.product_id}?session=${sessionId}&source=${item.source_search_id ?? ""}` as never,
+          `/product/${item.product_id}?${sq}source=${item.source_search_id ?? ""}` as never,
         );
       }
     },
-    [sessionId],
+    [navSessionId],
   );
 
   const isLoading = items === null;
