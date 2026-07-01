@@ -18,110 +18,10 @@ import {
   FloatingHeader,
 } from "@/components/floating-header";
 import { Haptic, IOSColors, IOSFont, IOSText } from "@/constants/ios";
+import { ApiError } from "@/lib/api";
+import { listHistory } from "@/lib/history";
+import { useBanner } from "@/state/banner";
 import type { HistoryItem, HistoryResultSetItem } from "@/types/api";
-
-// Mock feed — mirrors /v1/history?session_id=X response shape exactly so the
-// real fetch is a drop-in swap once the backend PR lands (feat/results-history-api).
-const MOCK_FEED: HistoryItem[] = [
-  {
-    type: "result_set",
-    occurred_at: "2026-06-28T05:12:00+00:00",
-    search_id: "rs-001",
-    query_text: "크림톤 오버셔츠",
-    result_count: 24,
-    preview_images: [
-      "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=400",
-      "https://images.unsplash.com/photo-1539109136881-3be0616acf4b?w=400",
-      "https://images.unsplash.com/photo-1551028719-00167b16eac5?w=400",
-      "https://images.unsplash.com/photo-1591047139829-d91aecb6caea?w=400",
-    ],
-  },
-  {
-    type: "product",
-    occurred_at: "2026-06-28T05:08:00+00:00",
-    product_id: 9001,
-    brand: "noon",
-    name: "크림 오버셔츠",
-    price: 48000,
-    image_url:
-      "https://images.unsplash.com/photo-1620799140408-edc6dcb6d633?w=600",
-    product_url: null,
-    source_search_id: "rs-001",
-  },
-  {
-    type: "result_set",
-    occurred_at: "2026-06-27T18:40:00+00:00",
-    search_id: "rs-002",
-    query_text: "와이드 데님 빈티지",
-    result_count: 8,
-    preview_images: [
-      "https://images.unsplash.com/photo-1542272604-787c3835535d?w=400",
-      "https://images.unsplash.com/photo-1604176354204-9268737828e4?w=400",
-      "https://images.unsplash.com/photo-1582418702059-97ebafb35d09?w=400",
-    ],
-  },
-  {
-    type: "result_set",
-    occurred_at: "2026-06-27T17:20:00+00:00",
-    search_id: "rs-003",
-    query_text: "크롭 자켓 봄 무드",
-    result_count: 14,
-    preview_images: [
-      "https://images.unsplash.com/photo-1591047139756-eed1a0d20a0a?w=400",
-      "https://images.unsplash.com/photo-1620799139501-9d3a3d7d6b56?w=400",
-      "https://images.unsplash.com/photo-1611601679395-3c5e0d72d8e6?w=400",
-      "https://images.unsplash.com/photo-1612722432474-b971cdcea546?w=400",
-    ],
-  },
-  {
-    type: "product",
-    occurred_at: "2026-06-27T16:00:00+00:00",
-    product_id: 9002,
-    brand: "depound",
-    name: "베이지 셔츠",
-    price: 39000,
-    image_url:
-      "https://images.unsplash.com/photo-1583744946564-b52ac1c389c8?w=600",
-    product_url: null,
-    source_search_id: "rs-001",
-  },
-  {
-    type: "result_set",
-    occurred_at: "2026-06-26T22:10:00+00:00",
-    search_id: "rs-004",
-    query_text: "실크 블라우스",
-    result_count: 16,
-    preview_images: [
-      "https://images.unsplash.com/photo-1551488831-00ddcb6c6bd3?w=400",
-      "https://images.unsplash.com/photo-1485518882345-15568b007407?w=400",
-      "https://images.unsplash.com/photo-1571513722275-4b41940f54b8?w=400",
-      "https://images.unsplash.com/photo-1564257631407-3deb25e91c92?w=400",
-    ],
-  },
-  {
-    type: "product",
-    occurred_at: "2026-06-26T20:30:00+00:00",
-    product_id: 9003,
-    brand: "another",
-    name: "와이드 데님",
-    price: 59000,
-    image_url:
-      "https://images.unsplash.com/photo-1542272604-787c3835535d?w=600",
-    product_url: null,
-    source_search_id: "rs-002",
-  },
-  {
-    type: "result_set",
-    occurred_at: "2026-06-25T11:00:00+00:00",
-    search_id: "rs-005",
-    query_text: "루즈핏 카디건",
-    result_count: 6,
-    preview_images: [
-      "https://images.unsplash.com/photo-1620799140188-3b2a02fd9a77?w=400",
-      "https://images.unsplash.com/photo-1610288311735-39b7facbd095?w=400",
-    ],
-  },
-];
 
 const SCREEN_W = Dimensions.get("window").width;
 const COLS = 3;
@@ -132,18 +32,39 @@ const TILE_W = (SCREEN_W - SIDE_PAD * 2 - GRID_GAP * (COLS - 1)) / COLS;
 export default function HistoryScreen() {
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ session?: string }>();
-  const sessionId = (params.session as string) || "mock-session";
+  const rawSession = params.session as string | undefined;
+  // Empty / placeholder session id → treat as "no history yet". Server
+  // requires a UUID, so hitting /v1/history with a placeholder returns 422.
+  const sessionId =
+    rawSession && rawSession !== "mock-session" ? rawSession : null;
 
   const [items, setItems] = useState<HistoryItem[] | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const { show: showBanner } = useBanner();
 
   const load = useCallback(async () => {
-    // Real wire-up (deferred until backend deploy):
-    //   const res = await listHistory(sessionId);
-    //   setItems(res.items);
-    await new Promise((r) => setTimeout(r, 250));
-    setItems(MOCK_FEED);
-  }, []);
+    if (!sessionId) {
+      setItems([]);
+      return;
+    }
+    try {
+      const res = await listHistory(sessionId, { limit: 50 });
+      setItems(res.items);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 404) {
+        // Session doesn't exist / no longer accessible — show empty state.
+        setItems([]);
+        return;
+      }
+      setItems([]);
+      showBanner({
+        id: "history-load-failed",
+        priority: "error",
+        title: "히스토리를 불러오지 못했어요",
+        action: { label: "다시 시도", onPress: () => void load() },
+      });
+    }
+  }, [sessionId, showBanner]);
 
   useEffect(() => {
     void load();
