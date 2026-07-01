@@ -397,8 +397,14 @@ export default function ChatEntryScreen() {
 
   // Load a past session into the home turn list (sidebar tap routes here
   // with ?session=<uuid> so the chat continues on the same surface).
+  //
+  // Skip the server round-trip when we already have in-memory turns for the
+  // SAME session. Rebuilding from GET /messages loses per-turn state that
+  // the server doesn't yet surface (e.g. streamSearchId → "더보기" CTA):
+  // navigating home → PDP → back would otherwise clear the CTA.
   useEffect(() => {
     if (!sessionParam) return;
+    if (sessionIdRef.current === sessionParam && messages.length > 0) return;
     let cancelled = false;
     sessionIdRef.current = sessionParam;
     (async () => {
@@ -414,6 +420,8 @@ export default function ChatEntryScreen() {
     return () => {
       cancelled = true;
     };
+    // messages excluded intentionally — this effect only runs on session change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionParam]);
 
   // Pick up a seed message handed off from another screen (PDP critique chip
