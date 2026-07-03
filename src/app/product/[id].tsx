@@ -253,9 +253,9 @@ export default function ProductDetailScreen() {
       linkAlive === false && alternativeUrl ? alternativeUrl : product?.product_url;
     if (!target || !product) return;
     Haptic.medium();
-    // 기획 스펙: outbound_click — thread_id, user_id, product_id 필수.
+    // 기획 스펙: outbound_click — session_id, user_id, product_id 필수.
     trackEvent("outbound_click", {
-      thread_id: session ?? null,
+      session_id: session ?? null,
       product_id: String(product.id),
       alternative_used: linkAlive === false && !!alternativeUrl,
     });

@@ -668,11 +668,12 @@ export default function ChatEntryScreen() {
     const hasImage = pickedImage !== null;
     Haptic.medium();
     lastSendFromCritiqueRef.current = false;
-    // 기획 스펙: search_query — thread_id, user_id, query_index 필수.
-    // (user_id 는 analytics 헬퍼가 자동 첨부).
+    // 기획 스펙: search_query — session_id, query, user_id, ts 필수.
+    // (user_id + ts 는 analytics 헬퍼가 자동 첨부).
     queryIndexRef.current += 1;
     trackEvent("search_query", {
-      thread_id: sessionIdRef.current,
+      session_id: sessionIdRef.current,
+      query: trimmed,
       query_index: queryIndexRef.current,
       has_image: hasImage,
       has_pinned_product: pinnedId != null,
@@ -875,14 +876,14 @@ export default function ChatEntryScreen() {
           threadStartFiredRef.current = true;
           queryIndexRef.current = 0;
           trackEvent("thread_start", {
-            thread_id: sessionId,
+            session_id: sessionId,
             is_new_user: isNewUser,
           });
         } else if (wasNewThread) {
           // 두 번째 이후 스레드도 카운터 리셋.
           queryIndexRef.current = 0;
           trackEvent("thread_start", {
-            thread_id: sessionId,
+            session_id: sessionId,
             is_new_user: false,
           });
         }
