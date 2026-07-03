@@ -144,7 +144,9 @@ function WishCard({
           <SymbolView
             name="heart.fill"
             size={12}
-            tintColor="#FFFFFF"
+            // 다크모드에선 버튼 bg (IOSColors.label) 이 흰색이라 흰 하트가
+            // 안 보이던 문제 → systemBackground 로 두면 항상 bg 반대색.
+            tintColor={IOSColors.systemBackground}
             weight="bold"
           />
         </Pressable>
