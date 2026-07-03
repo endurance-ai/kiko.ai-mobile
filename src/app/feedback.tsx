@@ -86,7 +86,12 @@ export default function FeedbackScreen() {
         note: note.trim(),
       });
       Haptic.success();
-      router.dismiss();
+      Alert.alert(
+        "제출이 완료되었어요.",
+        "더 나은 Kiko를 만들기 위한 피드백이 제출되었어요.",
+        [{ text: "확인", onPress: () => router.dismiss() }],
+        { cancelable: false },
+      );
     } catch (e) {
       Haptic.error();
       Alert.alert(
@@ -174,7 +179,7 @@ const styles = StyleSheet.create({
     ...IOSText.title3,
     color: IOSColors.label,
     marginBottom: 18,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
 
   chipRow: {
@@ -197,7 +202,7 @@ const styles = StyleSheet.create({
     ...IOSText.subhead,
     fontWeight: "400",
     color: IOSColors.label,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   chipTextActive: {
     color: IOSColors.label,
@@ -216,7 +221,7 @@ const styles = StyleSheet.create({
     borderColor: IOSColors.separator,
     backgroundColor: IOSColors.secondarySystemBackground,
     textAlignVertical: "top",
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
 
   consentBox: {
@@ -229,7 +234,7 @@ const styles = StyleSheet.create({
     ...IOSText.footnote,
     color: IOSColors.secondaryLabel,
     lineHeight: 18,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
 
   footer: {
@@ -252,6 +257,6 @@ const styles = StyleSheet.create({
   submitText: {
     ...IOSText.headline,
     color: IOSColors.systemBackground,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
 });

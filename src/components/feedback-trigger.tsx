@@ -71,19 +71,20 @@ export function FeedbackTrigger({ turnKey, searchId }: Props) {
 }
 
 const styles = StyleSheet.create({
+  // 컨테이너 좌측 마진은 부모(home.tsx feedbackTriggerRow)에서 잡음.
+  // 여기서 다시 paddingHorizontal 을 주면 상위 CTA(더보기)와 좌측 정렬이 어긋남.
   row: {
     flexDirection: "row",
-    gap: 4,
-    paddingHorizontal: 4,
+    gap: 12,
   },
+  // 아이콘 실제 크기에 맞춰 폭 지정. tap 영역은 hitSlop 으로 별도 확보.
   btn: {
-    width: 32,
+    width: 16,
     height: 16,
-    borderRadius: 8,
     justifyContent: "center",
     alignItems: "center",
   },
   btnPressed: {
-    backgroundColor: IOSColors.tertiarySystemBackground,
+    opacity: 0.5,
   },
 });

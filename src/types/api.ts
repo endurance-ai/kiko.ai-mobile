@@ -50,6 +50,9 @@ export interface MessageItem {
   role: MessageRole;
   content: string;
   product_refs: ProductRef[] | null;
+  /** ai.searches.search_id — assistant turn 이 만든 result set 을 가리킴.
+   * 재접속 시 [더보기] CTA 를 복원하는데 사용. */
+  search_id?: string | null;
   created_at: string;
 }
 

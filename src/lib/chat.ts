@@ -26,7 +26,8 @@ export function getMessages(
 }
 
 export interface ChatSendOpts {
-  /** 'unisex' | 'women' | 'men' (mobile FilterProvider). '무관' should pass undefined. */
+  /** 'women' | 'men' — 유저가 명시한 성별 선택. '공용' 은 undefined 로 전달해
+   * 서버가 taste_profile pin 을 참조하거나 gender card 로 다시 물어보도록 한다. */
   gender?: string;
   /** Upper price bound in KRW (원). undefined or 0 = no ceiling. */
   priceMaxKrw?: number;

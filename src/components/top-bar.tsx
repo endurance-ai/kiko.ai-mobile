@@ -40,7 +40,7 @@ export function TopBar({ onOpenMenu, onOpenList, onOpenWishlist }: Props) {
                 tintColor={IOSColors.label}
                 weight="medium"
               />
-              <Text style={styles.pillText}>리스트</Text>
+              <Text style={styles.pillText}>히스토리</Text>
             </GlassSurface>
           </Pressable>
 
@@ -93,6 +93,6 @@ const styles = StyleSheet.create({
     ...IOSText.subhead,
     fontWeight: '600',
     color: IOSColors.label,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
 });

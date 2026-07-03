@@ -143,9 +143,11 @@ function WishCard({
         >
           <SymbolView
             name="heart.fill"
-            size={14}
-            tintColor={IOSColors.systemRed}
-            weight="medium"
+            size={12}
+            // 다크모드에선 버튼 bg (IOSColors.label) 이 흰색이라 흰 하트가
+            // 안 보이던 문제 → systemBackground 로 두면 항상 bg 반대색.
+            tintColor={IOSColors.systemBackground}
+            weight="bold"
           />
         </Pressable>
         {product?.price != null && (
@@ -173,7 +175,7 @@ const styles = StyleSheet.create({
     ...IOSText.footnote,
     color: IOSColors.secondaryLabel,
     marginBottom: 16,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
 
   center: {
@@ -184,7 +186,7 @@ const styles = StyleSheet.create({
   muted: {
     ...IOSText.body,
     color: IOSColors.secondaryLabel,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   retry: {
     paddingHorizontal: 16,
@@ -195,7 +197,7 @@ const styles = StyleSheet.create({
   retryText: {
     ...IOSText.callout,
     color: IOSColors.label,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
 
   emptyBlock: {
@@ -206,7 +208,7 @@ const styles = StyleSheet.create({
   emptyText: {
     ...IOSText.body,
     color: IOSColors.secondaryLabel,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
 
   grid: {
@@ -230,7 +232,9 @@ const styles = StyleSheet.create({
     width: 26,
     height: 26,
     borderRadius: 13,
-    backgroundColor: "rgba(255,255,255,0.92)",
+    borderWidth: 1.5,
+    borderColor: "rgba(255,255,255,0.95)",
+    backgroundColor: IOSColors.label,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -247,13 +251,13 @@ const styles = StyleSheet.create({
     ...IOSText.caption1,
     fontWeight: "700",
     color: "#1C1C1E",
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   brand: {
     ...IOSText.footnote,
     fontWeight: "600",
     color: IOSColors.label,
     marginTop: 6,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
 });

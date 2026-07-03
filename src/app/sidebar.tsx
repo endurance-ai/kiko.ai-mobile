@@ -1,3 +1,4 @@
+import { Image as ExpoImage } from "expo-image";
 import { router, useLocalSearchParams } from "expo-router";
 import { SymbolView } from "expo-symbols";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -6,19 +7,19 @@ import {
   ActivityIndicator,
   Alert,
   Animated,
-  Dimensions,
   Easing,
-  Image,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   useColorScheme,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { GlassSurface } from "@/components/glass-surface";
 import { Haptic, IOSColors, IOSFont, IOSText } from "@/constants/ios";
 import { ApiError } from "@/lib/api";
 import { deleteSession, listSessions, renameSession } from "@/lib/chat";
@@ -26,13 +27,22 @@ import { getMe } from "@/lib/me";
 import { stripFamilyName } from "@/lib/name";
 import type { SessionSummary, UserProfile } from "@/types/api";
 
-const SCREEN_W = Dimensions.get("window").width;
-const PANEL_W = Math.min(SCREEN_W * 0.82, 360);
+// Hoist the require out of the render path so the bundler resolves the
+// asset once at module load. expo-image then reads it from its native
+// memory + disk cache on every subsequent mount → the wordmark appears
+// instantly on sidebar open instead of decoding after mount.
+const WORDMARK_SOURCE = require("../../assets/brand/kiko-wordmark.png");
 
 const OPEN_MS = 260;
 const CLOSE_MS = 200;
 
 export default function SidebarScreen() {
+  // Live window dimensions — Dimensions.get() at module init returned the
+  // pre-modal size on first open of the transparentModal, so panel width
+  // ended up wrong and the whole layout re-flowed only on the SECOND open
+  // (once cached). Using the hook forces a re-measure per mount.
+  const window = useWindowDimensions();
+  const PANEL_W = Math.min(window.width * 0.82, 360);
   const { current: currentSessionId } = useLocalSearchParams<{
     current?: string;
   }>();
@@ -264,37 +274,60 @@ export default function SidebarScreen() {
   // Use the given name (이름) for the avatar — Korean surnames are
   // one-syllable, so showing display_name as-is would put 성 in the circle.
   const givenName = displayName ? stripFamilyName(displayName) : "";
+  // 영문 이름 (한글이 하나도 없음) 은 원 안에 그대로 넣으면 "HYUN..." 처럼
+  // 잘리니, 첫 글자만 대문자로 표시. 한글 이름은 기존대로 이름 전체 노출.
+  const hasHangul = /[가-힣]/.test(givenName);
   const avatarLabelText =
-    givenName ||
+    (givenName && hasHangul ? givenName : givenName.charAt(0).toUpperCase()) ||
     me?.email?.charAt(0).toUpperCase() ||
     me?.provider?.charAt(0).toUpperCase() ||
     "?";
-  // Auto-scale: longer text → smaller glyph so it fits the 44pt circle.
+  // Auto-scale: longer text → smaller glyph so it fits the 56pt circle.
   const avatarFontSize =
     avatarLabelText.length >= 4
-      ? 10
+      ? 12
       : avatarLabelText.length === 3
-        ? 12
+        ? 15
         : avatarLabelText.length === 2
-          ? 14
-          : 18;
+          ? 18
+          : 22;
   const avatarLabel = displayName || me?.email?.split("@")[0] || "프로필";
 
   return (
-    <View style={styles.root}>
+    <View
+      style={[
+        styles.root,
+        // 트랜스페어런트 모달 컨테이너가 첫 마운트 시 완전히 측정되지 않아
+        // flex:1 만으로는 세로 오버플로우가 남는 케이스가 있음. 라이브 window
+        // 값을 명시적으로 잠가서 첫 열림부터 정확한 뷰포트에 국한시킨다.
+        { width: window.width, height: window.height },
+      ]}
+    >
       <Animated.View style={[styles.backdrop, { opacity: dim }]}>
         <Pressable style={StyleSheet.absoluteFill} onPress={close} />
       </Animated.View>
 
       <Animated.View
-        style={[styles.panel, { transform: [{ translateX: slide }] }]}
+        style={[
+          styles.panel,
+          {
+            // 가로는 라이브 window 값으로 잠그되, 세로는 top/bottom:0 로
+            // 부모 컨테이너(트랜스페어런트 모달) 를 그대로 채우도록 한다.
+            // 첫 마운트 때 window.height 가 상태바 등을 포함한 잘못된 값
+            // 을 뱉으면서 패널이 세로로 확장되던 문제를 원천 차단.
+            width: PANEL_W,
+            transform: [{ translateX: slide }],
+          },
+        ]}
       >
         <SafeAreaView edges={["top"]} style={styles.panelInner}>
           <View style={styles.body}>
-            <Image
-              source={require("../../assets/brand/kiko-wordmark.png")}
+            <ExpoImage
+              source={WORDMARK_SOURCE}
               style={[styles.brand, { tintColor: wordmarkTint }]}
-              resizeMode="contain"
+              contentFit="contain"
+              cachePolicy="memory-disk"
+              transition={0}
             />
 
             <Text style={styles.sectionLabel}>최근 항목</Text>
@@ -338,13 +371,20 @@ export default function SidebarScreen() {
               </ScrollView>
             )}
           </View>
+        </SafeAreaView>
 
-          <SafeAreaView edges={["bottom"]} style={styles.bottomSafe}>
-            <View style={styles.bottomRow}>
-              <Pressable
+        {/* 하단 버튼 클러스터는 패널 안에 절대 위치로 얹어, 그 뒤로 세션
+            리스트가 스크롤돼 지나가면서 글래스 아바타에 자연스럽게 비침. */}
+        <SafeAreaView edges={["bottom"]} style={styles.bottomSafe}>
+          <View style={styles.bottomRow}>
+            <Pressable
+              onPress={goProfile}
+              accessibilityLabel={`${avatarLabel} 프로필 설정`}
+            >
+              <GlassSurface
+                variant="composer"
+                isInteractive
                 style={styles.avatarBtn}
-                onPress={goProfile}
-                accessibilityLabel={`${avatarLabel} 프로필 설정`}
               >
                 <Text
                   style={[styles.avatarText, { fontSize: avatarFontSize }]}
@@ -352,19 +392,19 @@ export default function SidebarScreen() {
                 >
                   {avatarLabelText}
                 </Text>
-              </Pressable>
+              </GlassSurface>
+            </Pressable>
 
-              <Pressable style={styles.newChatBtn} onPress={goNewChat}>
-                <SymbolView
-                  name="plus"
-                  size={14}
-                  tintColor={IOSColors.systemBackground}
-                  weight="bold"
-                />
-                <Text style={styles.newChatText}>새 채팅</Text>
-              </Pressable>
-            </View>
-          </SafeAreaView>
+            <Pressable style={styles.newChatBtn} onPress={goNewChat}>
+              <SymbolView
+                name="plus"
+                size={18}
+                tintColor={IOSColors.systemBackground}
+                weight="bold"
+              />
+              <Text style={styles.newChatText}>새 채팅</Text>
+            </Pressable>
+          </View>
         </SafeAreaView>
       </Animated.View>
     </View>
@@ -372,7 +412,9 @@ export default function SidebarScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1 },
+  // width/height 는 inline 으로 useWindowDimensions 값 주입 — flex:1 만으로
+  // 부모(트랜스페어런트 모달 컨테이너) 사이즈에 의존하지 않도록.
+  root: { overflow: "hidden" },
   backdrop: {
     position: "absolute",
     left: 0,
@@ -384,9 +426,8 @@ const styles = StyleSheet.create({
   panel: {
     position: "absolute",
     top: 0,
-    bottom: 0,
     left: 0,
-    width: PANEL_W,
+    bottom: 0,
     backgroundColor: IOSColors.systemBackground,
     shadowColor: "#000",
     shadowOffset: { width: 2, height: 0 },
@@ -420,7 +461,7 @@ const styles = StyleSheet.create({
     color: IOSColors.secondaryLabel,
     marginBottom: 2,
     paddingHorizontal: 12,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
 
   listLoading: {
@@ -432,11 +473,13 @@ const styles = StyleSheet.create({
     color: IOSColors.tertiaryLabel,
     paddingHorizontal: 12,
     paddingVertical: 12,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
 
   historyList: {
-    paddingBottom: 16,
+    // 하단 버튼이 절대 위치로 얹혀 있으므로, 리스트 끝이 버튼에 안 가리도록
+    // 버튼 클러스터 높이 (∼ 50 + safeArea + row padding) 만큼 여유 확보.
+    paddingBottom: 96,
   },
   historyRow: {
     paddingHorizontal: 12,
@@ -450,13 +493,19 @@ const styles = StyleSheet.create({
   historyTitle: {
     ...IOSText.body,
     color: IOSColors.label,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   historyTitleActive: {
     fontWeight: "400",
   },
 
+  // 패널 하단에 절대 위치로 얹혀, 그 뒤로 세션 리스트가 지나갈 수 있도록.
+  // Liquid Glass 아바타에 리스트 아이템이 자연스럽게 비침.
   bottomSafe: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
     paddingHorizontal: 18,
   },
   bottomRow: {
@@ -465,46 +514,36 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingVertical: 12,
   },
+  // Liquid Glass 원형 아바타 — 홈 컴포저와 같은 언어이되 살짝 작게 (50pt)
+  // 로 사이드바 하단에 자연스럽게 얹힘.
   avatarBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: IOSColors.systemBackground,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: IOSColors.separator,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
     justifyContent: "center",
     alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 4,
+    overflow: "hidden",
   },
   avatarText: {
-    fontWeight: "700",
+    fontWeight: "400",
     color: IOSColors.label,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
     letterSpacing: -0.3,
   },
 
   newChatBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 18,
-    height: 44,
+    gap: 8,
+    paddingHorizontal: 20,
+    height: 50,
     borderRadius: 999,
     backgroundColor: IOSColors.label,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.18,
-    shadowRadius: 10,
-    elevation: 5,
   },
   newChatText: {
-    ...IOSText.subhead,
-    fontWeight: "700",
+    ...IOSText.body,
+    fontWeight: "400",
     color: IOSColors.systemBackground,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
 });

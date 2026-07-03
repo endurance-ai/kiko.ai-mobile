@@ -1,5 +1,6 @@
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
+import { SymbolView } from 'expo-symbols';
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -18,6 +19,7 @@ import { ApiError } from '@/lib/api';
 import { getResultSetPage } from '@/lib/results';
 import { useBanner } from '@/state/banner';
 import { formatPrice } from '@/state/products';
+import { useWishlist } from '@/state/wishlist';
 import type { ResultProduct, ResultSetPageResponse } from '@/types/api';
 
 // Edge-to-edge 3-col grid (mirrors PDP similar grid — no side padding, no
@@ -28,8 +30,9 @@ const PAGE_LIMIT = 60;
 
 export default function ListScreen() {
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams<{ search?: string }>();
+  const params = useLocalSearchParams<{ search?: string; session?: string }>();
   const searchId = (params.search as string | undefined) || null;
+  const sessionId = (params.session as string | undefined) || null;
   const { show: showBanner } = useBanner();
 
   const [page, setPage] = useState<ResultSetPageResponse | null>(null);
@@ -134,7 +137,12 @@ export default function ListScreen() {
         {items.length > 0 && (
           <View style={styles.grid}>
             {items.map((p) => (
-              <GridCard key={p.product_id} product={p} />
+              <GridCard
+                key={p.product_id}
+                product={p}
+                sessionId={sessionId}
+                searchId={searchId}
+              />
             ))}
           </View>
         )}
@@ -151,15 +159,52 @@ export default function ListScreen() {
   );
 }
 
-function GridCard({ product }: { product: ResultProduct }) {
+function GridCard({
+  product,
+  sessionId,
+  searchId,
+}: {
+  product: ResultProduct;
+  sessionId: string | null;
+  searchId: string | null;
+}) {
+  const { isSaved, toggle: toggleSaved } = useWishlist();
+  const productIdStr = String(product.product_id);
+  const saved = isSaved(productIdStr);
+  // 리스트 카드에서 체크 = 이 상품을 anchor 로 잡고 홈 컴포저로 이동해 다음
+  // 채팅 메시지를 이 상품 기준으로 이어가게 한다. PDP 의 '이 제품 기준' 과
+  // 동일한 pin 흐름. session 이 있으면 같이 붙여 기존 대화 흐름 유지.
+  const pinAsAnchor = () => {
+    Haptic.selection();
+    const params: string[] = [];
+    if (sessionId) params.push(`session=${encodeURIComponent(sessionId)}`);
+    if (product.image_url)
+      params.push(`pin_image=${encodeURIComponent(product.image_url)}`);
+    params.push(`pin_id=${encodeURIComponent(productIdStr)}`);
+    params.push(
+      `pin_label=${encodeURIComponent(product.brand || '선택한 상품')}`,
+    );
+    if (product.price != null)
+      params.push(
+        `pin_price=${encodeURIComponent(String(Math.round(product.price)))}`,
+      );
+    router.push(`/home?${params.join('&')}` as never);
+  };
+  const openPdp = () => {
+    Haptic.light();
+    const qs = [
+      sessionId ? `session=${encodeURIComponent(sessionId)}` : '',
+      searchId ? `search_id=${encodeURIComponent(searchId)}` : '',
+    ]
+      .filter(Boolean)
+      .join('&');
+    const url = qs
+      ? `/product/${product.product_id}?${qs}`
+      : `/product/${product.product_id}`;
+    router.push(url as never);
+  };
   return (
-    <Pressable
-      style={styles.card}
-      onPress={() => {
-        Haptic.light();
-        router.push(`/product/${product.product_id}` as never);
-      }}
-    >
+    <Pressable style={styles.card} onPress={openPdp}>
       <View style={styles.thumb}>
         {product.image_url ? (
           <Image
@@ -170,6 +215,33 @@ function GridCard({ product }: { product: ResultProduct }) {
         ) : (
           <View style={[styles.fill, styles.thumbFallback]} />
         )}
+        <View style={styles.cardActions}>
+          <Pressable hitSlop={8} style={styles.checkBtn} onPress={pinAsAnchor}>
+            <SymbolView
+              name="checkmark"
+              size={11}
+              tintColor="rgba(255,255,255,0.7)"
+              weight="bold"
+            />
+          </Pressable>
+          <Pressable
+            hitSlop={8}
+            style={[styles.heartBtn, saved && styles.heartBtnOn]}
+            onPress={() => {
+              Haptic.selection();
+              void toggleSaved(productIdStr);
+            }}
+          >
+            <SymbolView
+              name={saved ? 'heart.fill' : 'heart'}
+              size={12}
+              tintColor={
+                saved ? IOSColors.systemBackground : 'rgba(255,255,255,0.85)'
+              }
+              weight="bold"
+            />
+          </Pressable>
+        </View>
       </View>
       <View style={styles.meta}>
         <Text style={styles.brand} numberOfLines={1}>
@@ -209,13 +281,13 @@ const styles = StyleSheet.create({
   title: {
     ...IOSText.title2,
     color: IOSColors.label,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
     flexShrink: 1,
   },
   countText: {
     ...IOSText.subhead,
     color: IOSColors.secondaryLabel,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
     marginLeft: 14,
   },
   // 3-col grid edge-to-edge (mirrors PDP similar grid).
@@ -239,6 +311,39 @@ const styles = StyleSheet.create({
   thumbFallback: {
     backgroundColor: IOSColors.tertiarySystemBackground,
   },
+  // 우상단 액션 클러스터 — 순서: [체크(anchor pin), 찜]. 홈/PDP 와 통일.
+  cardActions: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  checkBtn: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.95)',
+    backgroundColor: 'rgba(0,0,0,0.22)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  heartBtn: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.95)',
+    backgroundColor: 'rgba(0,0,0,0.22)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  heartBtnOn: {
+    backgroundColor: IOSColors.label,
+    borderColor: IOSColors.label,
+  },
   meta: {
     paddingHorizontal: 8,
     gap: 1,
@@ -247,12 +352,12 @@ const styles = StyleSheet.create({
     ...IOSText.footnote,
     fontWeight: '600',
     color: IOSColors.label,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   price: {
     ...IOSText.footnote,
     color: IOSColors.secondaryLabel,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   center: {
     paddingVertical: 80,
@@ -262,12 +367,12 @@ const styles = StyleSheet.create({
   muted: {
     ...IOSText.body,
     color: IOSColors.secondaryLabel,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   mutedSmall: {
     ...IOSText.caption1,
     color: IOSColors.tertiaryLabel,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   footerLoad: {
     paddingVertical: 20,

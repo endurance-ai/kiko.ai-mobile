@@ -5,6 +5,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   View,
 } from "react-native";
@@ -14,7 +15,6 @@ import {
   FLOATING_HEADER_OFFSET,
   FloatingHeader,
 } from "@/components/floating-header";
-import { GlassToggle } from "@/components/glass-toggle";
 import { Haptic, IOSColors, IOSFont, IOSText } from "@/constants/ios";
 
 const FOOTER_NOTE =
@@ -74,7 +74,15 @@ export default function PrivacyScreen() {
               <Text style={styles.toggleTitle}>학습 데이터 제공</Text>
               <Text style={styles.toggleHint}>가명처리 후 모델 개선</Text>
             </View>
-            <GlassToggle value={training} onValueChange={setTraining} />
+            <Switch
+              value={training}
+              onValueChange={setTraining}
+              trackColor={{
+                false: IOSColors.systemGray4,
+                true: IOSColors.systemGreen,
+              }}
+              style={{ alignSelf: "center" }}
+            />
           </View>
         </View>
 
@@ -113,7 +121,7 @@ const styles = StyleSheet.create({
     ...IOSText.body,
     fontWeight: "400",
     color: IOSColors.label,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
 
   sectionLabel: {
@@ -122,7 +130,7 @@ const styles = StyleSheet.create({
     color: IOSColors.secondaryLabel,
     marginTop: 6,
     marginLeft: 4,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
 
   toggleRow: {
@@ -140,13 +148,13 @@ const styles = StyleSheet.create({
     ...IOSText.body,
     fontWeight: "400",
     color: IOSColors.label,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   toggleHint: {
     ...IOSText.footnote,
     color: IOSColors.secondaryLabel,
     marginTop: 2,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
 
   footerNote: {
@@ -155,6 +163,6 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     marginTop: 4,
     paddingHorizontal: 4,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
 });

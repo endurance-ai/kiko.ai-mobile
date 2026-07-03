@@ -225,7 +225,7 @@ const styles = StyleSheet.create({
   muted: {
     ...IOSText.body,
     color: IOSColors.secondaryLabel,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   retry: {
     paddingHorizontal: 16,
@@ -236,7 +236,7 @@ const styles = StyleSheet.create({
   retryText: {
     ...IOSText.callout,
     color: IOSColors.label,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
 
   labelRow: {
@@ -248,7 +248,7 @@ const styles = StyleSheet.create({
   label: {
     ...IOSText.subhead,
     color: IOSColors.secondaryLabel,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   input: {
     ...IOSText.body,
@@ -258,7 +258,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     backgroundColor: IOSColors.systemBackground,
     marginBottom: 20,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   inputReadonly: {
     justifyContent: "center",
@@ -266,7 +266,7 @@ const styles = StyleSheet.create({
   accountText: {
     ...IOSText.body,
     color: IOSColors.tertiaryLabel,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
 
   deleteCard: {
@@ -283,7 +283,7 @@ const styles = StyleSheet.create({
     ...IOSText.body,
     fontWeight: "400",
     color: IOSColors.systemRed,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
 
   footerNote: {
@@ -292,6 +292,6 @@ const styles = StyleSheet.create({
     marginTop: 14,
     lineHeight: 18,
     paddingHorizontal: 4,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
 });

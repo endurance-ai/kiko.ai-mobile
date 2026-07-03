@@ -23,8 +23,13 @@ import {
 } from "@/components/floating-header";
 import { Haptic, IOSColors, IOSFont, IOSText } from "@/constants/ios";
 import { getMessages, sendMessageStream } from "@/lib/chat";
-import type { ChatStreamController } from "@/lib/sse";
+import type {
+  CapMeta,
+  CapReachedInfo,
+  ChatStreamController,
+} from "@/lib/sse";
 import { useBanner } from "@/state/banner";
+import { useCap } from "@/state/cap";
 import type { MessageItem, ProductRef } from "@/types/api";
 
 const PAGE_SIZE = 30;
@@ -46,23 +51,36 @@ function ProductCardSmall({ product }: { product: ProductRef }) {
 
 function MessageRow({ item }: { item: MessageItem }) {
   const isUser = item.role === "user";
+  // 어시스턴트 응답이 길어질 때 하나의 거대 버블 대신 문단 단위로 나눔.
+  // 유저 메시지는 원문 유지 (짧고, 나누면 의도가 왜곡될 수 있음).
+  const segments = isUser
+    ? [item.content]
+    : (item.content ?? "")
+        .split(/\n{2,}/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+  const displaySegments = segments.length > 0 ? segments : [""];
   return (
     <View style={[styles.msg, isUser ? styles.msgUser : styles.msgAssistant]}>
-      <View
-        style={[
-          styles.bubble,
-          isUser ? styles.bubbleUser : styles.bubbleAssistant,
-        ]}
-      >
-        <Text
+      {displaySegments.map((seg, i) => (
+        <View
+          key={i}
           style={[
-            styles.bubbleText,
-            isUser ? styles.bubbleTextUser : styles.bubbleTextAssistant,
+            styles.bubble,
+            isUser ? styles.bubbleUser : styles.bubbleAssistant,
+            i > 0 && { marginTop: 6 },
           ]}
         >
-          {item.content}
-        </Text>
-      </View>
+          <Text
+            style={[
+              styles.bubbleText,
+              isUser ? styles.bubbleTextUser : styles.bubbleTextAssistant,
+            ]}
+          >
+            {seg}
+          </Text>
+        </View>
+      ))}
       {item.product_refs && item.product_refs.length > 0 && (
         <View style={styles.productsRow}>
           {item.product_refs.map((p, i) => (
@@ -92,6 +110,11 @@ export default function ChatDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
   const { show: showBanner, clear: clearBanner } = useBanner();
+  const {
+    locked: capLocked,
+    applyMeta: applyCapMeta,
+    markReached: markCapReached,
+  } = useCap();
   const [messages, setMessages] = useState<MessageItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -139,16 +162,20 @@ export default function ChatDetailScreen() {
   }, []);
 
   const streamRef = useRef<ChatStreamController | null>(null);
+  const streamTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const STREAM_STALL_MS = 8_000;
 
   useEffect(() => {
     return () => {
       streamRef.current?.cancel();
+      if (streamTimeoutRef.current) clearTimeout(streamTimeoutRef.current);
     };
   }, []);
 
   const sendText = useCallback(
     (trimmed: string) => {
       if (!id) return;
+      if (capLocked) return; // 캡 잠금 시 재시도/새 전송 모두 차단
       clearBanner("request-failure");
       setSending(true);
 
@@ -165,23 +192,98 @@ export default function ChatDetailScreen() {
         );
       };
 
+      // 캡 소진 이벤트를 봤는지 플래그. fireStall / onError 에서 이걸 참조해
+      // 에러 배너가 캡 배너를 덮는 걸 방지한다.
+      let capHitThisTurn = false;
+      const killTimeout = () => {
+        if (streamTimeoutRef.current) {
+          clearTimeout(streamTimeoutRef.current);
+          streamTimeoutRef.current = null;
+        }
+      };
+      const fireStall = () => {
+        streamRef.current?.cancel();
+        streamRef.current = null;
+        killTimeout();
+        setMessages((prev) =>
+          (prev ?? []).filter(
+            (m) =>
+              m.message_id !== userMsg.message_id &&
+              m.message_id !== assistantMsg.message_id,
+          ),
+        );
+        setSending(false);
+        // 캡 소진 배너가 이미 떠 있으면 에러 배너로 덮지 않음.
+        if (capHitThisTurn) return;
+        Haptic.error();
+        showBanner({
+          id: "request-failure",
+          priority: "error",
+          title: "응답이 늦어져 요청을 취소했어요",
+          subtitle: "다시 시도해주세요",
+          action: {
+            label: "다시 시도",
+            onPress: () => sendText(trimmed),
+          },
+        });
+      };
+      const bumpTimeout = () => {
+        killTimeout();
+        streamTimeoutRef.current = setTimeout(fireStall, STREAM_STALL_MS);
+      };
+      bumpTimeout();
+
       streamRef.current = sendMessageStream(id, trimmed, {
+        onSession: (_sessionId: string, cap?: CapMeta) => {
+          bumpTimeout();
+          if (!cap) return;
+          applyCapMeta(cap);
+          if (cap.cap_remaining <= 0) {
+            // 이 세션 시점에 이미 캡 소진 (다른 세션에서 다 썼을 가능성).
+            capHitThisTurn = true;
+            clearBanner("chat-cap-warn");
+            showBanner({
+              id: "chat-cap-reached",
+              priority: "billing",
+              kicker: "DAILY CAP",
+              title: "오늘 무료 사용량을 다 썼어요",
+              subtitle: "오늘 자정 이후 다시 시작돼요",
+            });
+          } else {
+            clearBanner("chat-cap-reached");
+            const used = cap.cap_used ?? 0;
+            const total = cap.daily_cap ?? 0;
+            const ratio = total > 0 ? used / total : 0;
+            if (ratio >= 0.9) {
+              showBanner({
+                id: "chat-cap-warn",
+                priority: "notice",
+                kicker: "DAILY CAP",
+                title: "일일 사용량의 90%를 사용했어요",
+                subtitle: "오늘 자정 이후 다시 시작돼요",
+              });
+            } else {
+              clearBanner("chat-cap-warn");
+            }
+          }
+        },
         onTextDelta: (delta) => {
+          bumpTimeout();
           updateAssistant((m) => ({ ...m, content: m.content + delta }));
           scrollToEnd();
         },
         onProduct: (product) => {
+          bumpTimeout();
           updateAssistant((m) => ({
             ...m,
             product_refs: [...(m.product_refs ?? []), product],
           }));
           scrollToEnd();
         },
-        onDone: () => {
-          setSending(false);
-          streamRef.current = null;
-        },
-        onError: () => {
+        onCapReached: (info: CapReachedInfo) => {
+          killTimeout();
+          capHitThisTurn = true;
+          // 이 화면의 낙관적 assistant/user 버블 제거 후 캡 잠금.
           setMessages((prev) =>
             (prev ?? []).filter(
               (m) =>
@@ -191,6 +293,35 @@ export default function ChatDetailScreen() {
           );
           setSending(false);
           streamRef.current = null;
+          Haptic.warning();
+          markCapReached(info);
+          clearBanner("chat-cap-warn");
+          showBanner({
+            id: "chat-cap-reached",
+            priority: "billing",
+            kicker: "DAILY CAP",
+            title: "오늘 무료 사용량을 다 썼어요",
+            subtitle: "오늘 자정 이후 다시 시작돼요",
+          });
+        },
+        onDone: () => {
+          killTimeout();
+          setSending(false);
+          streamRef.current = null;
+        },
+        onError: () => {
+          killTimeout();
+          setMessages((prev) =>
+            (prev ?? []).filter(
+              (m) =>
+                m.message_id !== userMsg.message_id &&
+                m.message_id !== assistantMsg.message_id,
+            ),
+          );
+          setSending(false);
+          streamRef.current = null;
+          // 캡 소진으로 스트림이 닫힌 케이스면 캡 배너가 이미 떠 있어야 함.
+          if (capHitThisTurn) return;
           Haptic.error();
           showBanner({
             id: "request-failure",
@@ -204,18 +335,26 @@ export default function ChatDetailScreen() {
         },
       });
     },
-    [id, scrollToEnd, showBanner, clearBanner],
+    [
+      id,
+      scrollToEnd,
+      showBanner,
+      clearBanner,
+      applyCapMeta,
+      markCapReached,
+      capLocked,
+    ],
   );
 
   const handleSend = useCallback(() => {
     const trimmed = text.trim();
-    if (!trimmed || sending) return;
+    if (!trimmed || sending || capLocked) return;
     Haptic.medium();
     setText("");
     sendText(trimmed);
-  }, [text, sending, sendText]);
+  }, [text, sending, capLocked, sendText]);
 
-  const canSend = !sending && text.trim().length > 0;
+  const canSend = !sending && !capLocked && text.trim().length > 0;
   const isLoading = messages === null && !error;
   const isEmpty = messages !== null && messages.length === 0 && !error;
 
@@ -248,6 +387,8 @@ export default function ChatDetailScreen() {
             paddingTop: insets.top + FLOATING_HEADER_OFFSET,
             paddingBottom: composerBottom + 80,
           }}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
           onEndReached={loadOlder}
           onEndReachedThreshold={0.5}
           onContentSizeChange={() => {
@@ -285,13 +426,17 @@ export default function ChatDetailScreen() {
               value={text}
               onChangeText={setText}
               placeholder={
-                sending ? "키코가 답하는 중..." : "메시지를 입력하세요"
+                capLocked
+                  ? "오늘 사용량이 다 소진됐어요"
+                  : sending
+                    ? "키코가 답하는 중..."
+                    : "메시지를 입력하세요"
               }
               placeholderTextColor={IOSColors.placeholderText}
               style={styles.input}
               returnKeyType="send"
               onSubmitEditing={handleSend}
-              editable={!sending}
+              editable={!sending && !capLocked}
               multiline
             />
             <Pressable
@@ -335,7 +480,7 @@ const styles = StyleSheet.create({
   muted: {
     ...IOSText.body,
     color: IOSColors.secondaryLabel,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   retry: {
     marginTop: 12,
@@ -347,7 +492,7 @@ const styles = StyleSheet.create({
   retryText: {
     ...IOSText.callout,
     color: IOSColors.label,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   msg: {
     paddingHorizontal: 16,
@@ -375,7 +520,7 @@ const styles = StyleSheet.create({
   },
   bubbleText: {
     ...IOSText.body,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
     lineHeight: 22,
   },
   bubbleTextUser: {
@@ -403,7 +548,7 @@ const styles = StyleSheet.create({
   productCaption: {
     ...IOSText.caption1,
     color: IOSColors.label,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
     padding: 8,
   },
   composerFloat: {
@@ -431,7 +576,7 @@ const styles = StyleSheet.create({
     flex: 1,
     ...IOSText.body,
     color: IOSColors.label,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
     paddingVertical: 8,
     maxHeight: 120,
   },

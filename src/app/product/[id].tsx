@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Dimensions,
@@ -20,11 +20,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GlassSurface } from '@/components/glass-surface';
 import { Haptic, IOSColors, IOSFont, IOSText } from '@/constants/ios';
 import { ApiError } from '@/lib/api';
-import { createSessionStream } from '@/lib/chat';
 import { checkProductLink, getProduct, recordProductView } from '@/lib/products';
-import type { ChatStreamController } from '@/lib/sse';
+import { useCap } from '@/state/cap';
 import { useWishlist } from '@/state/wishlist';
-import type { ProductDetail, ProductRef, SimilarProduct } from '@/types/api';
+import type { ProductDetail, SimilarProduct } from '@/types/api';
 
 const SCREEN_W = Dimensions.get('window').width;
 const HERO_HEIGHT = Math.round(SCREEN_W * 0.95);
@@ -63,19 +62,6 @@ function similarToItem(p: SimilarProduct): SimilarItem {
   };
 }
 
-function refToItem(p: ProductRef): SimilarItem {
-  const plain = (p.caption || '').replace(/<[^>]+>/g, '').trim();
-  const brand = plain.split('·')[0]?.trim() || plain || '';
-  return {
-    product_id: p.product_id,
-    image_url: p.image_url,
-    brand,
-    price: null,
-    original_price: null,
-    sale_price: null,
-  };
-}
-
 export default function ProductDetailScreen() {
   const insets = useSafeAreaInsets();
   const { id, session, search_id } = useLocalSearchParams<{
@@ -96,41 +82,79 @@ export default function ProductDetailScreen() {
   // those picks, which is when `similarLoading` flips back on.
   const [similar, setSimilar] = useState<SimilarItem[]>([]);
   const [similarLoading, setSimilarLoading] = useState(false);
-  // Tracks which similar cards the user has ticked. Tapping the action
-  // button below the grid refires the search with these as anchors.
-  const [selectedSimilar, setSelectedSimilar] = useState<Set<number>>(new Set());
-  const similarStreamRef = useRef<ChatStreamController | null>(null);
+  // 단일 anchor — 컴포저의 [이 제품 기준] 이 가리키는 상품. 페이지 진입 시
+  // 메인 상품 id 로 초기화되고, 사용자가 비슷한 제품 카드나 메인 이미지 위
+  // 체크박스를 탭하면 해당 상품 id 로 교체된다.
+  const [anchorId, setAnchorId] = useState<number | null>(null);
   // Hero image natural aspect ratio (width / height). Falls back to the
   // historical 1:0.95 frame until the image reports its intrinsic size, so
   // the layout doesn't jump as drastically when the image finally loads.
   const [heroAspect, setHeroAspect] = useState<number>(SCREEN_W / HERO_HEIGHT);
 
   const { isSaved, toggle: toggleSaved } = useWishlist();
+  const { locked: capLocked } = useCap();
   const productIdStr = product ? String(product.id) : '';
   const saved = productIdStr ? isSaved(productIdStr) : false;
-  const canSend = text.trim().length > 0;
+  const canSend = !capLocked && text.trim().length > 0;
 
-  // Hand the message + this product as a pinned attachment off to /home, which
-  // owns the chat surface. Home reads the seed/pin params, fires the SSE turn
-  // there so the user sees the streaming response in the main chat flow.
+  // 현재 anchor 로 잡힌 상품의 pin 정보. 기본은 메인 상품이지만 사용자가
+  // 비슷한 제품 카드를 anchor 로 지정하면 그 카드의 값을 쓴다.
+  const anchorPin = useMemo((): {
+    id: string;
+    image_url: string;
+    brand: string;
+    name: string | null;
+    price: number | null;
+  } | null => {
+    if (!product) return null;
+    if (anchorId != null && anchorId !== Number(product.id)) {
+      const s = similar.find((x) => x.product_id === anchorId);
+      if (s) {
+        return {
+          id: String(s.product_id),
+          image_url: s.image_url,
+          brand: s.brand,
+          name: null,
+          price: s.price,
+        };
+      }
+    }
+    return {
+      id: String(product.id),
+      image_url: product.image_url,
+      brand: product.brand,
+      name: product.name,
+      price: product.price,
+    };
+  }, [product, similar, anchorId]);
+
+  // Hand the message + the anchor product as a pinned attachment off to
+  // /home, which owns the chat surface. Home reads the seed/pin params, fires
+  // the SSE turn there so the user sees the streaming response in the main
+  // chat flow.
   const kickoffChat = useCallback(
     (msg: string) => {
-      if (!product) return;
+      if (!anchorPin) return;
       Haptic.medium();
       const params: string[] = [`seed=${encodeURIComponent(msg)}`];
       if (session) params.push(`session=${encodeURIComponent(session)}`);
-      if (product.image_url)
-        params.push(`pin_image=${encodeURIComponent(product.image_url)}`);
+      if (anchorPin.image_url)
+        params.push(`pin_image=${encodeURIComponent(anchorPin.image_url)}`);
       params.push(
-        `pin_label=${encodeURIComponent(product.brand || product.name || '선택한 상품')}`,
+        `pin_label=${encodeURIComponent(
+          anchorPin.brand || anchorPin.name || '선택한 상품',
+        )}`,
       );
-      params.push(`pin_id=${encodeURIComponent(String(product.id))}`);
-      if (product.name) params.push(`pin_name=${encodeURIComponent(product.name)}`);
-      if (product.price != null)
-        params.push(`pin_price=${encodeURIComponent(String(Math.round(product.price)))}`);
+      params.push(`pin_id=${encodeURIComponent(anchorPin.id)}`);
+      if (anchorPin.name)
+        params.push(`pin_name=${encodeURIComponent(anchorPin.name)}`);
+      if (anchorPin.price != null)
+        params.push(
+          `pin_price=${encodeURIComponent(String(Math.round(anchorPin.price)))}`,
+        );
       router.replace(`/home?${params.join('&')}` as never);
     },
-    [product, session],
+    [anchorPin, session],
   );
 
   const handleCritique = useCallback(
@@ -199,8 +223,21 @@ export default function ProductDetailScreen() {
   // refires an SSE chat to anchor the next batch on those picks.
   useEffect(() => {
     if (!product) return;
-    setSelectedSimilar(new Set());
-    setSimilar((product.similar ?? []).map(similarToItem));
+    // 페이지 진입 시 anchor 는 메인 상품으로 초기화.
+    setAnchorId(typeof product.id === "number" ? product.id : Number(product.id));
+    // 서버 응답에 같은 product_id 카드가 여러 번 들어오거나 현재 상세 제품이
+    // 그대로 섞여 오는 경우가 있어, 렌더 전에 dedupe + self-remove.
+    const seen = new Set<number>();
+    const items: SimilarItem[] = [];
+    for (const raw of product.similar ?? []) {
+      const item = similarToItem(raw);
+      if (item.product_id == null) continue;
+      if (String(item.product_id) === String(product.id)) continue;
+      if (seen.has(item.product_id)) continue;
+      seen.add(item.product_id);
+      items.push(item);
+    }
+    setSimilar(items);
     setSimilarLoading(false);
   }, [product]);
 
@@ -213,54 +250,17 @@ export default function ProductDetailScreen() {
     await Linking.openURL(target);
   }, [product, linkAlive, alternativeUrl]);
 
-  const toggleSimilarSelected = useCallback((pid: number) => {
-    Haptic.selection();
-    setSelectedSimilar((prev) => {
-      const next = new Set(prev);
-      if (next.has(pid)) next.delete(pid);
-      else next.add(pid);
-      return next;
-    });
-  }, []);
-
-  // Refire the similar feed using every ticked card as an anchor. The chat
-  // pipeline sees a multi-anchor prefix and converges on items that match
-  // the *combined* feel of the user's picks.
-  const refineWithSelected = useCallback(() => {
-    if (!product || selectedSimilar.size === 0) return;
-    const anchors = similar.filter(
-      (p) => p.product_id != null && selectedSimilar.has(p.product_id),
-    );
-    if (anchors.length === 0) return;
-
-    Haptic.medium();
-    similarStreamRef.current?.cancel();
-
-    const anchorTokens = anchors
-      .map((p) => `#${p.product_id}${p.brand ? ' · ' + p.brand : ''}`)
-      .join(', ');
-    const message = `[${anchorTokens}] 이거랑 비슷한 거 보여줘`;
-
-    setSimilar([]);
-    setSelectedSimilar(new Set());
-    setSimilarLoading(true);
-    const ctrl = createSessionStream(message, {
-      onProduct: (p) => {
-        // Skip both the page's product and any anchor that comes back.
-        if (
-          p.product_id != null &&
-          (String(p.product_id) === String(product.id) ||
-            anchors.some((a) => a.product_id === p.product_id))
-        ) {
-          return;
-        }
-        setSimilar((prev) => [...prev, refToItem(p)]);
-      },
-      onDone: () => setSimilarLoading(false),
-      onError: () => setSimilarLoading(false),
-    });
-    similarStreamRef.current = ctrl;
-  }, [product, similar, selectedSimilar]);
+  // 비슷한 카드 / 메인 이미지의 체크박스 탭 → anchor 를 해당 id 로 교체.
+  // 이미 anchor 인 항목을 다시 탭하면 메인 상품으로 되돌린다.
+  const mainId = product ? Number(product.id) : null;
+  const selectAnchor = useCallback(
+    (pid: number) => {
+      if (mainId == null) return;
+      Haptic.selection();
+      setAnchorId((prev) => (prev === pid ? mainId : pid));
+    },
+    [mainId],
+  );
 
   const heroImages = product?.images && product.images.length > 0
     ? product.images
@@ -309,14 +309,51 @@ export default function ProductDetailScreen() {
             ) : (
               <View style={[styles.heroImage, styles.heroFallback]} />
             )}
-
-            {heroImages.length > 1 && (
-              <View style={styles.dots}>
-                {heroImages.map((_, i) => (
-                  <View key={i} style={[styles.dot, i === 0 && styles.dotActive]} />
-                ))}
-              </View>
-            )}
+            {/* 체크 · 찜은 헤더가 아니라 상품 이미지 위(우하단)에 박아둠.
+                back 만 상단 오버레이에 남아 sticky 로 스크롤을 견딤. */}
+            <View style={styles.heroInlineActions}>
+              {mainId != null && (
+                <Pressable
+                  hitSlop={8}
+                  style={[
+                    styles.heroInlineBtn,
+                    anchorId === mainId && styles.heroInlineBtnOn,
+                  ]}
+                  onPress={() => selectAnchor(mainId)}
+                >
+                  <SymbolView
+                    name="checkmark"
+                    size={14}
+                    tintColor={
+                      anchorId === mainId
+                        ? IOSColors.systemBackground
+                        : 'rgba(255,255,255,0.75)'
+                    }
+                    weight="bold"
+                  />
+                </Pressable>
+              )}
+              <Pressable
+                hitSlop={8}
+                style={[styles.heroInlineBtn, saved && styles.heroInlineBtnOn]}
+                onPress={() => {
+                  if (!productIdStr) return;
+                  Haptic.selection();
+                  void toggleSaved(productIdStr);
+                }}
+              >
+                <SymbolView
+                  name={saved ? 'heart.fill' : 'heart'}
+                  size={14}
+                  tintColor={
+                    saved
+                      ? IOSColors.systemBackground
+                      : 'rgba(255,255,255,0.85)'
+                  }
+                  weight="bold"
+                />
+              </Pressable>
+            </View>
           </View>
 
           {/* Info */}
@@ -374,13 +411,14 @@ export default function ProductDetailScreen() {
 
           {/* Similar products — populated from a background SSE chat
               anchored on this product. Tap a card to navigate, tap the
-              checkmark to refine the feed with that pick. */}
+              checkbox to set that item as the composer anchor. */}
           <SimilarProducts
             items={similar}
             loading={similarLoading}
-            selectedIds={selectedSimilar}
-            onToggle={toggleSimilarSelected}
-            onRefine={refineWithSelected}
+            anchorId={anchorId}
+            onSelectAnchor={selectAnchor}
+            session={session}
+            searchId={search_id}
           />
 
         </ScrollView>
@@ -409,23 +447,6 @@ export default function ProductDetailScreen() {
               />
             </GlassSurface>
           </Pressable>
-          <Pressable
-            hitSlop={8}
-            onPress={() => {
-              if (!productIdStr) return;
-              Haptic.selection();
-              void toggleSaved(productIdStr);
-            }}
-          >
-            <GlassSurface variant="pill" isInteractive style={styles.heroBtn}>
-              <SymbolView
-                name={saved ? 'heart.fill' : 'heart'}
-                size={18}
-                tintColor={saved ? IOSColors.systemRed : IOSColors.label}
-                weight="medium"
-              />
-            </GlassSurface>
-          </Pressable>
         </View>
       )}
 
@@ -437,11 +458,20 @@ export default function ProductDetailScreen() {
           pointerEvents="box-none"
         >
           <View style={[styles.composerWrap, { paddingBottom: insets.bottom + 12 }]}>
-            <View style={styles.chipRow}>
+            {/* 캡 배너는 상세 페이지에서 노출 X — 홈/기존 채팅에서만 안내.
+                여기선 컴포저만 잠기고 배너는 보이지 않도록. */}
+            {/* 항상 1 Row 유지. 브랜드가 길면 말줄임표, 그래도 넘치면
+                가로 스크롤로 흐르게 한다. */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.chipRow}
+              keyboardShouldPersistTaps="handled"
+            >
               <View style={styles.scopeChip}>
-                {product.image_url ? (
+                {anchorPin?.image_url ? (
                   <Image
-                    source={product.image_url}
+                    source={anchorPin.image_url}
                     style={styles.scopeThumb}
                     contentFit="cover"
                   />
@@ -449,16 +479,26 @@ export default function ProductDetailScreen() {
                   <View style={[styles.scopeThumb, styles.heroFallback]} />
                 )}
                 <Text style={styles.scopeLabel}>이 제품 기준</Text>
-                <Text style={styles.scopeBrand}>· {product.brand}</Text>
+                <Text style={styles.scopeBrand} numberOfLines={1}>
+                  · {anchorPin?.brand ?? product.brand}
+                </Text>
               </View>
               {CRITIQUE.map((c) => (
-                <Pressable key={c.id} onPress={() => handleCritique(c.label)}>
-                  <GlassSurface variant="pill" isInteractive style={styles.critiqueChip}>
+                <Pressable
+                  key={c.id}
+                  disabled={capLocked}
+                  onPress={() => handleCritique(c.label)}
+                >
+                  <GlassSurface
+                    variant="pill"
+                    isInteractive={!capLocked}
+                    style={[styles.critiqueChip, capLocked && { opacity: 0.4 }]}
+                  >
                     <Text style={styles.critiqueText}>{c.label}</Text>
                   </GlassSurface>
                 </Pressable>
               ))}
-            </View>
+            </ScrollView>
 
             <GlassSurface variant="composer" style={styles.composer}>
               <Pressable
@@ -476,11 +516,16 @@ export default function ProductDetailScreen() {
               <TextInput
                 value={text}
                 onChangeText={setText}
-                placeholder="이거랑 비슷한데 더 저렴하게..."
+                placeholder={
+                  capLocked
+                    ? "오늘 사용량이 다 소진됐어요"
+                    : "이거랑 비슷한데 더 저렴하게..."
+                }
                 placeholderTextColor={IOSColors.placeholderText}
                 style={styles.input}
                 returnKeyType="send"
                 onSubmitEditing={handleComposerSend}
+                editable={!capLocked}
               />
               <Pressable
                 hitSlop={6}
@@ -506,23 +551,27 @@ export default function ProductDetailScreen() {
 // ─── Similar products section ────────────────────────────────────────────
 // 3-col grid of cards fed by the background SSE turn fired in the parent.
 // Each card has two tap zones: the body navigates into the card's PDP, the
-// corner check toggle selects the card as an anchor for a refined search.
-// The bottom action button refires the SSE with every ticked card.
+// corner check toggle selects the card as the SINGLE composer anchor
+// (replacing whatever was previously anchored — main product or another
+// similar item). Multi-select is intentionally not supported.
 
 function SimilarProducts({
   items,
   loading,
-  selectedIds,
-  onToggle,
-  onRefine,
+  anchorId,
+  onSelectAnchor,
+  session,
+  searchId,
 }: {
   items: SimilarItem[];
   loading: boolean;
-  selectedIds: Set<number>;
-  onToggle: (productId: number) => void;
-  onRefine: () => void;
+  anchorId: number | null;
+  onSelectAnchor: (productId: number) => void;
+  /** 세션 유지용 — 자식 PDP 로 넘겨서 새 세션이 뜨는 걸 방지. */
+  session?: string;
+  searchId?: string;
 }) {
-  const selectedCount = selectedIds.size;
+  const { isSaved, toggle: toggleSaved } = useWishlist();
   const isEmpty = items.length === 0;
   // Skeleton tiles during loading (or before the SSE has fired) keep the
   // grid scaffold visible so the layout doesn't pop in. Six tiles = two
@@ -551,7 +600,7 @@ function SimilarProducts({
       <Text style={styles.similarHeader}>비슷한 제품</Text>
       <View style={styles.similarGrid}>
         {items.map((p, idx) => {
-              const checked = p.product_id != null && selectedIds.has(p.product_id);
+              const checked = p.product_id != null && anchorId === p.product_id;
               return (
                 <Pressable
                   key={`${p.product_id ?? idx}-${p.image_url}`}
@@ -560,7 +609,22 @@ function SimilarProducts({
                   onPress={() => {
                     if (p.product_id == null) return;
                     Haptic.light();
-                    router.push(`/product/${p.product_id}` as never);
+                    // 세션·서치 컨텍스트 유지. 그래야 다음 PDP 에서
+                    // critique 눌러도 새 세션이 안 생기고 이어감.
+                    const qs = [
+                      session
+                        ? `session=${encodeURIComponent(session)}`
+                        : "",
+                      searchId
+                        ? `search_id=${encodeURIComponent(searchId)}`
+                        : "",
+                    ]
+                      .filter(Boolean)
+                      .join("&");
+                    const url = qs
+                      ? `/product/${p.product_id}?${qs}`
+                      : `/product/${p.product_id}`;
+                    router.push(url as never);
                   }}
                 >
                   <View style={styles.similarThumb}>
@@ -579,23 +643,58 @@ function SimilarProducts({
                       />
                     )}
                     {p.product_id != null && (
-                      <Pressable
-                        hitSlop={8}
-                        style={[
-                          styles.similarCheck,
-                          checked && styles.similarCheckOn,
-                        ]}
-                        onPress={() => onToggle(p.product_id as number)}
-                      >
-                        {checked && (
+                      <View style={styles.similarActions}>
+                        <Pressable
+                          hitSlop={8}
+                          style={[
+                            styles.similarCheck,
+                            checked && styles.similarCheckOn,
+                          ]}
+                          onPress={() => onSelectAnchor(p.product_id as number)}
+                        >
                           <SymbolView
                             name="checkmark"
                             size={11}
-                            tintColor="#FFFFFF"
+                            // on 상태 bg 는 IOSColors.label (다크모드에선 흰
+                            // 색) 이라 흰 아이콘이 사라짐. systemBackground
+                            // 로 반대색 유지.
+                            tintColor={
+                              checked
+                                ? IOSColors.systemBackground
+                                : "rgba(255,255,255,0.7)"
+                            }
                             weight="bold"
                           />
-                        )}
-                      </Pressable>
+                        </Pressable>
+                        {(() => {
+                          const pidStr = String(p.product_id);
+                          const savedFlag = isSaved(pidStr);
+                          return (
+                            <Pressable
+                              hitSlop={8}
+                              style={[
+                                styles.similarCheck,
+                                savedFlag && styles.similarCheckOn,
+                              ]}
+                              onPress={() => {
+                                Haptic.selection();
+                                void toggleSaved(pidStr);
+                              }}
+                            >
+                              <SymbolView
+                                name={savedFlag ? 'heart.fill' : 'heart'}
+                                size={11}
+                                tintColor={
+                                  savedFlag
+                                    ? IOSColors.systemBackground
+                                    : 'rgba(255,255,255,0.85)'
+                                }
+                                weight="bold"
+                              />
+                            </Pressable>
+                          );
+                        })()}
+                      </View>
                     )}
                   </View>
                   <View style={styles.similarMeta}>
@@ -623,17 +722,6 @@ function SimilarProducts({
               );
             })}
       </View>
-      {selectedCount > 0 && (
-        <Pressable
-          style={styles.similarRefineCta}
-          onPress={onRefine}
-          disabled={loading}
-        >
-          <Text style={styles.similarRefineText}>
-            선택한 {selectedCount}개와 비슷한 거 보기
-          </Text>
-        </Pressable>
-      )}
     </View>
   );
 }
@@ -653,7 +741,7 @@ const styles = StyleSheet.create({
   muted: {
     ...IOSText.body,
     color: IOSColors.secondaryLabel,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   retry: {
     paddingHorizontal: 16,
@@ -664,7 +752,7 @@ const styles = StyleSheet.create({
   retryText: {
     ...IOSText.callout,
     color: IOSColors.label,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
 
   // Hero
@@ -697,6 +785,29 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  // 상품 이미지 위에 박히는 액션 클러스터. 순서 [체크, 찜], 우하단.
+  heroInlineActions: {
+    position: 'absolute',
+    bottom: 12,
+    right: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  heroInlineBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.95)',
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  heroInlineBtnOn: {
+    backgroundColor: IOSColors.label,
+    borderColor: IOSColors.label,
+  },
   dots: {
     position: 'absolute',
     bottom: 14,
@@ -724,13 +835,13 @@ const styles = StyleSheet.create({
   brand: {
     ...IOSText.subhead,
     color: IOSColors.tertiaryLabel,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   name: {
     ...IOSText.title2,
     color: IOSColors.label,
     marginTop: 2,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   priceRow: {
     flexDirection: 'row',
@@ -742,19 +853,19 @@ const styles = StyleSheet.create({
     ...IOSText.title2,
     fontWeight: '700',
     color: IOSColors.label,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   priceOriginal: {
     ...IOSText.subhead,
     color: IOSColors.tertiaryLabel,
     textDecorationLine: 'line-through',
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   staleNotice: {
     ...IOSText.footnote,
     color: IOSColors.systemRed,
     marginTop: 8,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
 
   ctaWrap: {
@@ -776,7 +887,7 @@ const styles = StyleSheet.create({
   ctaText: {
     ...IOSText.headline,
     color: IOSColors.systemBackground,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
 
   composerFloat: {
@@ -793,7 +904,7 @@ const styles = StyleSheet.create({
   },
   chipRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    alignItems: 'center',
     paddingHorizontal: 4,
     gap: 8,
   },
@@ -816,13 +927,15 @@ const styles = StyleSheet.create({
     ...IOSText.footnote,
     fontWeight: '700',
     color: IOSColors.label,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   scopeBrand: {
     ...IOSText.footnote,
     fontWeight: '500',
     color: IOSColors.secondaryLabel,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
+    // 브랜드가 매우 길 때 chip 이 컴포저 폭을 다 잡아먹지 않도록 상한.
+    maxWidth: 120,
   },
   critiqueChip: {
     paddingHorizontal: 16,
@@ -834,7 +947,7 @@ const styles = StyleSheet.create({
     ...IOSText.subhead,
     fontWeight: '500',
     color: IOSColors.label,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   composer: {
     flexDirection: 'row',
@@ -856,7 +969,7 @@ const styles = StyleSheet.create({
     ...IOSText.body,
     color: IOSColors.label,
     paddingHorizontal: 6,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   sendBtn: {
     width: 44,
@@ -878,7 +991,7 @@ const styles = StyleSheet.create({
   similarHeader: {
     ...IOSText.headline,
     color: IOSColors.label,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
     paddingHorizontal: 20,
     marginBottom: 12,
   },
@@ -912,17 +1025,21 @@ const styles = StyleSheet.create({
   similarEmptyHint: {
     ...IOSText.footnote,
     color: IOSColors.tertiaryLabel,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
     textAlign: 'center',
     paddingHorizontal: 20,
     paddingTop: 12,
   },
-  // Check toggle (top-right of thumb). Empty circle when off, solid + check
-  // when on. Sits above the image with a subtle translucent halo.
-  similarCheck: {
+  // 우상단 액션 스택 — [체크, 찜]. 개별 버튼은 similarCheck 스타일 재사용.
+  similarActions: {
     position: 'absolute',
     top: 6,
     right: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  similarCheck: {
     width: 22,
     height: 22,
     borderRadius: 11,
@@ -944,39 +1061,23 @@ const styles = StyleSheet.create({
     ...IOSText.footnote,
     fontWeight: '600',
     color: IOSColors.label,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   similarPrice: {
     ...IOSText.footnote,
     color: IOSColors.secondaryLabel,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   similarPriceOriginal: {
     ...IOSText.caption1,
     color: IOSColors.tertiaryLabel,
     textDecorationLine: 'line-through',
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   similarPriceSale: {
     ...IOSText.footnote,
     fontWeight: '600',
     color: IOSColors.systemRed,
-    fontFamily: IOSFont.rounded,
-  },
-  // Refine CTA shown below the grid when at least one card is ticked.
-  similarRefineCta: {
-    marginTop: 16,
-    marginHorizontal: 20,
-    height: 46,
-    borderRadius: 14,
-    backgroundColor: IOSColors.label,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  similarRefineText: {
-    ...IOSText.subhead,
-    fontWeight: '700',
-    color: IOSColors.systemBackground,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
 });

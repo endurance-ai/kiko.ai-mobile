@@ -72,36 +72,71 @@ export function Banner() {
     active.action.onPress();
   };
 
+  // billing (캡 소진) 은 solid 검정 배경으로 강한 어텐션을 준다. 나머지
+  // (notice / error) 는 clear glass 로 컨텐츠 위에 얹힌 느낌 유지.
+  const isBilling = active.priority === 'billing';
   return (
     <Animated.View style={[styles.wrap, { opacity }]}>
-      <GlassSurface
-        variant="composer"
-        glassStyle="regular"
-        style={styles.card}
-      >
-        <View style={styles.textCol}>
-          <Text style={styles.title} numberOfLines={2}>
-            {active.title}
-          </Text>
-          {active.subtitle && (
-            <Text style={styles.subtitle} numberOfLines={2}>
-              {active.subtitle}
+      {isBilling ? (
+        <View style={[styles.card, styles.billingCard]}>
+          <View style={styles.textCol}>
+            <Text style={[styles.title, styles.billingText]} numberOfLines={2}>
+              {active.title}
             </Text>
+            {active.subtitle && (
+              <Text
+                style={[styles.subtitle, styles.billingSubtitle]}
+                numberOfLines={2}
+              >
+                {active.subtitle}
+              </Text>
+            )}
+          </View>
+
+          {active.action && (
+            <Pressable onPress={handleAction} style={styles.billingActionBtn}>
+              <Text style={styles.billingActionLabel}>
+                {active.action.label}
+              </Text>
+              <SymbolView
+                name="arrow.right"
+                size={12}
+                tintColor={IOSColors.label}
+                weight="semibold"
+              />
+            </Pressable>
           )}
         </View>
+      ) : (
+        <GlassSurface
+          variant="composer"
+          glassStyle="clear"
+          style={styles.card}
+        >
+          <View style={styles.textCol}>
+            <Text style={styles.title} numberOfLines={2}>
+              {active.title}
+            </Text>
+            {active.subtitle && (
+              <Text style={styles.subtitle} numberOfLines={2}>
+                {active.subtitle}
+              </Text>
+            )}
+          </View>
 
-        {active.action && (
-          <Pressable onPress={handleAction} style={styles.actionBtn}>
-            <Text style={styles.actionLabel}>{active.action.label}</Text>
-            <SymbolView
-              name="arrow.right"
-              size={12}
-              tintColor={IOSColors.systemBackground}
-              weight="semibold"
-            />
-          </Pressable>
-        )}
-      </GlassSurface>
+          {active.action && (
+            <Pressable onPress={handleAction} style={styles.actionBtn}>
+              <Text style={styles.actionLabel}>{active.action.label}</Text>
+              <SymbolView
+                name="arrow.right"
+                size={12}
+                tintColor={IOSColors.systemBackground}
+                weight="semibold"
+              />
+            </Pressable>
+          )}
+        </GlassSurface>
+      )}
     </Animated.View>
   );
 }
@@ -127,13 +162,13 @@ const styles = StyleSheet.create({
     ...IOSText.body,
     fontWeight: '600',
     color: IOSColors.label,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   subtitle: {
     ...IOSText.footnote,
     color: IOSColors.secondaryLabel,
     marginTop: 2,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   actionBtn: {
     flexDirection: 'row',
@@ -148,6 +183,31 @@ const styles = StyleSheet.create({
     ...IOSText.footnote,
     fontWeight: '600',
     color: IOSColors.systemBackground,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
+  },
+  // Billing (캡 소진) 전용 — 검정 배경 + 흰 텍스트.
+  billingCard: {
+    backgroundColor: '#0A0A0A',
+  },
+  billingText: {
+    color: '#FFFFFF',
+  },
+  billingSubtitle: {
+    color: 'rgba(255,255,255,0.72)',
+  },
+  billingActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 999,
+    backgroundColor: '#FFFFFF',
+  },
+  billingActionLabel: {
+    ...IOSText.footnote,
+    fontWeight: '600',
+    color: '#0A0A0A',
+    fontFamily: IOSFont.sans,
   },
 });

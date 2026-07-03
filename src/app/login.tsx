@@ -22,7 +22,6 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { GlassSurface } from '@/components/glass-surface';
 import { Haptic } from '@/constants/ios';
 import { ApiError } from '@/lib/api';
 import { useAuth } from '@/state/auth';
@@ -65,8 +64,8 @@ if (LINEAR_GRADIENT_NATIVE_READY) {
 }
 
 const GRADIENT_STOPS = [
-  { color: '#fefcfa', at: 0 },
-  { color: '#fefcfa', at: 0.32 },
+  { color: '#FFFFFF', at: 0 },
+  { color: '#FFFFFF', at: 0.32 },
   { color: '#fce4d2', at: 0.65 },
   { color: '#f5cdb6', at: 0.88 },
   { color: '#eebda5', at: 1 },
@@ -216,15 +215,12 @@ function MarqueeRow({
     return () => loop.stop();
   }, [halfWidth, direction, durationMs, translateX]);
 
+  // 버블 배경 (유리 / 흰 상자 등) 없이 브랜드 워드마크 텍스트만 그라디언트
+  // 위를 지나가게 한다.
   const renderChip = (chip: Chip, idx: number) => (
-    <GlassSurface
-      key={`${chip.label}-${idx}`}
-      variant="pill"
-      bordered={false}
-      style={styles.chip}
-    >
+    <View key={`${chip.label}-${idx}`} style={styles.chip}>
       <Text style={[styles.chipText, chipTextStyle(chip.s)]}>{chip.label}</Text>
-    </GlassSurface>
+    </View>
   );
 
   return (
@@ -444,8 +440,10 @@ const INK_SUBTLE = 'rgba(10,10,10,0.55)';
 const INK_LINK = 'rgba(10,10,10,0.85)';
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#fefcfa' },
-  safe: { flex: 1, paddingVertical: 16 },
+  root: { flex: 1, backgroundColor: '#FFFFFF' },
+  // 위·아래 여백을 안전 영역 기준으로 대칭. 상단은 safe.paddingTop(16) +
+  // marquee.paddingTop(8) = 24. 하단은 terms.paddingBottom(24) 로 매칭.
+  safe: { flex: 1, paddingTop: 16, paddingBottom: 0 },
 
   // Marquee
   marquee: {
@@ -486,10 +484,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   title: {
-    fontSize: 31,
-    lineHeight: 37,
+    fontSize: 27,
+    lineHeight: 33,
     fontWeight: '700',
-    letterSpacing: -0.775,
+    letterSpacing: -0.675,
     color: INK,
     textAlign: 'center',
   },
@@ -549,7 +547,7 @@ const styles = StyleSheet.create({
     lineHeight: 16.5,
     paddingHorizontal: 22,
     paddingTop: 14,
-    paddingBottom: 14,
+    paddingBottom: 0,
   },
   termsLink: {
     color: INK_LINK,

@@ -251,7 +251,7 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: IOSColors.label,
     textAlign: "center",
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
     lineHeight: 40,
   },
   upgradeSub: {
@@ -261,7 +261,7 @@ const styles = StyleSheet.create({
     marginTop: 12,
     marginBottom: 28,
     lineHeight: 22,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
 
   featureCard: {
@@ -281,7 +281,7 @@ const styles = StyleSheet.create({
     flex: 1,
     ...IOSText.subhead,
     color: IOSColors.secondaryLabel,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   featureColumnHeader: {
     width: 60,
@@ -289,7 +289,7 @@ const styles = StyleSheet.create({
     ...IOSText.subhead,
     fontWeight: "600",
     color: IOSColors.secondaryLabel,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   featureRow: {
     flexDirection: "row",
@@ -302,7 +302,7 @@ const styles = StyleSheet.create({
     flex: 1,
     ...IOSText.body,
     color: IOSColors.label,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   featureCell: {
     width: 60,
@@ -311,7 +311,7 @@ const styles = StyleSheet.create({
   featureDash: {
     ...IOSText.body,
     color: IOSColors.tertiaryLabel,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   featureDashMuted: {
     color: IOSColors.tertiaryLabel,
@@ -329,13 +329,13 @@ const styles = StyleSheet.create({
     ...IOSText.footnote,
     fontWeight: "600",
     color: IOSColors.secondaryLabel,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
     marginBottom: 4,
   },
   comingSoonItem: {
     ...IOSText.body,
     color: IOSColors.label,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
 
   upgradeFooter: {
@@ -359,13 +359,13 @@ const styles = StyleSheet.create({
   upgradeBtnText: {
     ...IOSText.headline,
     color: IOSColors.systemBackground,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   upgradeDisclaimer: {
     ...IOSText.footnote,
     color: IOSColors.tertiaryLabel,
     textAlign: "center",
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
 
   // ── Manage ──
@@ -389,19 +389,19 @@ const styles = StyleSheet.create({
     ...IOSText.body,
     fontWeight: "600",
     color: IOSColors.label,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   planRight: {
     ...IOSText.body,
     fontWeight: "600",
     color: PRO_ACCENT,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   planSub: {
     ...IOSText.footnote,
     color: IOSColors.secondaryLabel,
     marginTop: 6,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   actionCard: {
     borderRadius: 16,
@@ -422,7 +422,7 @@ const styles = StyleSheet.create({
   actionLabel: {
     ...IOSText.body,
     color: IOSColors.label,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   actionTrailing: {
     flexDirection: "row",
@@ -432,6 +432,6 @@ const styles = StyleSheet.create({
   actionTrailingText: {
     ...IOSText.body,
     color: IOSColors.secondaryLabel,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
 });

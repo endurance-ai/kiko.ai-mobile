@@ -51,10 +51,15 @@ if (LOTTIE_NATIVE_READY) {
 // Haptic timing — synced with kiko-splash Lottie frames 28/32/36/40 @60fps.
 const HAPTIC_DELAYS_MS = [467, 533, 600, 667];
 
-// ─── Fallback letter animation (used until next native build) ────────────
+// Lottie 애니메이션이 끝난 뒤 마지막 프레임을 얼마나 더 붙잡아둘지.
+// 애니메이션 자체가 ~1.2초라 유저 인지 전에 다음 화면으로 넘어가는 느낌 →
+// 마지막 프레임에서 잠깐 머물러 브랜드를 각인시킨다.
+const SPLASH_POST_HOLD_MS = 900;
+
+// ─── Fallback letter animation ────────────────────────────────────────────
+// Only used when lottie-react-native native module isn't linked. The main
+// splash is the Lottie file bundled with the EAS build.
 const LETTERS = ['k', 'i', 'k', 'o'] as const;
-// Slightly slower cadence per design feedback — reads more deliberate.
-// Total = 4*STAGGER + RISE + HOLD + EXIT.
 const STAGGER_MS = 130;
 const RISE_MS = 500;
 const HOLD_MS = 400;
@@ -100,8 +105,12 @@ export default function SplashScreen() {
     const timers = HAPTIC_DELAYS_MS.map((delay) =>
       setTimeout(Haptic.light, delay),
     );
-    // Lottie animation is ~1.2s; give it 3s headroom before we bail.
-    const safety = setTimeout(() => setAnimationDone(true), 3000);
+    // Lottie animation is ~1.2s + post-hold; safety timer covers both plus
+    // headroom in case onAnimationFinish never fires.
+    const safety = setTimeout(
+      () => setAnimationDone(true),
+      3000 + SPLASH_POST_HOLD_MS,
+    );
     return () => {
       timers.forEach(clearTimeout);
       clearTimeout(safety);
@@ -132,7 +141,10 @@ export default function SplashScreen() {
           loop={false}
           resizeMode="contain"
           style={styles.lottie}
-          onAnimationFinish={() => setAnimationDone(true)}
+          onAnimationFinish={() => {
+            // 마지막 프레임에서 잠깐 머무른 뒤에 다음 화면으로 넘어감.
+            setTimeout(() => setAnimationDone(true), SPLASH_POST_HOLD_MS);
+          }}
         />
       </View>
     );
@@ -159,7 +171,7 @@ const styles = StyleSheet.create({
   rootLight: { backgroundColor: '#FFFFFF' },
   rootDark: { backgroundColor: '#000' },
   lottie: {
-    width: '100%',
+    width: '70%',
     aspectRatio: 9 / 16,
   },
   word: { flexDirection: 'row' },
@@ -167,7 +179,7 @@ const styles = StyleSheet.create({
     fontSize: 48,
     fontWeight: '800',
     color: '#FFFFFF',
-    fontFamily: IOSFont.rounded,
-    letterSpacing: -1.7,
+    fontFamily: IOSFont.sans,
+    letterSpacing: -1.85,
   },
 });

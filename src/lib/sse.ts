@@ -39,7 +39,7 @@ export interface ChatStreamHandlers {
    */
   onClarify?: (payload: ClarifyPayload) => void;
   /** Emitted after products are persisted as a result set (server PR #96). */
-  onSearch?: (searchId: string) => void;
+  onSearch?: (searchId: string, total?: number) => void;
   /** Daily token cap hit — server skips graph run and doesn't save the turn. */
   onCapReached?: (info: CapReachedInfo) => void;
   onDone?: () => void;
@@ -130,7 +130,8 @@ function dispatch(event: SseEvent, handlers: ChatStreamHandlers): boolean {
     }
     case 'search': {
       const id = data.search_id;
-      if (typeof id === 'string') handlers.onSearch?.(id);
+      const total = typeof data.total === 'number' ? data.total : undefined;
+      if (typeof id === 'string') handlers.onSearch?.(id, total);
       return false;
     }
     case 'clarify': {
