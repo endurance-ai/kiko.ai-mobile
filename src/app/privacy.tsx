@@ -5,6 +5,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   View,
 } from "react-native";
@@ -14,7 +15,6 @@ import {
   FLOATING_HEADER_OFFSET,
   FloatingHeader,
 } from "@/components/floating-header";
-import { GlassToggle } from "@/components/glass-toggle";
 import { Haptic, IOSColors, IOSFont, IOSText } from "@/constants/ios";
 
 const FOOTER_NOTE =
@@ -74,7 +74,14 @@ export default function PrivacyScreen() {
               <Text style={styles.toggleTitle}>학습 데이터 제공</Text>
               <Text style={styles.toggleHint}>가명처리 후 모델 개선</Text>
             </View>
-            <GlassToggle value={training} onValueChange={setTraining} />
+            <Switch
+              value={training}
+              onValueChange={setTraining}
+              trackColor={{
+                false: IOSColors.systemGray4,
+                true: IOSColors.systemGreen,
+              }}
+            />
           </View>
         </View>
 

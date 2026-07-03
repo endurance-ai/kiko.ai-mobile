@@ -6,6 +6,7 @@ import {
   Linking,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   View,
 } from "react-native";
@@ -15,7 +16,6 @@ import {
   FLOATING_HEADER_OFFSET,
   FloatingHeader,
 } from "@/components/floating-header";
-import { GlassToggle } from "@/components/glass-toggle";
 import { IOSColors, IOSFont, IOSText } from "@/constants/ios";
 import { getNotifications, updateNotifications } from "@/lib/devices";
 import type { NotificationCategories } from "@/types/api";
@@ -105,9 +105,39 @@ export default function NotificationsScreen() {
       ],
     );
   };
-  const onMarketingChange = (v: boolean) => {
-    setMarketing(v);
-    void persist({ release_alerts: v });
+  // 마케팅 토글도 알림 토글과 동일한 iOS 권한 흐름을 탄다: 켜려면 시스템
+  // 알림 권한이 있어야 하고 (미결정이면 요청, 거부돼있으면 설정 앱으로 딥링크),
+  // 끌 땐 그냥 서버 상태만 반영.
+  const onMarketingChange = async (v: boolean) => {
+    if (!v) {
+      setMarketing(false);
+      void persist({ release_alerts: false });
+      return;
+    }
+    const current = await Notifications.getPermissionsAsync();
+    if (current.status === "granted") {
+      setMarketing(true);
+      void persist({ release_alerts: true });
+      return;
+    }
+    if (current.status === "undetermined" || current.canAskAgain) {
+      const next = await Notifications.requestPermissionsAsync({
+        ios: { allowAlert: true, allowBadge: true, allowSound: true },
+      });
+      if (next.status === "granted") {
+        setMarketing(true);
+        void persist({ release_alerts: true });
+      }
+      return;
+    }
+    Alert.alert(
+      "알림 권한이 필요해요",
+      "iOS 설정에서 키코 앱의 알림을 켜 주세요.",
+      [
+        { text: "취소", style: "cancel" },
+        { text: "설정 열기", onPress: () => void Linking.openSettings() },
+      ],
+    );
   };
 
   return (
@@ -129,16 +159,27 @@ export default function NotificationsScreen() {
               <View style={styles.rowText}>
                 <Text style={styles.rowTitle}>알림</Text>
               </View>
-              <GlassToggle value={enabled} onValueChange={onEnabledChange} />
+              <Switch
+                value={enabled}
+                onValueChange={onEnabledChange}
+                trackColor={{
+                  false: IOSColors.systemGray4,
+                  true: IOSColors.systemGreen,
+                }}
+              />
             </View>
             <View style={[styles.row, styles.rowDivider]}>
               <View style={styles.rowText}>
                 <Text style={styles.rowTitle}>마케팅</Text>
                 <Text style={styles.rowHint}>혜택/신규 브랜드 소식</Text>
               </View>
-              <GlassToggle
+              <Switch
                 value={marketing}
                 onValueChange={onMarketingChange}
+                trackColor={{
+                  false: IOSColors.systemGray4,
+                  true: IOSColors.systemGreen,
+                }}
               />
             </View>
           </View>
