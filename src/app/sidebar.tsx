@@ -373,6 +373,10 @@ export default function SidebarScreen() {
           </View>
         </SafeAreaView>
 
+        {/* 하단 버튼 뒤의 반투명 흰 fade — 스크롤 리스트가 이 밑을 지나갈
+            때 살짝 흐릿하게 감춰지면서 버튼 클러스터가 부각된다. */}
+        <View style={styles.bottomFade} pointerEvents="none" />
+
         {/* 하단 버튼 클러스터는 패널 안에 절대 위치로 얹어, 그 뒤로 세션
             리스트가 스크롤돼 지나가면서 글래스 아바타에 자연스럽게 비침. */}
         <SafeAreaView edges={["bottom"]} style={styles.bottomSafe}>
@@ -507,6 +511,17 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     paddingHorizontal: 18,
+  },
+  // 반투명 흰 fade — 버튼 클러스터 뒤에 깔려서 스크롤 리스트가 지나갈 때
+  // 흐릿하게 보이도록. bottomSafe 보다 조금 더 위까지 덮어 위쪽 세션 행
+  // 도 살짝 페이드 인.
+  bottomFade: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 130,
+    backgroundColor: "rgba(255,255,255,0.72)",
   },
   bottomRow: {
     flexDirection: "row",
