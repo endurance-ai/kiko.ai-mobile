@@ -61,6 +61,14 @@
       "expo-secure-store",
       "expo-apple-authentication",
       [
+        "expo-build-properties",
+        {
+          "ios": {
+            "deploymentTarget": "16.4"
+          }
+        }
+      ],
+      [
         "expo-share-extension",
         {
           "activationRules": [
