@@ -45,11 +45,7 @@ export default function PrivacyScreen() {
       <ScrollView
         contentContainerStyle={[
           styles.body,
-          {
-            paddingTop: insets.top + FLOATING_HEADER_OFFSET,
-            flexGrow: 1,
-            justifyContent: "center",
-          },
+          { paddingTop: insets.top + FLOATING_HEADER_OFFSET },
         ]}
         showsVerticalScrollIndicator={false}
       >
@@ -85,6 +81,7 @@ export default function PrivacyScreen() {
                 false: IOSColors.systemGray4,
                 true: IOSColors.systemGreen,
               }}
+              style={{ alignSelf: "center" }}
             />
           </View>
         </View>

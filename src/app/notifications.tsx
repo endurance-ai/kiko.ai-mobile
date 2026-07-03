@@ -145,11 +145,7 @@ export default function NotificationsScreen() {
       <ScrollView
         contentContainerStyle={[
           styles.body,
-          {
-            paddingTop: insets.top + FLOATING_HEADER_OFFSET,
-            flexGrow: 1,
-            justifyContent: "center",
-          },
+          { paddingTop: insets.top + FLOATING_HEADER_OFFSET },
         ]}
         showsVerticalScrollIndicator={false}
       >
@@ -170,6 +166,7 @@ export default function NotificationsScreen() {
                   false: IOSColors.systemGray4,
                   true: IOSColors.systemGreen,
                 }}
+                style={{ alignSelf: "center" }}
               />
             </View>
             <View style={[styles.row, styles.rowDivider]}>
@@ -184,6 +181,7 @@ export default function NotificationsScreen() {
                   false: IOSColors.systemGray4,
                   true: IOSColors.systemGreen,
                 }}
+                style={{ alignSelf: "center" }}
               />
             </View>
           </View>
