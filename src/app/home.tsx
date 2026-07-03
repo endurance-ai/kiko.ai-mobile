@@ -42,6 +42,7 @@ import {
   type CapReachedInfo,
   type ChatStreamController,
 } from "@/lib/sse";
+import { extractFirstUrl, fetchLinkPreviewImage } from "@/lib/og-image";
 import { uploadImage } from "@/lib/uploads";
 import { useBanner } from "@/state/banner";
 import { useCap } from "@/state/cap";
@@ -176,46 +177,6 @@ const VISION_LINK_RE =
 
 function containsVisionLink(text: string | undefined): boolean {
   return !!text && VISION_LINK_RE.test(text);
-}
-
-const URL_RE = /https?:\/\/[^\s]+/i;
-
-function extractFirstUrl(text: string): string | null {
-  const m = text.match(URL_RE);
-  return m ? m[0] : null;
-}
-
-/**
- * Best-effort fetch of the og:image (or twitter:image) for a given URL.
- * Used to render a small thumbnail preview inside the user's chat bubble
- * when they paste a Pinterest / Instagram / generic link. Failures are
- * silent — the bubble just stays text-only.
- */
-async function fetchLinkPreviewImage(url: string): Promise<string | null> {
-  try {
-    const res = await fetch(url, {
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
-        Accept: "text/html,*/*",
-      },
-    });
-    if (!res.ok) return null;
-    const html = await res.text();
-    const patterns = [
-      /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i,
-      /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i,
-      /<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i,
-      /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image["']/i,
-    ];
-    for (const re of patterns) {
-      const m = html.match(re);
-      if (m?.[1]) return m[1];
-    }
-    return null;
-  } catch {
-    return null;
-  }
 }
 
 /**
