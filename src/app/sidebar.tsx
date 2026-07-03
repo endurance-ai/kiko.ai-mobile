@@ -426,13 +426,9 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     bottom: 0,
-    // width 만 inline 으로 지정, 세로는 top/bottom:0 로 부모 채움
-    backgroundColor: IOSColors.systemBackground,
-    shadowColor: "#000",
-    shadowOffset: { width: 2, height: 0 },
-    shadowOpacity: 0.18,
-    shadowRadius: 16,
-    elevation: 16,
+    // 배경 없음 — 사이드바 콘텐츠 (로고, 세션 리스트, 하단 버튼) 만 노출되고
+    // 그 뒤로는 dim 처리된 홈 스크린이 그대로 보이도록.
+    backgroundColor: "transparent",
     borderRadius: 50,
   },
   panelInner: { flex: 1 },
@@ -530,11 +526,6 @@ const styles = StyleSheet.create({
     height: 50,
     borderRadius: 999,
     backgroundColor: IOSColors.label,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.18,
-    shadowRadius: 10,
-    elevation: 5,
   },
   newChatText: {
     ...IOSText.body,
