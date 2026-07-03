@@ -714,6 +714,10 @@ export default function ChatEntryScreen() {
       serverImageUrl?: string;
     },
   ) => {
+    // 캡 잠금 상태에선 어떤 경로로 들어오든 (composer send / seedParam /
+    // critique / retry) 서버 호출 금지. 새 채팅에서 seed 로 들어오는 케이스
+    // 도 여기 방어선 하나로 막힌다.
+    if (capLocked) return;
     clearBanner("request-failure");
     // Explicit override wins (e.g. handoff from PDP). Otherwise use the
     // currently-pinned product from the composer.
@@ -989,6 +993,7 @@ export default function ChatEntryScreen() {
     callback: string,
     label: string,
   ) => {
+    if (capLocked) return; // 캡 잠금 시 clarify 콜백도 서버 호출 금지
     const sid = sessionIdRef.current;
     if (!sid) return;
     Haptic.medium();

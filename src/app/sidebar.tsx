@@ -273,8 +273,11 @@ export default function SidebarScreen() {
   // Use the given name (이름) for the avatar — Korean surnames are
   // one-syllable, so showing display_name as-is would put 성 in the circle.
   const givenName = displayName ? stripFamilyName(displayName) : "";
+  // 영문 이름 (한글이 하나도 없음) 은 원 안에 그대로 넣으면 "HYUN..." 처럼
+  // 잘리니, 첫 글자만 대문자로 표시. 한글 이름은 기존대로 이름 전체 노출.
+  const hasHangul = /[가-힣]/.test(givenName);
   const avatarLabelText =
-    givenName ||
+    (givenName && hasHangul ? givenName : givenName.charAt(0).toUpperCase()) ||
     me?.email?.charAt(0).toUpperCase() ||
     me?.provider?.charAt(0).toUpperCase() ||
     "?";

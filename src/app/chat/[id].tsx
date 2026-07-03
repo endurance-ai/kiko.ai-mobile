@@ -175,6 +175,7 @@ export default function ChatDetailScreen() {
   const sendText = useCallback(
     (trimmed: string) => {
       if (!id) return;
+      if (capLocked) return; // 캡 잠금 시 재시도/새 전송 모두 차단
       clearBanner("request-failure");
       setSending(true);
 
@@ -334,7 +335,15 @@ export default function ChatDetailScreen() {
         },
       });
     },
-    [id, scrollToEnd, showBanner, clearBanner, applyCapMeta, markCapReached],
+    [
+      id,
+      scrollToEnd,
+      showBanner,
+      clearBanner,
+      applyCapMeta,
+      markCapReached,
+      capLocked,
+    ],
   );
 
   const handleSend = useCallback(() => {
