@@ -23,10 +23,11 @@ import {
 } from "@/components/floating-header";
 import { Haptic, IOSColors, IOSFont, IOSText } from "@/constants/ios";
 import { getMessages, sendMessageStream } from "@/lib/chat";
-import type {
-  CapMeta,
-  CapReachedInfo,
-  ChatStreamController,
+import {
+  isCapExhausted,
+  type CapMeta,
+  type CapReachedInfo,
+  type ChatStreamController,
 } from "@/lib/sse";
 import { useBanner } from "@/state/banner";
 import { useCap } from "@/state/cap";
@@ -238,7 +239,7 @@ export default function ChatDetailScreen() {
           bumpTimeout();
           if (!cap) return;
           applyCapMeta(cap);
-          if (cap.cap_remaining <= 0) {
+          if (isCapExhausted(cap)) {
             // 이 세션 시점에 이미 캡 소진 (다른 세션에서 다 썼을 가능성).
             capHitThisTurn = true;
             clearBanner("chat-cap-warn");

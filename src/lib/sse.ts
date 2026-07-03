@@ -7,13 +7,29 @@ import {
 } from '@/lib/api';
 import type { ApiErrorBody, ClarifyPayload, ProductRef } from '@/types/api';
 
-/** Daily-cap quota meta returned on every `session` event (PR #102). */
+/** Daily-cap quota meta returned on every `session` event (PR #102).
+ *
+ * 서버 표기 규약:
+ *   - `daily_cap: 0` + `cap_remaining: null` → 무제한 (developer / pro tier)
+ *   - `daily_cap: N` + `cap_remaining: M`   → 유한 캡, 잔여 M
+ *
+ * 따라서 `cap_remaining` 을 절대 `0` 으로 강제 변환하지 않는다. null 을
+ * 그대로 남겨야 무제한과 "잔여 0" 을 구분할 수 있음. 잠금 판정은
+ * [[isCapExhausted]] 로 통일. */
 export interface CapMeta {
   user_tier: string;
   daily_cap: number;
   cap_used: number;
-  cap_remaining: number;
+  cap_remaining: number | null;
   cap_reset_at: string;
+}
+
+/** 유한 캡인데 잔여가 0 이하일 때만 소진 (=잠금) 판정.
+ * daily_cap===0 또는 cap_remaining===null 은 무제한 → 절대 소진 아님. */
+export function isCapExhausted(cap: CapMeta): boolean {
+  if (cap.daily_cap <= 0) return false;
+  if (cap.cap_remaining == null) return false;
+  return cap.cap_remaining <= 0;
 }
 
 /** Payload of the `cap_reached` event — terminates the turn. */
@@ -106,7 +122,9 @@ function dispatch(event: SseEvent, handlers: ChatStreamHandlers): boolean {
               daily_cap: data.daily_cap,
               cap_used: typeof data.cap_used === 'number' ? data.cap_used : 0,
               cap_remaining:
-                typeof data.cap_remaining === 'number' ? data.cap_remaining : 0,
+                typeof data.cap_remaining === 'number'
+                  ? data.cap_remaining
+                  : null, // null = 무제한 (developer/pro tier). 0 으로 낮추지 말 것.
               cap_reset_at:
                 typeof data.cap_reset_at === 'string' ? data.cap_reset_at : '',
             }

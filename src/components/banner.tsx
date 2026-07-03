@@ -72,12 +72,13 @@ export function Banner() {
     active.action.onPress();
   };
 
-  // billing (캡 소진) 은 solid 검정 배경으로 강한 어텐션을 준다. 나머지
-  // (notice / error) 는 clear glass 로 컨텐츠 위에 얹힌 느낌 유지.
-  const isBilling = active.priority === 'billing';
+  // billing (캡 소진) 과 error (요청 처리 실패) 는 solid 검정 배경으로 강한
+  // 어텐션을 준다. notice 만 clear glass 로 컨텐츠 위에 얹힌 느낌 유지.
+  const isSolidDark =
+    active.priority === 'billing' || active.priority === 'error';
   return (
     <Animated.View style={[styles.wrap, { opacity }]}>
-      {isBilling ? (
+      {isSolidDark ? (
         <View style={[styles.card, styles.billingCard]}>
           <View style={styles.textCol}>
             <Text style={[styles.title, styles.billingText]} numberOfLines={2}>

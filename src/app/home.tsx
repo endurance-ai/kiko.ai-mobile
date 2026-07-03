@@ -36,7 +36,12 @@ import { FREE_LIMIT_VERSION, trackEvent } from "@/lib/analytics";
 import { ApiError } from "@/lib/api";
 import { getMe } from "@/lib/me";
 import { stripFamilyName } from "@/lib/name";
-import type { CapMeta, CapReachedInfo, ChatStreamController } from "@/lib/sse";
+import {
+  isCapExhausted,
+  type CapMeta,
+  type CapReachedInfo,
+  type ChatStreamController,
+} from "@/lib/sse";
 import { uploadImage } from "@/lib/uploads";
 import { useBanner } from "@/state/banner";
 import { useCap } from "@/state/cap";
@@ -889,7 +894,7 @@ export default function ChatEntryScreen() {
         }
         if (cap) {
           applyCapMeta(cap);
-          if (cap.cap_remaining <= 0) {
+          if (isCapExhausted(cap)) {
             // 이미 소진 상태로 세션 시작 (이전 세션이 캡을 다 썼거나,
             // 앱 재시작 후 처음 붙었을 때). 90% 안내는 정리하고 소진 배너
             // 를 띄워 유저가 컴포저 잠긴 이유를 즉시 볼 수 있게 한다.
@@ -1022,7 +1027,12 @@ export default function ChatEntryScreen() {
       gender: filter.gender === "unisex" ? undefined : filter.gender,
       priceMaxKrw:
         filter.priceMax >= PRICE_MAX ? undefined : filter.priceMax * 10_000,
-      attachedImageUrl: imagePayload?.serverImageUrl,
+      // 유저가 직접 업로드한 이미지가 최우선. 없으면 pin 된 상품(리스트탭 /
+       // SSE product pin) 의 공개 이미지 URL 을 서버에 함께 넘겨서 비전 단계에
+       // 서 실제 사진을 볼 수 있게 한다. 안 넘기면 "#id 라벨" 텍스트만 남아서
+       // 서버가 "사진이 안 보인다" 고 응답함.
+      attachedImageUrl:
+        imagePayload?.serverImageUrl ?? attachment?.imageUrl ?? undefined,
     };
 
     // 첫 이벤트가 오기 전 서버가 조용히 멈춰버리는 케이스 대비 즉시 착수.
@@ -1127,7 +1137,7 @@ export default function ChatEntryScreen() {
         bumpCbTimeout();
         if (!cap) return;
         applyCapMeta(cap);
-        if (cap.cap_remaining <= 0) {
+        if (isCapExhausted(cap)) {
           capHitThisCb = true;
           clearBanner("chat-cap-warn");
           showBanner({

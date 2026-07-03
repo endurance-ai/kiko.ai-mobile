@@ -9,7 +9,7 @@ import {
   useState,
 } from 'react';
 
-import type { CapMeta, CapReachedInfo } from '@/lib/sse';
+import { isCapExhausted, type CapMeta, type CapReachedInfo } from '@/lib/sse';
 
 /**
  * Format an ISO reset timestamp into a short Korean hint for the cap banner.
@@ -79,8 +79,8 @@ export function CapProvider({ children }: { children: ReactNode }) {
     (cap: CapMeta) => {
       setMeta(cap);
       setResetAt(cap.cap_reset_at ?? null);
-      if (cap.cap_remaining > 0) {
-        // 서버가 잔여 크레딧이 남아 있다고 알려주면 (하루 롤오버 등) 잠금 해제.
+      if (!isCapExhausted(cap)) {
+        // 잔여 크레딧이 있거나 무제한 tier (developer/pro) — 잠금 해제.
         setLocked(false);
         if (resetTimerRef.current) {
           clearTimeout(resetTimerRef.current);
