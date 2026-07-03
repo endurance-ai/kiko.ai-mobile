@@ -683,27 +683,7 @@ export default function ChatEntryScreen() {
     setText("");
     setPickedImage(null);
     pickedAssetRef.current = null;
-
-    // URL 만 담긴 메시지 (첨부 이미지도, pin 도 없음): 서버가 raw URL 은
-    // 처리 못 하므로 og:image 를 먼저 뽑아 attachment 로 넘겨준다. og
-    // 실패 시엔 그냥 텍스트로 흘려보내고 서버 응답에 맡긴다.
-    let seedAttachment:
-      | {
-          imageUrl: string;
-          label: string;
-        }
-      | undefined;
-    if (!hasImage && pinnedId == null) {
-      const url = extractFirstUrl(trimmed);
-      if (url) {
-        const og = await fetchLinkPreviewImage(url);
-        if (og) {
-          seedAttachment = { imageUrl: og, label: "공유한 상품" };
-        }
-      }
-    }
-
-    runStreamingTurn(trimmed, seedAttachment, {
+    runStreamingTurn(trimmed, undefined, {
       localImageUri: localUri ?? undefined,
       serverImageUrl,
     });
