@@ -22,6 +22,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { GlassSurface } from '@/components/glass-surface';
 import { Haptic } from '@/constants/ios';
 import { ApiError } from '@/lib/api';
 import { useAuth } from '@/state/auth';
@@ -64,8 +65,8 @@ if (LINEAR_GRADIENT_NATIVE_READY) {
 }
 
 const GRADIENT_STOPS = [
-  { color: '#fefcfa', at: 0 },
-  { color: '#fefcfa', at: 0.32 },
+  { color: '#FFFFFF', at: 0 },
+  { color: '#FFFFFF', at: 0.32 },
   { color: '#fce4d2', at: 0.65 },
   { color: '#f5cdb6', at: 0.88 },
   { color: '#eebda5', at: 1 },
@@ -215,13 +216,18 @@ function MarqueeRow({
     return () => loop.stop();
   }, [halfWidth, direction, durationMs, translateX]);
 
-  // 브랜드 워드마크가 그라디언트 위를 그대로 지나가도록 — 유리(GlassSurface)
-  // 나 배경 어떤 것도 얹지 않는다. 유리 clear 모드에서도 미묘한 리프렉션이
-  // 상단 흰 그라디언트 위에 회색 밴드처럼 인식되던 문제를 원천 차단.
+  // Liquid Glass on iOS 26+ — GlassSurface with bordered={false} forces
+  // glassStyle='clear' so the chip reads as a floating bubble on the
+  // peach gradient. On older iOS the fallback is a transparent View.
   const renderChip = (chip: Chip, idx: number) => (
-    <View key={`${chip.label}-${idx}`} style={styles.chip}>
+    <GlassSurface
+      key={`${chip.label}-${idx}`}
+      variant="pill"
+      bordered={false}
+      style={styles.chip}
+    >
       <Text style={[styles.chipText, chipTextStyle(chip.s)]}>{chip.label}</Text>
-    </View>
+    </GlassSurface>
   );
 
   return (
@@ -441,7 +447,7 @@ const INK_SUBTLE = 'rgba(10,10,10,0.55)';
 const INK_LINK = 'rgba(10,10,10,0.85)';
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#fefcfa' },
+  root: { flex: 1, backgroundColor: '#FFFFFF' },
   // 위·아래 여백을 안전 영역 기준으로 대칭. 상단은 safe.paddingTop(16) +
   // marquee.paddingTop(8) = 24. 하단은 terms.paddingBottom(24) 로 매칭.
   safe: { flex: 1, paddingTop: 16, paddingBottom: 0 },
