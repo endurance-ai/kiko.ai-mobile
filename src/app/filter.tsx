@@ -15,7 +15,7 @@ import {
   type Gender,
 } from '@/state/filter';
 
-const GENDERS: Gender[] = ['unisex', 'women', 'men', 'any'];
+const GENDERS: Gender[] = ['unisex', 'women', 'men'];
 
 export default function FilterScreen() {
   const { value, setValue } = useFilter();

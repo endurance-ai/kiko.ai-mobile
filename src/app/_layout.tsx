@@ -3,10 +3,10 @@ import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import { ReactNode, useEffect } from 'react';
 import { useColorScheme } from 'react-native';
 
-import { useConsentGate } from '@/hooks/use-consent-gate';
 import { useRegisterDevice } from '@/hooks/use-register-device';
 import { AuthProvider } from '@/state/auth';
 import { BannerProvider } from '@/state/banner';
+import { CapProvider } from '@/state/cap';
 import { FeedbackProvider } from '@/state/feedback';
 import { FilterProvider } from '@/state/filter';
 import { SubscriptionProvider } from '@/state/subscription';
@@ -19,7 +19,6 @@ const PRELOAD_ASSETS = [require('../../assets/brand/kiko-wordmark.png')];
 
 function AuthSideEffects({ children }: { children: ReactNode }) {
   useRegisterDevice();
-  useConsentGate();
   useEffect(() => {
     void ExpoImage.prefetch(PRELOAD_ASSETS, 'memory-disk');
   }, []);
@@ -33,6 +32,7 @@ export default function RootLayout() {
         <AuthProvider>
           <AuthSideEffects>
             <BannerProvider>
+              <CapProvider>
               <FilterProvider>
                 <WishlistProvider>
                   <SubscriptionProvider>
@@ -69,10 +69,6 @@ export default function RootLayout() {
                         />
                         <Stack.Screen name="settings" />
                         <Stack.Screen
-                          name="consent"
-                          options={{ gestureEnabled: false }}
-                        />
-                        <Stack.Screen
                           name="feedback"
                           options={{
                             presentation: 'formSheet',
@@ -88,6 +84,7 @@ export default function RootLayout() {
                   </SubscriptionProvider>
                 </WishlistProvider>
               </FilterProvider>
+              </CapProvider>
             </BannerProvider>
           </AuthSideEffects>
         </AuthProvider>

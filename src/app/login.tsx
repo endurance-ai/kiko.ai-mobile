@@ -450,7 +450,9 @@ const INK_LINK = 'rgba(10,10,10,0.85)';
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#fefcfa' },
-  safe: { flex: 1, paddingVertical: 16 },
+  // 위·아래 여백을 안전 영역 기준으로 대칭. 상단은 safe.paddingTop(16) +
+  // marquee.paddingTop(8) = 24. 하단은 terms.paddingBottom(24) 로 매칭.
+  safe: { flex: 1, paddingTop: 16, paddingBottom: 0 },
 
   // Marquee
   marquee: {
@@ -491,10 +493,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   title: {
-    fontSize: 31,
-    lineHeight: 37,
+    fontSize: 27,
+    lineHeight: 33,
     fontWeight: '700',
-    letterSpacing: -0.775,
+    letterSpacing: -0.675,
     color: INK,
     textAlign: 'center',
   },
@@ -554,7 +556,7 @@ const styles = StyleSheet.create({
     lineHeight: 16.5,
     paddingHorizontal: 22,
     paddingTop: 14,
-    paddingBottom: 14,
+    paddingBottom: 0,
   },
   termsLink: {
     color: INK_LINK,

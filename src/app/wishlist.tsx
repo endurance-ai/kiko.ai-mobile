@@ -143,9 +143,9 @@ function WishCard({
         >
           <SymbolView
             name="heart.fill"
-            size={14}
-            tintColor={IOSColors.systemRed}
-            weight="medium"
+            size={12}
+            tintColor="#FFFFFF"
+            weight="bold"
           />
         </Pressable>
         {product?.price != null && (
@@ -230,7 +230,9 @@ const styles = StyleSheet.create({
     width: 26,
     height: 26,
     borderRadius: 13,
-    backgroundColor: "rgba(255,255,255,0.92)",
+    borderWidth: 1.5,
+    borderColor: "rgba(255,255,255,0.95)",
+    backgroundColor: IOSColors.label,
     justifyContent: "center",
     alignItems: "center",
   },

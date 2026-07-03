@@ -29,6 +29,7 @@ const SYSTEM_WARNING =
 function readEnabled(cat: NotificationCategories): boolean {
   return cat.system !== false; // null / undefined → true 로 간주 (기본 on)
 }
+// 마케팅은 명시적으로 true 일 때만 on. null / undefined → 기본 off.
 function readMarketing(cat: NotificationCategories): boolean {
   return cat.release_alerts === true;
 }

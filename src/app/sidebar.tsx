@@ -290,7 +290,15 @@ export default function SidebarScreen() {
   const avatarLabel = displayName || me?.email?.split("@")[0] || "프로필";
 
   return (
-    <View style={styles.root}>
+    <View
+      style={[
+        styles.root,
+        // 트랜스페어런트 모달 컨테이너가 첫 마운트 시 완전히 측정되지 않아
+        // flex:1 만으로는 세로 오버플로우가 남는 케이스가 있음. 라이브 window
+        // 값을 명시적으로 잠가서 첫 열림부터 정확한 뷰포트에 국한시킨다.
+        { width: window.width, height: window.height },
+      ]}
+    >
       <Animated.View style={[styles.backdrop, { opacity: dim }]}>
         <Pressable style={StyleSheet.absoluteFill} onPress={close} />
       </Animated.View>
@@ -299,13 +307,11 @@ export default function SidebarScreen() {
         style={[
           styles.panel,
           {
-            // Explicit dims — the top/bottom:0 approach re-flowed only on the
-            // second mount because the transparentModal container hadn't
-            // finished measuring on the first open. Locking to the live
-            // window dimensions fixes both the initial vertical overflow
-            // and the width mismatch.
+            // 가로는 라이브 window 값으로 잠그되, 세로는 top/bottom:0 로
+            // 부모 컨테이너(트랜스페어런트 모달) 를 그대로 채우도록 한다.
+            // 첫 마운트 때 window.height 가 상태바 등을 포함한 잘못된 값
+            // 을 뱉으면서 패널이 세로로 확장되던 문제를 원천 차단.
             width: PANEL_W,
-            height: window.height,
             transform: [{ translateX: slide }],
           },
         ]}
@@ -395,7 +401,9 @@ export default function SidebarScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1 },
+  // width/height 는 inline 으로 useWindowDimensions 값 주입 — flex:1 만으로
+  // 부모(트랜스페어런트 모달 컨테이너) 사이즈에 의존하지 않도록.
+  root: { overflow: "hidden" },
   backdrop: {
     position: "absolute",
     left: 0,
@@ -408,7 +416,8 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: 0,
     left: 0,
-    // width + height applied inline from useWindowDimensions
+    bottom: 0,
+    // width 만 inline 으로 지정, 세로는 top/bottom:0 로 부모 채움
     backgroundColor: IOSColors.systemBackground,
     shadowColor: "#000",
     shadowOffset: { width: 2, height: 0 },
@@ -503,7 +512,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   avatarText: {
-    fontWeight: "700",
+    fontWeight: "400",
     color: IOSColors.label,
     fontFamily: IOSFont.rounded,
     letterSpacing: -0.3,

@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -37,8 +38,10 @@ import { stripFamilyName } from "@/lib/name";
 import type { CapMeta, CapReachedInfo, ChatStreamController } from "@/lib/sse";
 import { uploadImage } from "@/lib/uploads";
 import { useBanner } from "@/state/banner";
+import { formatCapResetHint, useCap } from "@/state/cap";
 import { buildFilterLabel, PRICE_MAX, useFilter } from "@/state/filter";
 import { MOCK_PRODUCTS, type Product } from "@/state/products";
+import { useWishlist } from "@/state/wishlist";
 import type { ClarifyPayload, ProductRef } from "@/types/api";
 
 type TurnStatus = "analyzing" | "picking" | "searching" | "results" | "empty";
@@ -251,35 +254,6 @@ function messageItemsToTurns(
 const FASHION_KEYWORDS =
   /옷|셔츠|티셔츠|블라우스|니트|스웨터|가디건|후드|맨투맨|자켓|재킷|코트|아우터|이너|패딩|점퍼|조끼|베스트|원피스|드레스|스커트|치마|바지|팬츠|진|데님|슬랙스|쇼츠|반바지|신발|스니커즈|운동화|구두|로퍼|샌들|부츠|슬리퍼|가방|백|클러치|토트|크로스백|숄더백|모자|캡|비니|버킷햇|선글라스|안경|벨트|시계|악세사리|악세서리|주얼리|목걸이|반지|귀걸이|팔찌|핏|루즈핏|오버핏|슬림핏|와이드|크롭|롱|숏|컬러|색감|색상|브랜드|코디|룩|스타일|무드|빈티지|미니멀|스트릿|캐주얼|포멀|찾아|추천|입을|입고|사고/i;
 
-/**
- * Format an ISO reset timestamp into a short Korean hint for the cap banner.
- * Output: '내일 오전 9시' / '오후 3시' / '6/30 오전 9시' depending on distance.
- * Fail-open: returns empty string if parsing fails.
- */
-function formatCapResetHint(iso: string): string {
-  if (!iso) return "";
-  const reset = new Date(iso);
-  if (Number.isNaN(reset.getTime())) return "";
-  const now = new Date();
-  const sameDay =
-    reset.getFullYear() === now.getFullYear() &&
-    reset.getMonth() === now.getMonth() &&
-    reset.getDate() === now.getDate();
-  const tomorrow = new Date(now);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const isTomorrow =
-    reset.getFullYear() === tomorrow.getFullYear() &&
-    reset.getMonth() === tomorrow.getMonth() &&
-    reset.getDate() === tomorrow.getDate();
-  const hour = reset.getHours();
-  const ampm = hour < 12 ? "오전" : "오후";
-  const hour12 = hour % 12 === 0 ? 12 : hour % 12;
-  const timeStr = `${ampm} ${hour12}시`;
-  if (sameDay) return timeStr;
-  if (isTomorrow) return `내일 ${timeStr}`;
-  return `${reset.getMonth() + 1}/${reset.getDate()} ${timeStr}`;
-}
-
 function looksLikeFashionQuery(text: string): boolean {
   return FASHION_KEYWORDS.test(text);
 }
@@ -304,6 +278,7 @@ export default function ChatEntryScreen() {
     pin_price?: string;
   }>();
   const { value: filter, setValue: setFilter } = useFilter();
+  const { isSaved: isWishlisted, toggle: toggleWishlist } = useWishlist();
   const {
     active: activeBanner,
     show: showBanner,
@@ -324,21 +299,24 @@ export default function ChatEntryScreen() {
   const nextIdRef = useRef(1);
   const sessionIdRef = useRef<string | null>(null);
   const streamRef = useRef<ChatStreamController | null>(null);
+  // 스트림이 마지막 이벤트 이후 아무 응답도 없이 오래 걸리면 스피너가 무한
+  // 히 도는 케이스가 있어, 클라이언트에서 강제 타임아웃을 건다. 이벤트가
+  // 올 때마다 리셋 → 타임아웃 발동 시 스트림 취소 + 실패 처리 + 배너.
+  const streamTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const STREAM_STALL_MS = 8_000; // 8s — 이벤트 없이 8초 조용하면 취소
   // Latest daily-cap meta from the most recent `session` event. Kept around
-  // so future surfaces (e.g. usage chip) can display remaining quota; the
-  // banner itself uses the cap_reached payload directly.
-  const capMetaRef = useRef<CapMeta | null>(null);
-  // Cap-reached lockout — flips on when the server signals daily-cap hit.
-  // Locks the composer (input + send + photo) until reset_at OR until a
-  // later `session` event reports cap_remaining > 0 (e.g. day rolled over
-  // while the app was foregrounded). resetAt drives an auto-unlock timer.
-  const [capLocked, setCapLocked] = useState(false);
-  const capResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 캡 상태는 CapProvider 에 위임 (홈/기존 채팅방 모두 공유). locked 는
+  // 어떤 화면에서 소진 이벤트를 받았든 앱 전체에 즉시 반영된다.
+  const {
+    locked: capLocked,
+    applyMeta: applyCapMeta,
+    markReached: markCapReached,
+  } = useCap();
 
-  useEffect(() => () => streamRef.current?.cancel(), []);
   useEffect(
     () => () => {
-      if (capResetTimerRef.current) clearTimeout(capResetTimerRef.current);
+      streamRef.current?.cancel();
+      if (streamTimeoutRef.current) clearTimeout(streamTimeoutRef.current);
     },
     [],
   );
@@ -413,6 +391,24 @@ export default function ChatEntryScreen() {
         if (cancelled) return;
         const turns = messageItemsToTurns(res.messages, nextIdRef);
         setMessages(turns);
+        // 서버 히스토리엔 링크 미리보기 이미지가 저장돼 있지 않아, 재입장
+        // 시 유저 버블에서 og:image 썸네일이 사라진다. 텍스트에 URL 이
+        // 포함된 유저 턴은 여기서 다시 fetch 해서 imageUri 를 복원한다.
+        for (const t of turns) {
+          if (!t.user.text) continue;
+          const url = extractFirstUrl(t.user.text);
+          if (!url || t.user.imageUri) continue;
+          void fetchLinkPreviewImage(url).then((imageUrl) => {
+            if (!imageUrl || cancelled) return;
+            setMessages((prev) =>
+              prev.map((x) =>
+                x.id === t.id
+                  ? { ...x, user: { ...x.user, imageUri: imageUrl } }
+                  : x,
+              ),
+            );
+          });
+        }
       } catch {
         // ignore — empty state will show
       }
@@ -801,62 +797,124 @@ export default function ChatEntryScreen() {
       }
     }
 
+    // 이 턴에서 이미 캡 소진 이벤트를 봤는지. 이 플래그가 켜져 있으면
+    // 이후 onError 는 침묵 — 서버가 cap_reached 이벤트 뒤에 스트림을 닫으며
+    // 클라이언트에서 파싱 에러로 이어질 때 "요청을 처리하지 못했어요" 배너
+    // 가 캡 소진 배너를 덮어버리는 걸 방지.
+    let capHitThisTurn = false;
+    // 타임아웃 관리 — 이벤트 도착 시마다 리셋, 정적으로 오래 걸리면 발동.
+    const killTimeout = () => {
+      if (streamTimeoutRef.current) {
+        clearTimeout(streamTimeoutRef.current);
+        streamTimeoutRef.current = null;
+      }
+    };
+    const fireStall = () => {
+      streamRef.current?.cancel();
+      streamRef.current = null;
+      killTimeout();
+      // 낙관적 어시스턴트 스피너 제거 + 유저 버블도 함께 정리.
+      setMessages((prev) => prev.filter((t) => t.id !== turnId));
+      // 캡 소진 배너가 이미 떠 있는 상황이면 에러 배너로 덮지 않음.
+      if (capHitThisTurn) return;
+      Haptic.error();
+      showBanner({
+        id: "request-failure",
+        priority: "error",
+        title: "응답이 늦어져 요청을 취소했어요",
+        subtitle: "다시 시도해주세요",
+        action: {
+          label: "다시 시도",
+          onPress: () => runStreamingTurn(trimmed),
+        },
+      });
+    };
+    const bumpTimeout = () => {
+      killTimeout();
+      streamTimeoutRef.current = setTimeout(fireStall, STREAM_STALL_MS);
+    };
+
     const handlers = {
       onSession: (sessionId: string, cap?: CapMeta) => {
+        bumpTimeout();
         sessionIdRef.current = sessionId;
         if (cap) {
-          capMetaRef.current = cap;
-          // Day rolled over (or server reset the bucket) — clear the lock.
-          if (cap.cap_remaining > 0 && capLocked) {
-            setCapLocked(false);
-            if (capResetTimerRef.current) {
-              clearTimeout(capResetTimerRef.current);
-              capResetTimerRef.current = null;
+          applyCapMeta(cap);
+          if (cap.cap_remaining <= 0) {
+            // 이미 소진 상태로 세션 시작 (이전 세션이 캡을 다 썼거나,
+            // 앱 재시작 후 처음 붙었을 때). 90% 안내는 정리하고 소진 배너
+            // 를 띄워 유저가 컴포저 잠긴 이유를 즉시 볼 수 있게 한다.
+            capHitThisTurn = true;
+            clearBanner("chat-cap-warn");
+            showBanner({
+              id: "chat-cap-reached",
+              priority: "billing",
+              kicker: "DAILY CAP",
+              title: "오늘 무료 사용량을 다 썼어요",
+              subtitle: `${formatCapResetHint(cap.cap_reset_at)} 다시 시작돼요`,
+            });
+          } else {
+            // 잔여 크레딧이 있음 → 이전에 남아 있던 소진 배너 제거.
+            clearBanner("chat-cap-reached");
+            // 90% 임계치 경고
+            const used = cap.cap_used ?? 0;
+            const total = cap.daily_cap ?? 0;
+            const ratio = total > 0 ? used / total : 0;
+            if (ratio >= 0.9) {
+              showBanner({
+                id: "chat-cap-warn",
+                priority: "notice",
+                kicker: "DAILY CAP",
+                title: "일일 사용량의 90%를 사용했어요",
+                subtitle: `${formatCapResetHint(cap.cap_reset_at)} 다시 시작돼요`,
+              });
+            } else {
+              clearBanner("chat-cap-warn");
             }
           }
         }
       },
       onTextDelta: (delta: string) => {
+        bumpTimeout();
         patch((t) => ({ streamText: (t.streamText ?? "") + delta }));
       },
       onProduct: (product: ProductRef) => {
+        bumpTimeout();
         patch((t) => ({
           streamProducts: [...(t.streamProducts ?? []), product],
         }));
       },
       onSearch: (searchId: string) => {
+        bumpTimeout();
         patch(() => ({ streamSearchId: searchId }));
       },
       onClarify: (payload: ClarifyPayload) => {
         // Inline-keyboard prompt (pick_item carousel / gender ask /
         // category pick / ...). Render as buttons in the assistant bubble;
         // handleClarifyPick resumes the turn via POST /callback.
+        bumpTimeout();
         patch(() => ({ streamClarify: payload }));
       },
       onCapReached: (info: CapReachedInfo) => {
         // Server skipped the graph run for this turn; just end the streaming
         // state cleanly (no assistant reply) and surface a billing banner.
         // 업그레이드 CTA 는 IAP 도입 전까지 비활성 — 안내만 표시.
+        killTimeout();
+        capHitThisTurn = true;
         patch(() => ({ streamDone: true, status: "results" as const }));
         streamRef.current = null;
         Haptic.warning();
-        // Lock the composer until reset_at so we don't spam the server.
-        setCapLocked(true);
-        if (capResetTimerRef.current) clearTimeout(capResetTimerRef.current);
-        const resetMs = new Date(info.reset_at).getTime() - Date.now();
-        if (resetMs > 0 && Number.isFinite(resetMs)) {
-          capResetTimerRef.current = setTimeout(() => {
-            setCapLocked(false);
-            capResetTimerRef.current = null;
-          }, resetMs);
-        }
+        // 앱 전역 캡 상태 잠금 (context 가 reset_at 까지 unlock 타이머도 관리).
+        markCapReached(info);
+        // 90% 안내 배너가 떠 있었다면 정식 소진 배너가 이를 덮도록 정리.
+        clearBanner("chat-cap-warn");
         showBanner({
           id: "chat-cap-reached",
           priority: "billing",
           kicker: "DAILY CAP",
           title: "오늘 무료 사용량을 다 썼어요",
           subtitle: `${formatCapResetHint(info.reset_at)} 다시 시작돼요`,
-          autoDismissMs: 5000,
+          // autoDismiss 없음 — 유저가 컴포저 잠금 이유를 계속 볼 수 있어야 함.
           // action 비활성: IAP 들어오면 다시 활성화
           // action: {
           //   label: "업그레이드",
@@ -865,13 +923,22 @@ export default function ChatEntryScreen() {
         });
       },
       onDone: () => {
+        killTimeout();
         patch(() => ({ streamDone: true, status: "results" as const }));
         streamRef.current = null;
       },
       onError: () => {
+        killTimeout();
+        streamRef.current = null;
+        // 캡 소진으로 스트림이 닫힌 케이스면 캡 배너가 이미 떠 있어야 함.
+        // 여기서 "요청을 처리하지 못했어요" 를 추가로 띄우면 우선순위상 그
+        // 배너가 캡 배너를 덮어 유저가 진짜 원인을 못 봄. 조용히 종료.
+        if (capHitThisTurn) {
+          setMessages((prev) => prev.filter((t) => t.id !== turnId));
+          return;
+        }
         Haptic.error();
         setMessages((prev) => prev.filter((t) => t.id !== turnId));
-        streamRef.current = null;
         showBanner({
           id: "request-failure",
           priority: "error",
@@ -884,16 +951,20 @@ export default function ChatEntryScreen() {
       },
     };
 
-    // Filter values from the composer chip — '무관' / max slider = no ceiling
-    // so the server sees no constraint. priceMax is stored in 만원 units; the
-    // server expects KRW 원 — multiply by 10,000.
+    // Filter values from the composer chip. '공용' = 성별 제한 없이 → 서버에
+    // undefined 로 보내야 taste_profile.gender pin 이 반영되고, pin 이 없으면
+    // gender card 로 물어볼 수 있다 (SPEC-GENDER-PIN-001). 'women'/'men' 은
+    // 유저가 명시한 선택이므로 그대로 전달. priceMax 는 슬라이더 최대치에서
+    // 상한 없음. 서버는 KRW 원 단위 기대.
     const filterOpts = {
-      gender: filter.gender === "any" ? undefined : filter.gender,
+      gender: filter.gender === "unisex" ? undefined : filter.gender,
       priceMaxKrw:
         filter.priceMax >= PRICE_MAX ? undefined : filter.priceMax * 10_000,
       attachedImageUrl: imagePayload?.serverImageUrl,
     };
 
+    // 첫 이벤트가 오기 전 서버가 조용히 멈춰버리는 케이스 대비 즉시 착수.
+    bumpTimeout();
     streamRef.current = sessionIdRef.current
       ? sendMessageStream(
           sessionIdRef.current,
@@ -956,31 +1027,100 @@ export default function ChatEntryScreen() {
         prev.map((t) => (t.id === newTurnId ? { ...t, ...mut(t) } : t)),
       );
 
+    // 콜백 스트림도 홈 스트림과 동일한 stall 타임아웃 관리.
+    let capHitThisCb = false;
+    const killCbTimeout = () => {
+      if (streamTimeoutRef.current) {
+        clearTimeout(streamTimeoutRef.current);
+        streamTimeoutRef.current = null;
+      }
+    };
+    const fireCbStall = () => {
+      streamRef.current?.cancel();
+      streamRef.current = null;
+      killCbTimeout();
+      setMessages((prev) => prev.filter((t) => t.id !== newTurnId));
+      if (capHitThisCb) return;
+      Haptic.error();
+      showBanner({
+        id: "request-failure",
+        priority: "error",
+        title: "응답이 늦어져 요청을 취소했어요",
+        subtitle: "다시 시도해주세요",
+        action: {
+          label: "다시 시도",
+          onPress: () => handleClarifyPick(priorTurnId, callback, label),
+        },
+      });
+    };
+    const bumpCbTimeout = () => {
+      killCbTimeout();
+      streamTimeoutRef.current = setTimeout(fireCbStall, STREAM_STALL_MS);
+    };
+    bumpCbTimeout();
+
     streamRef.current = sendCallbackStream(sid, callback, label, {
+      onSession: (_sid, cap) => {
+        bumpCbTimeout();
+        if (!cap) return;
+        applyCapMeta(cap);
+        if (cap.cap_remaining <= 0) {
+          capHitThisCb = true;
+          clearBanner("chat-cap-warn");
+          showBanner({
+            id: "chat-cap-reached",
+            priority: "billing",
+            kicker: "DAILY CAP",
+            title: "오늘 무료 사용량을 다 썼어요",
+            subtitle: `${formatCapResetHint(cap.cap_reset_at)} 다시 시작돼요`,
+          });
+        }
+      },
       onTextDelta: (delta) => {
+        bumpCbTimeout();
         patch((t) => ({ streamText: (t.streamText ?? "") + delta }));
       },
       onProduct: (product) => {
+        bumpCbTimeout();
         patch((t) => ({
           streamProducts: [...(t.streamProducts ?? []), product],
         }));
       },
       onSearch: (searchId) => {
+        bumpCbTimeout();
         patch(() => ({ streamSearchId: searchId }));
       },
       onClarify: (payload) => {
+        bumpCbTimeout();
         patch(() => ({ streamClarify: payload }));
       },
+      onCapReached: (info) => {
+        killCbTimeout();
+        capHitThisCb = true;
+        patch(() => ({ streamDone: true, status: "results" as const }));
+        streamRef.current = null;
+        Haptic.warning();
+        markCapReached(info);
+        clearBanner("chat-cap-warn");
+        showBanner({
+          id: "chat-cap-reached",
+          priority: "billing",
+          kicker: "DAILY CAP",
+          title: "오늘 무료 사용량을 다 썼어요",
+          subtitle: `${formatCapResetHint(info.reset_at)} 다시 시작돼요`,
+        });
+      },
       onDone: () => {
+        killCbTimeout();
         patch(() => ({ streamDone: true, status: "results" as const }));
         streamRef.current = null;
       },
       onError: () => {
-        Haptic.error();
-        // Drop the placeholder turn on failure so the user isn't left with an
-        // orphan bubble.
-        setMessages((prev) => prev.filter((t) => t.id !== newTurnId));
+        killCbTimeout();
         streamRef.current = null;
+        setMessages((prev) => prev.filter((t) => t.id !== newTurnId));
+        if (capHitThisCb) return; // 캡 배너가 이미 떠 있음 — 에러 배너 억제
+        Haptic.error();
         showBanner({
           id: "request-failure",
           priority: "error",
@@ -1038,6 +1178,8 @@ export default function ChatEntryScreen() {
             { paddingTop: topPad, paddingBottom: insets.bottom + 180 },
           ]}
           keyboardShouldPersistTaps="handled"
+          // 스크롤(드래그) 시작하는 순간 키보드 내려감. 흔한 iOS 메시징 앱 UX.
+          keyboardDismissMode="on-drag"
           showsVerticalScrollIndicator={false}
         >
           {messages.map((turn) => {
@@ -1200,15 +1342,23 @@ export default function ChatEntryScreen() {
                 {/* SSE streaming assistant — real /v1/chat */}
                 {turn.isStream && (
                   <View style={styles.streamBlock}>
-                    {turn.streamText && (
-                      <View style={styles.botBubbleRow}>
-                        <View style={styles.botBubble}>
-                          <Text style={styles.botBubbleText}>
-                            {turn.streamText}
-                          </Text>
-                        </View>
-                      </View>
-                    )}
+                    {turn.streamText &&
+                      // 긴 응답이 하나의 커다란 버블로 몰리지 않도록 문단
+                      // (연속된 개행) 단위로 쪼갠다. 스트리밍 중 마지막
+                      // 세그먼트는 계속 자라나며 재렌더됨.
+                      turn.streamText
+                        .split(/\n{2,}/)
+                        .map((s) => s.trim())
+                        .filter(Boolean)
+                        .map((segment, i) => (
+                          <View key={i} style={styles.botBubbleRow}>
+                            <View style={styles.botBubble}>
+                              <Text style={styles.botBubbleText}>
+                                {segment}
+                              </Text>
+                            </View>
+                          </View>
+                        ))}
                     {/* Keep the searching indicator alive until the first
                         product card arrives — the assistant's prose lands
                         well before the search RPC returns, so the bubble
@@ -1266,23 +1416,58 @@ export default function ChatEntryScreen() {
                                   style={styles.streamProductImage}
                                   contentFit="cover"
                                 />
-                                <Pressable
-                                  hitSlop={8}
-                                  style={styles.streamPinBtn}
-                                  onPress={() => {
-                                    Haptic.selection();
-                                    setPinnedId((prev) =>
-                                      prev === key ? null : key,
-                                    );
-                                  }}
-                                >
-                                  <SymbolView
-                                    name={pinned ? "checkmark" : "plus"}
-                                    size={14}
-                                    tintColor="#1C1C1E"
-                                    weight="bold"
-                                  />
-                                </Pressable>
+                                <View style={styles.streamCardActions}>
+                                  {/* 순서: [체크(anchor pin), 찜] — PDP 와 통일 */}
+                                  <Pressable
+                                    hitSlop={8}
+                                    style={[
+                                      styles.streamCardCheck,
+                                      pinned && styles.streamCardCheckOn,
+                                    ]}
+                                    onPress={() => {
+                                      Haptic.selection();
+                                      setPinnedId((prev) =>
+                                        prev === key ? null : key,
+                                      );
+                                    }}
+                                  >
+                                    <SymbolView
+                                      name="checkmark"
+                                      size={11}
+                                      tintColor={
+                                        pinned ? "#FFFFFF" : "rgba(255,255,255,0.7)"
+                                      }
+                                      weight="bold"
+                                    />
+                                  </Pressable>
+                                  <Pressable
+                                    hitSlop={8}
+                                    style={[
+                                      styles.streamCardHeartBtn,
+                                      productId != null &&
+                                        isWishlisted(String(productId)) &&
+                                        styles.streamCardHeartBtnOn,
+                                    ]}
+                                    onPress={() => {
+                                      if (productId == null) return;
+                                      Haptic.selection();
+                                      void toggleWishlist(String(productId));
+                                    }}
+                                    disabled={productId == null}
+                                  >
+                                    <SymbolView
+                                      name={
+                                        productId != null &&
+                                        isWishlisted(String(productId))
+                                          ? "heart.fill"
+                                          : "heart"
+                                      }
+                                      size={12}
+                                      tintColor="#FFFFFF"
+                                      weight="bold"
+                                    />
+                                  </Pressable>
+                                </View>
                               </Pressable>
                               <Pressable
                                 onPress={goPdp}
@@ -1311,14 +1496,19 @@ export default function ChatEntryScreen() {
                           style={styles.seeMoreCta}
                           onPress={() => {
                             Haptic.light();
-                            router.push(
-                              `/list?search=${encodeURIComponent(
+                            const sid = sessionIdRef.current;
+                            const qs = [
+                              `search=${encodeURIComponent(
                                 turn.streamSearchId as string,
-                              )}` as never,
-                            );
+                              )}`,
+                              sid ? `session=${encodeURIComponent(sid)}` : "",
+                            ]
+                              .filter(Boolean)
+                              .join("&");
+                            router.push(`/list?${qs}` as never);
                           }}
                         >
-                          <Text style={styles.seeMoreText}>더보기</Text>
+                          <Text style={styles.seeMoreText}>더보기 (15)</Text>
                           <SymbolView
                             name="chevron.right"
                             size={13}
@@ -1490,12 +1680,13 @@ export default function ChatEntryScreen() {
           })}
         </ScrollView>
       ) : (
-        <View style={styles.emptyHero}>
+        // 배경 탭 → 키보드 내리기. emptyHero 자체엔 인터랙션이 없어 안전.
+        <Pressable style={styles.emptyHero} onPress={Keyboard.dismiss}>
           <Text style={styles.emptyHeadline}>
             {emptyGreeting.slice(0, revealedChars)}
             {!typingDone && <Text style={styles.cursor}>▍</Text>}
           </Text>
-        </View>
+        </Pressable>
       )}
 
       {/* Composer — floats over content so chips/input show real glass with
@@ -1864,16 +2055,43 @@ const styles = StyleSheet.create({
     fontFamily: IOSFont.rounded,
     padding: 8,
   },
-  streamPinBtn: {
+  // 카드 우상단 액션 스택. 순서: [체크(anchor), 찜]. PDP 비슷한 카드와
+  // 동일한 체크 UI (다크 서클 + 흰 체크마크).
+  streamCardActions: {
     position: "absolute",
     top: 6,
     right: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  streamCardCheck: {
     width: 22,
     height: 22,
     borderRadius: 11,
-    backgroundColor: "rgba(255,255,255,0.92)",
+    borderWidth: 1.5,
+    borderColor: "rgba(255,255,255,0.95)",
+    backgroundColor: "rgba(0,0,0,0.22)",
     justifyContent: "center",
     alignItems: "center",
+  },
+  streamCardCheckOn: {
+    backgroundColor: IOSColors.label,
+    borderColor: IOSColors.label,
+  },
+  streamCardHeartBtn: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1.5,
+    borderColor: "rgba(255,255,255,0.95)",
+    backgroundColor: "rgba(0,0,0,0.22)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  streamCardHeartBtnOn: {
+    backgroundColor: IOSColors.label,
+    borderColor: IOSColors.label,
   },
   agentRow: {
     flexDirection: "row",
@@ -1892,7 +2110,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 4,
     alignSelf: "flex-start",
-    paddingHorizontal: 8,
+    paddingHorizontal: 4,
     paddingVertical: 6,
     marginTop: 4,
   },

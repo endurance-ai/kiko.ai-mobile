@@ -86,7 +86,12 @@ export default function FeedbackScreen() {
         note: note.trim(),
       });
       Haptic.success();
-      router.dismiss();
+      Alert.alert(
+        "제출이 완료되었어요.",
+        "더 나은 Kiko를 만들기 위한 피드백이 제출되었어요.",
+        [{ text: "확인", onPress: () => router.dismiss() }],
+        { cancelable: false },
+      );
     } catch (e) {
       Haptic.error();
       Alert.alert(

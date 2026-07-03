@@ -76,7 +76,7 @@ export function Banner() {
     <Animated.View style={[styles.wrap, { opacity }]}>
       <GlassSurface
         variant="composer"
-        glassStyle="regular"
+        glassStyle="clear"
         style={styles.card}
       >
         <View style={styles.textCol}>

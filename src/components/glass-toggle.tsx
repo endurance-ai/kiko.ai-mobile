@@ -1,6 +1,13 @@
-import { GlassView } from 'expo-glass-effect';
+import { GlassView, isLiquidGlassAvailable } from 'expo-glass-effect';
 import { useEffect, useRef } from 'react';
-import { Animated, Easing, Pressable, StyleSheet, View } from 'react-native';
+import {
+  Animated,
+  Easing,
+  Pressable,
+  StyleSheet,
+  useColorScheme,
+  View,
+} from 'react-native';
 
 import { Haptic, IOSColors } from '@/constants/ios';
 
@@ -16,7 +23,16 @@ const TRACK_H = 32;
 const THUMB = 26;
 const PADDING = 3;
 
+// iOS 26+ 에선 GlassView 자체가 Liquid Glass 라, on 상태를 tintColor 로
+// 유리에 직접 입혀서 오버레이가 유리를 가리지 않게 한다.
+const LIQUID = isLiquidGlassAvailable();
+
 export function GlassToggle({ value, onValueChange, disabled }: Props) {
+  const scheme = useColorScheme();
+  // clear glass 위에 얹는 on-tint. 라이트모드는 반투명 검정, 다크모드는
+  // 반투명 흰색으로 뒤집어 배경과 뭉치지 않게 한다.
+  const onTint =
+    scheme === 'dark' ? 'rgba(255,255,255,0.28)' : 'rgba(0,0,0,0.18)';
   const x = useRef(new Animated.Value(value ? 1 : 0)).current;
 
   useEffect(() => {
@@ -47,10 +63,16 @@ export function GlassToggle({ value, onValueChange, disabled }: Props) {
       hitSlop={6}
       style={[styles.wrap, disabled && styles.wrapDisabled]}
     >
-      <GlassView glassEffectStyle="clear" style={styles.track}>
-        {/* Translucent tint over the glass — keeps the frosted look on
-            flat solid cards (where pure glass would render as opaque). */}
-        <View style={[styles.tint, value ? styles.tintOn : styles.tintOff]} />
+      <GlassView
+        glassEffectStyle="clear"
+        tintColor={LIQUID && value ? onTint : undefined}
+        isInteractive
+        style={styles.track}
+      >
+        {/* 폴백(iOS 25 이하 / Android)에선 유리가 없으니 tint overlay 로 켜짐 표시 */}
+        {!LIQUID && (
+          <View style={[styles.tint, value ? styles.tintOn : styles.tintOff]} />
+        )}
         <Animated.View
           style={[styles.thumb, { transform: [{ translateX: tx }] }]}
         />
@@ -81,7 +103,6 @@ const styles = StyleSheet.create({
     bottom: 0,
   },
   tintOff: {
-    // systemFill 은 다크모드에서도 인식 가능한 회색 frost.
     backgroundColor: IOSColors.systemFill,
   },
   tintOn: {
