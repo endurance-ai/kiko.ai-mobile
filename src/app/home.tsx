@@ -1174,6 +1174,7 @@ export default function ChatEntryScreen() {
   };
 
   const handlePin = (p: Product) => {
+    if (capLocked) return;
     setPinnedId((prev) => (prev === p.id ? null : p.id));
   };
 
@@ -1437,11 +1438,16 @@ export default function ChatEntryScreen() {
                                   {/* 순서: [체크(anchor pin), 찜] — PDP 와 통일 */}
                                   <Pressable
                                     hitSlop={8}
+                                    disabled={capLocked}
                                     style={[
                                       styles.streamCardCheck,
                                       pinned && styles.streamCardCheckOn,
                                     ]}
                                     onPress={() => {
+                                      // 캡 잠금 상태에선 선택도 무반응 —
+                                      // pinnedAttachment 가 배너 위에 뜨는 걸
+                                      // 원천 차단.
+                                      if (capLocked) return;
                                       Haptic.selection();
                                       setPinnedId((prev) =>
                                         prev === key ? null : key,
@@ -1730,7 +1736,7 @@ export default function ChatEntryScreen() {
             isBusy && styles.composerBusy,
           ]}
         >
-          {pinnedAttachment && (
+          {pinnedAttachment && !capLocked && (
             <View style={styles.attachmentRow}>
               <View style={styles.attachmentChip}>
                 {pinnedAttachment.imageUrl ? (
