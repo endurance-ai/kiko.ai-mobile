@@ -1435,7 +1435,9 @@ export default function ChatEntryScreen() {
                                       name="checkmark"
                                       size={11}
                                       tintColor={
-                                        pinned ? "#FFFFFF" : "rgba(255,255,255,0.7)"
+                                        pinned
+                                          ? IOSColors.systemBackground
+                                          : "rgba(255,255,255,0.7)"
                                       }
                                       weight="bold"
                                     />
@@ -1463,7 +1465,12 @@ export default function ChatEntryScreen() {
                                           : "heart"
                                       }
                                       size={12}
-                                      tintColor="#FFFFFF"
+                                      tintColor={
+                                        productId != null &&
+                                        isWishlisted(String(productId))
+                                          ? IOSColors.systemBackground
+                                          : "rgba(255,255,255,0.85)"
+                                      }
                                       weight="bold"
                                     />
                                   </Pressable>

@@ -326,7 +326,9 @@ export default function ProductDetailScreen() {
                     name="checkmark"
                     size={14}
                     tintColor={
-                      anchorId === mainId ? '#FFFFFF' : 'rgba(255,255,255,0.75)'
+                      anchorId === mainId
+                        ? IOSColors.systemBackground
+                        : 'rgba(255,255,255,0.75)'
                     }
                     weight="bold"
                   />
@@ -344,7 +346,11 @@ export default function ProductDetailScreen() {
                 <SymbolView
                   name={saved ? 'heart.fill' : 'heart'}
                   size={14}
-                  tintColor="#FFFFFF"
+                  tintColor={
+                    saved
+                      ? IOSColors.systemBackground
+                      : 'rgba(255,255,255,0.85)'
+                  }
                   weight="bold"
                 />
               </Pressable>
@@ -649,8 +655,13 @@ function SimilarProducts({
                           <SymbolView
                             name="checkmark"
                             size={11}
+                            // on 상태 bg 는 IOSColors.label (다크모드에선 흰
+                            // 색) 이라 흰 아이콘이 사라짐. systemBackground
+                            // 로 반대색 유지.
                             tintColor={
-                              checked ? "#FFFFFF" : "rgba(255,255,255,0.7)"
+                              checked
+                                ? IOSColors.systemBackground
+                                : "rgba(255,255,255,0.7)"
                             }
                             weight="bold"
                           />
@@ -673,7 +684,11 @@ function SimilarProducts({
                               <SymbolView
                                 name={savedFlag ? 'heart.fill' : 'heart'}
                                 size={11}
-                                tintColor="#FFFFFF"
+                                tintColor={
+                                  savedFlag
+                                    ? IOSColors.systemBackground
+                                    : 'rgba(255,255,255,0.85)'
+                                }
                                 weight="bold"
                               />
                             </Pressable>

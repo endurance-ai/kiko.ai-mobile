@@ -235,7 +235,9 @@ function GridCard({
             <SymbolView
               name={saved ? 'heart.fill' : 'heart'}
               size={12}
-              tintColor="#FFFFFF"
+              tintColor={
+                saved ? IOSColors.systemBackground : 'rgba(255,255,255,0.85)'
+              }
               weight="bold"
             />
           </Pressable>
