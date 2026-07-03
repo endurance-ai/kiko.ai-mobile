@@ -171,14 +171,12 @@ const styles = StyleSheet.create({
   rootLight: { backgroundColor: '#FFFFFF' },
   rootDark: { backgroundColor: '#000' },
   lottie: {
-    // 화면 전체가 아닌 60% 폭만 사용해 로고를 좀 작게. contain 이라 aspect 는
-    // 원본 유지, 세로도 자연스레 함께 줄어듬.
-    width: '60%',
+    width: '70%',
     aspectRatio: 9 / 16,
   },
   word: { flexDirection: 'row' },
   letter: {
-    fontSize: 40,
+    fontSize: 48,
     fontWeight: '800',
     color: '#FFFFFF',
     fontFamily: IOSFont.rounded,
