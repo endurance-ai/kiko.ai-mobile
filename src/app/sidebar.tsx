@@ -371,8 +371,11 @@ export default function SidebarScreen() {
               </ScrollView>
             )}
           </View>
+        </SafeAreaView>
 
-          <SafeAreaView edges={["bottom"]} style={styles.bottomSafe}>
+        {/* 하단 버튼 클러스터는 패널 안에 절대 위치로 얹어, 그 뒤로 세션
+            리스트가 스크롤돼 지나가면서 글래스 아바타에 자연스럽게 비침. */}
+        <SafeAreaView edges={["bottom"]} style={styles.bottomSafe}>
           <View style={styles.bottomRow}>
             <Pressable
               onPress={goProfile}
@@ -402,7 +405,6 @@ export default function SidebarScreen() {
               <Text style={styles.newChatText}>새 채팅</Text>
             </Pressable>
           </View>
-          </SafeAreaView>
         </SafeAreaView>
       </Animated.View>
     </View>
@@ -475,7 +477,9 @@ const styles = StyleSheet.create({
   },
 
   historyList: {
-    paddingBottom: 16,
+    // 하단 버튼이 절대 위치로 얹혀 있으므로, 리스트 끝이 버튼에 안 가리도록
+    // 버튼 클러스터 높이 (∼ 50 + safeArea + row padding) 만큼 여유 확보.
+    paddingBottom: 96,
   },
   historyRow: {
     paddingHorizontal: 12,
@@ -495,7 +499,13 @@ const styles = StyleSheet.create({
     fontWeight: "400",
   },
 
+  // 패널 하단에 절대 위치로 얹혀, 그 뒤로 세션 리스트가 지나갈 수 있도록.
+  // Liquid Glass 아바타에 리스트 아이템이 자연스럽게 비침.
   bottomSafe: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
     paddingHorizontal: 18,
   },
   bottomRow: {
