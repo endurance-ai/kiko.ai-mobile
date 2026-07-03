@@ -5,19 +5,24 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Dimensions,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FLOATING_HEADER_OFFSET, FloatingHeader } from '@/components/floating-header';
+import { GlassSurface } from '@/components/glass-surface';
 import { Haptic, IOSColors, IOSFont, IOSText } from '@/constants/ios';
 import { ApiError } from '@/lib/api';
 import { getResultSetPage } from '@/lib/results';
 import { useBanner } from '@/state/banner';
+import { useCap } from '@/state/cap';
 import { formatPrice } from '@/state/products';
 import { useWishlist } from '@/state/wishlist';
 import type { ResultProduct, ResultSetPageResponse } from '@/types/api';
@@ -34,11 +39,57 @@ export default function ListScreen() {
   const searchId = (params.search as string | undefined) || null;
   const sessionId = (params.session as string | undefined) || null;
   const { show: showBanner } = useBanner();
+  const { locked: capLocked } = useCap();
 
   const [page, setPage] = useState<ResultSetPageResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [loadingMore, setLoadingMore] = useState<boolean>(false);
   const [errored, setErrored] = useState<boolean>(false);
+  const [text, setText] = useState('');
+  // 카드에서 체크한 상품 — PDP 의 anchor 와 동일한 개념. 컴포저에서 send
+  // 하면 이 상품을 pin 으로 실어 홈으로 넘긴다.
+  const [pinnedProductId, setPinnedProductId] = useState<string | null>(null);
+  const canSend = !capLocked && text.trim().length > 0;
+  const items = page?.items ?? [];
+  const pinnedProduct = pinnedProductId
+    ? items.find((p) => String(p.product_id) === pinnedProductId) ?? null
+    : null;
+
+  // 컴포저 send — 리스트 컨텍스트를 통째로 홈에 넘긴다:
+  //   - session: 있으면 기존 스레드 이어감
+  //   - list_search_id: 이번 결과 세트 (홈 → 서버는 향후 이 컨텍스트로 리파인)
+  //   - pin_*: 카드에서 체크한 상품이 있으면 [이 제품 기준] 으로 anchor
+  const handleSend = () => {
+    const trimmed = text.trim();
+    if (!trimmed || capLocked) return;
+    Haptic.medium();
+    setText('');
+    const qs: string[] = [`seed=${encodeURIComponent(trimmed)}`];
+    if (sessionId) qs.push(`session=${encodeURIComponent(sessionId)}`);
+    if (searchId) qs.push(`list_search_id=${encodeURIComponent(searchId)}`);
+    if (pinnedProduct) {
+      const pid = String(pinnedProduct.product_id);
+      qs.push(`pin_id=${encodeURIComponent(pid)}`);
+      qs.push(
+        `pin_label=${encodeURIComponent(pinnedProduct.brand || '선택한 상품')}`,
+      );
+      if (pinnedProduct.image_url)
+        qs.push(`pin_image=${encodeURIComponent(pinnedProduct.image_url)}`);
+      if (pinnedProduct.price != null)
+        qs.push(
+          `pin_price=${encodeURIComponent(
+            String(Math.round(pinnedProduct.price)),
+          )}`,
+        );
+    }
+    router.push(`/home?${qs.join('&')}` as never);
+  };
+
+  const togglePinnedProduct = (productId: string) => {
+    if (capLocked) return;
+    Haptic.selection();
+    setPinnedProductId((prev) => (prev === productId ? null : productId));
+  };
 
   const load = useCallback(async () => {
     if (!searchId) return;
@@ -86,7 +137,6 @@ export default function ListScreen() {
     }
   }, [searchId, page, loadingMore]);
 
-  const items = page?.items ?? [];
   const title = page?.title ?? '검색 결과';
   const count = page?.result_count ?? items.length;
 
@@ -97,10 +147,14 @@ export default function ListScreen() {
           styles.body,
           {
             paddingTop: insets.top + FLOATING_HEADER_OFFSET,
-            paddingBottom: insets.bottom + 24,
+            // 컴포저가 하단에 float 하므로 그리드 마지막 행이 안 가려지게
+            // 여유. safe area + composer(56) + margin ~= 110.
+            paddingBottom: insets.bottom + 110,
           },
         ]}
         onScrollEndDrag={loadMore}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         showsVerticalScrollIndicator={false}
       >
         {searchId && (
@@ -136,14 +190,19 @@ export default function ListScreen() {
 
         {items.length > 0 && (
           <View style={styles.grid}>
-            {items.map((p) => (
-              <GridCard
-                key={p.product_id}
-                product={p}
-                sessionId={sessionId}
-                searchId={searchId}
-              />
-            ))}
+            {items.map((p) => {
+              const pidStr = String(p.product_id);
+              return (
+                <GridCard
+                  key={p.product_id}
+                  product={p}
+                  sessionId={sessionId}
+                  searchId={searchId}
+                  pinned={pinnedProductId === pidStr}
+                  onTogglePin={() => togglePinnedProduct(pidStr)}
+                />
+              );
+            })}
           </View>
         )}
 
@@ -155,6 +214,74 @@ export default function ListScreen() {
       </ScrollView>
 
       <FloatingHeader title="리스트" />
+
+      {/* Composer — 홈/PDP 와 같은 하단 float. 세션 컨텍스트를 유지하면서
+          검색 결과 리스트를 보면서 이어서 쿼리할 수 있게 한다. */}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.composerFloat}
+        pointerEvents="box-none"
+      >
+        <View style={[styles.composerWrap, { paddingBottom: insets.bottom + 12 }]}>
+          {pinnedProduct && !capLocked && (
+            <View style={styles.pinChipRow}>
+              <View style={styles.pinChip}>
+                {pinnedProduct.image_url ? (
+                  <Image
+                    source={pinnedProduct.image_url}
+                    style={styles.pinThumb}
+                    contentFit="cover"
+                  />
+                ) : (
+                  <View style={[styles.pinThumb, styles.thumbFallback]} />
+                )}
+                <Text style={styles.pinLabel} numberOfLines={1}>
+                  {pinnedProduct.brand || '선택한 상품'}
+                </Text>
+                <Pressable
+                  hitSlop={6}
+                  onPress={() => setPinnedProductId(null)}
+                >
+                  <SymbolView
+                    name="xmark.circle.fill"
+                    size={18}
+                    tintColor={IOSColors.tertiaryLabel}
+                  />
+                </Pressable>
+              </View>
+            </View>
+          )}
+          <GlassSurface variant="composer" style={styles.composer}>
+            <TextInput
+              value={text}
+              onChangeText={setText}
+              placeholder={
+                capLocked
+                  ? '오늘 사용량이 다 소진됐어요'
+                  : '이 리스트에서 이어서 찾아볼까?'
+              }
+              placeholderTextColor={IOSColors.placeholderText}
+              style={styles.input}
+              returnKeyType="send"
+              onSubmitEditing={handleSend}
+              editable={!capLocked}
+            />
+            <Pressable
+              hitSlop={6}
+              disabled={!canSend}
+              style={[styles.sendBtn, !canSend && styles.sendBtnDisabled]}
+              onPress={handleSend}
+            >
+              <SymbolView
+                name="arrow.up"
+                size={18}
+                tintColor={IOSColors.systemBackground}
+                weight="bold"
+              />
+            </Pressable>
+          </GlassSurface>
+        </View>
+      </KeyboardAvoidingView>
     </View>
   );
 }
@@ -163,33 +290,18 @@ function GridCard({
   product,
   sessionId,
   searchId,
+  pinned,
+  onTogglePin,
 }: {
   product: ResultProduct;
   sessionId: string | null;
   searchId: string | null;
+  pinned: boolean;
+  onTogglePin: () => void;
 }) {
   const { isSaved, toggle: toggleSaved } = useWishlist();
   const productIdStr = String(product.product_id);
   const saved = isSaved(productIdStr);
-  // 리스트 카드에서 체크 = 이 상품을 anchor 로 잡고 홈 컴포저로 이동해 다음
-  // 채팅 메시지를 이 상품 기준으로 이어가게 한다. PDP 의 '이 제품 기준' 과
-  // 동일한 pin 흐름. session 이 있으면 같이 붙여 기존 대화 흐름 유지.
-  const pinAsAnchor = () => {
-    Haptic.selection();
-    const params: string[] = [];
-    if (sessionId) params.push(`session=${encodeURIComponent(sessionId)}`);
-    if (product.image_url)
-      params.push(`pin_image=${encodeURIComponent(product.image_url)}`);
-    params.push(`pin_id=${encodeURIComponent(productIdStr)}`);
-    params.push(
-      `pin_label=${encodeURIComponent(product.brand || '선택한 상품')}`,
-    );
-    if (product.price != null)
-      params.push(
-        `pin_price=${encodeURIComponent(String(Math.round(product.price)))}`,
-      );
-    router.push(`/home?${params.join('&')}` as never);
-  };
   const openPdp = () => {
     Haptic.light();
     const qs = [
@@ -216,11 +328,17 @@ function GridCard({
           <View style={[styles.fill, styles.thumbFallback]} />
         )}
         <View style={styles.cardActions}>
-          <Pressable hitSlop={8} style={styles.checkBtn} onPress={pinAsAnchor}>
+          <Pressable
+            hitSlop={8}
+            style={[styles.checkBtn, pinned && styles.checkBtnOn]}
+            onPress={onTogglePin}
+          >
             <SymbolView
               name="checkmark"
               size={11}
-              tintColor="rgba(255,255,255,0.7)"
+              tintColor={
+                pinned ? IOSColors.systemBackground : 'rgba(255,255,255,0.7)'
+              }
               weight="bold"
             />
           </Pressable>
@@ -330,6 +448,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  checkBtnOn: {
+    backgroundColor: IOSColors.label,
+    borderColor: IOSColors.label,
+  },
   heartBtn: {
     width: 22,
     height: 22,
@@ -377,5 +499,73 @@ const styles = StyleSheet.create({
   footerLoad: {
     paddingVertical: 20,
     alignItems: 'center',
+  },
+
+  // ── Composer (하단 float) ─────────────────────────────────────
+  composerFloat: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 40,
+  },
+  composerWrap: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    gap: 10,
+  },
+  // pin chip (선택된 상품 프리뷰) — 컴포저 바로 위. 홈의 pinnedAttachment 와
+  // 동일 스타일 언어.
+  pinChipRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 4,
+  },
+  pinChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingLeft: 6,
+    paddingRight: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: IOSColors.tertiarySystemBackground,
+  },
+  pinThumb: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+  },
+  pinLabel: {
+    ...IOSText.footnote,
+    fontWeight: '500',
+    color: IOSColors.label,
+    fontFamily: IOSFont.sans,
+    maxWidth: 160,
+  },
+  composer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 56,
+    borderRadius: 28,
+    paddingLeft: 16,
+    paddingRight: 6,
+    overflow: 'hidden',
+  },
+  input: {
+    flex: 1,
+    ...IOSText.body,
+    color: IOSColors.label,
+    fontFamily: IOSFont.sans,
+  },
+  sendBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: IOSColors.label,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  sendBtnDisabled: {
+    backgroundColor: IOSColors.systemGray3,
   },
 });

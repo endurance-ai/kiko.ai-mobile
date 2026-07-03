@@ -19,6 +19,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { GlassSurface } from '@/components/glass-surface';
 import { Haptic, IOSColors, IOSFont, IOSText } from '@/constants/ios';
+import { trackEvent } from '@/lib/analytics';
 import { ApiError } from '@/lib/api';
 import { checkProductLink, getProduct, recordProductView } from '@/lib/products';
 import { useCap } from '@/state/cap';
@@ -195,7 +196,12 @@ export default function ProductDetailScreen() {
     void recordProductView(product.id, { session_id: session }).catch(() => {
       // 24h dedup or transient failure — silent
     });
-  }, [product, session]);
+    trackEvent("product_view", {
+      product_id: String(product.id),
+      brand: product.brand,
+      search_id: search_id ?? null,
+    });
+  }, [product, session, search_id]);
 
   // Background link-check — dead-link / 404 catches stale catalog rows so we
   // don't dump users into a broken external page. Fail-open: leave the CTA
@@ -245,10 +251,16 @@ export default function ProductDetailScreen() {
     // Prefer the freshness-checked alternative when the original is dead.
     const target =
       linkAlive === false && alternativeUrl ? alternativeUrl : product?.product_url;
-    if (!target) return;
+    if (!target || !product) return;
     Haptic.medium();
+    // 기획 스펙: outbound_click — session_id, user_id, product_id 필수.
+    trackEvent("outbound_click", {
+      session_id: session ?? null,
+      product_id: String(product.id),
+      alternative_used: linkAlive === false && !!alternativeUrl,
+    });
     await Linking.openURL(target);
-  }, [product, linkAlive, alternativeUrl]);
+  }, [product, linkAlive, alternativeUrl, session]);
 
   // 비슷한 카드 / 메인 이미지의 체크박스 탭 → anchor 를 해당 id 로 교체.
   // 이미 anchor 인 항목을 다시 탭하면 메인 상품으로 되돌린다.

@@ -10,6 +10,7 @@ import {
   useState,
 } from 'react';
 
+import { identifyUser, resetAnalytics } from '@/lib/analytics';
 import { api, registerAuthHooks } from '@/lib/api';
 import type {
   AccessTokenResponse,
@@ -54,6 +55,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUserId(tokens.user_id);
       await writeRefreshToken(tokens.refresh_token);
       await SecureStore.setItemAsync(USER_ID_KEY, tokens.user_id);
+      identifyUser(tokens.user_id);
       setStatus('authenticated');
     },
     [],
@@ -64,6 +66,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUserId(null);
     await clearRefreshToken();
     await SecureStore.deleteItemAsync(USER_ID_KEY);
+    resetAnalytics();
     setStatus('unauthenticated');
   }, []);
 
@@ -116,6 +119,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         accessTokenRef.current = res.access_token;
         const storedUserId = await SecureStore.getItemAsync(USER_ID_KEY);
         setUserId(storedUserId);
+        if (storedUserId) identifyUser(storedUserId);
         setStatus('authenticated');
       } catch {
         if (!cancelled) await clearSession();
