@@ -539,7 +539,7 @@ const styles = StyleSheet.create({
   },
   newChatText: {
     ...IOSText.body,
-    fontWeight: "700",
+    fontWeight: "400",
     color: IOSColors.systemBackground,
     fontFamily: IOSFont.sans,
   },
