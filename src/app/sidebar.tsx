@@ -13,7 +13,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  UIManager,
   useColorScheme,
   useWindowDimensions,
   View,
@@ -22,32 +21,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { GlassSurface } from "@/components/glass-surface";
 import { Haptic, IOSColors, IOSFont, IOSText } from "@/constants/ios";
-
-// expo-linear-gradient 는 dev client 에 링크가 없을 수 있어 native view
-// manager 존재 여부를 먼저 확인. 없으면 폴백으로 solid 반투명 흰 View.
-type LinearGradientModule = {
-  LinearGradient: React.ComponentType<{
-    colors: readonly string[];
-    locations?: readonly number[];
-    style?: object;
-    start?: { x: number; y: number };
-    end?: { x: number; y: number };
-    pointerEvents?: "none" | "auto" | "box-none";
-  }>;
-};
-let LinearGradient: LinearGradientModule["LinearGradient"] | null = null;
-if (
-  typeof UIManager.hasViewManagerConfig === "function" &&
-  UIManager.hasViewManagerConfig("BVLinearGradient")
-) {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    LinearGradient = (require("expo-linear-gradient") as LinearGradientModule)
-      .LinearGradient;
-  } catch {
-    LinearGradient = null;
-  }
-}
 import { ApiError } from "@/lib/api";
 import { deleteSession, listSessions, renameSession } from "@/lib/chat";
 import { getMe } from "@/lib/me";
@@ -400,23 +373,6 @@ export default function SidebarScreen() {
           </View>
         </SafeAreaView>
 
-        {/* 하단 버튼 뒤의 흰 gradient — 위쪽은 완전 투명, 아래쪽은 거의
-            불투명하게 자연스럽게 fade. LinearGradient 미링크 시 solid 폴백. */}
-        {LinearGradient ? (
-          <LinearGradient
-            pointerEvents="none"
-            colors={[
-              "rgba(255,255,255,0)",
-              "rgba(255,255,255,0.5)",
-              "rgba(255,255,255,0.9)",
-            ]}
-            locations={[0, 0.55, 1]}
-            style={styles.bottomFade}
-          />
-        ) : (
-          <View style={styles.bottomFade} pointerEvents="none" />
-        )}
-
         {/* 하단 버튼 클러스터는 패널 안에 절대 위치로 얹어, 그 뒤로 세션
             리스트가 스크롤돼 지나가면서 글래스 아바타에 자연스럽게 비침. */}
         <SafeAreaView edges={["bottom"]} style={styles.bottomSafe}>
@@ -551,17 +507,6 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     paddingHorizontal: 18,
-  },
-  // 흰 gradient (또는 폴백 solid) — 버튼 클러스터 뒤에 깔려서 스크롤 리스
-  // 트가 지나갈 때 위→아래로 자연스럽게 흐릿해지도록. 폴백은 solid 반투명.
-  bottomFade: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: 150,
-    // 폴백용 solid — LinearGradient 가 활성화되면 이 배경은 gradient 로 덮임.
-    backgroundColor: "rgba(255,255,255,0.72)",
   },
   bottomRow: {
     flexDirection: "row",
