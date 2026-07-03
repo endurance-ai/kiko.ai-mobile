@@ -322,7 +322,14 @@ export default function ChatEntryScreen() {
   // 히 도는 케이스가 있어, 클라이언트에서 강제 타임아웃을 건다. 이벤트가
   // 올 때마다 리셋 → 타임아웃 발동 시 스트림 취소 + 실패 처리 + 배너.
   const streamTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const STREAM_STALL_MS = 8_000; // 8s — 이벤트 없이 8초 조용하면 취소
+  // Stall timeout — 이벤트 없이 조용하면 스트림 취소.
+  //   텍스트만: 10s (검색 RPC + diversify 만)
+  //   이미지/URL: 20s (link_resolver → vision LLM → search → diversify)
+  // URL/이미지 케이스는 서버가 vision 단계에서 몇 초 조용해질 수 있어 여유
+  // 필요. 두 값은 아래 runStreamingTurn 에서 attachment/URL 유무로 골라씀.
+  const STREAM_STALL_MS_TEXT = 10_000;
+  const STREAM_STALL_MS_MEDIA = 20_000;
+  const URL_RE = /https?:\/\/\S+/i;
   // Latest daily-cap meta from the most recent `session` event. Kept around
   // 캡 상태는 CapProvider 에 위임 (홈/기존 채팅방 모두 공유). locked 는
   // 어떤 화면에서 소진 이벤트를 받았든 앱 전체에 즉시 반영된다.
@@ -753,6 +760,17 @@ export default function ChatEntryScreen() {
     // Explicit override wins (e.g. handoff from PDP). Otherwise use the
     // currently-pinned product from the composer.
     const attachment = overrideAttachment ?? pinnedAttachment;
+    // 서버가 vision + link_resolve 를 거치는 케이스는 첫 이벤트까지 10s
+    // 넘게 걸릴 수 있어 stall 임계치를 20s 로 늘린다. 순수 텍스트 검색은
+    // 10s 유지 (embedding + search RPC 만).
+    const hasMediaOrUrl =
+      Boolean(imagePayload?.serverImageUrl) ||
+      Boolean(imagePayload?.localImageUri) ||
+      Boolean(attachment?.imageUrl) ||
+      URL_RE.test(trimmed);
+    const stallMs = hasMediaOrUrl
+      ? STREAM_STALL_MS_MEDIA
+      : STREAM_STALL_MS_TEXT;
     const turnId = nextIdRef.current++;
     const turn: Turn = {
       id: turnId,
@@ -867,7 +885,7 @@ export default function ChatEntryScreen() {
     };
     const bumpTimeout = () => {
       killTimeout();
-      streamTimeoutRef.current = setTimeout(fireStall, STREAM_STALL_MS);
+      streamTimeoutRef.current = setTimeout(fireStall, stallMs);
     };
 
     const handlers = {
@@ -1128,7 +1146,12 @@ export default function ChatEntryScreen() {
     };
     const bumpCbTimeout = () => {
       killCbTimeout();
-      streamTimeoutRef.current = setTimeout(fireCbStall, STREAM_STALL_MS);
+      // callback 스트림은 이전 턴 컨텍스트 재개라 vision 이 다시 돌지는 않지만,
+      // agent 가 refine_search 등으로 서너 초 걸릴 수 있어 넉넉한 20s 로 통일.
+      streamTimeoutRef.current = setTimeout(
+        fireCbStall,
+        STREAM_STALL_MS_MEDIA,
+      );
     };
     bumpCbTimeout();
 

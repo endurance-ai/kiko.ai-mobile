@@ -164,7 +164,12 @@ export default function ChatDetailScreen() {
 
   const streamRef = useRef<ChatStreamController | null>(null);
   const streamTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const STREAM_STALL_MS = 8_000;
+  // Stall timeout — 이벤트 없이 조용하면 스트림 취소.
+  //   텍스트만: 10s (검색 RPC + diversify 만)
+  //   URL 포함: 20s (link_resolver → vision LLM → search → diversify)
+  const STREAM_STALL_MS_TEXT = 10_000;
+  const STREAM_STALL_MS_MEDIA = 20_000;
+  const URL_RE = /https?:\/\/\S+/i;
 
   useEffect(() => {
     return () => {
@@ -228,9 +233,12 @@ export default function ChatDetailScreen() {
           },
         });
       };
+      const stallMs = URL_RE.test(trimmed)
+        ? STREAM_STALL_MS_MEDIA
+        : STREAM_STALL_MS_TEXT;
       const bumpTimeout = () => {
         killTimeout();
-        streamTimeoutRef.current = setTimeout(fireStall, STREAM_STALL_MS);
+        streamTimeoutRef.current = setTimeout(fireStall, stallMs);
       };
       bumpTimeout();
 
