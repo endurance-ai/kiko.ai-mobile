@@ -17,7 +17,6 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Banner } from '@/components/banner';
 import { GlassSurface } from '@/components/glass-surface';
 import { Haptic, IOSColors, IOSFont, IOSText } from '@/constants/ios';
 import { ApiError } from '@/lib/api';
@@ -459,7 +458,8 @@ export default function ProductDetailScreen() {
           pointerEvents="box-none"
         >
           <View style={[styles.composerWrap, { paddingBottom: insets.bottom + 12 }]}>
-            <Banner />
+            {/* 캡 배너는 상세 페이지에서 노출 X — 홈/기존 채팅에서만 안내.
+                여기선 컴포저만 잠기고 배너는 보이지 않도록. */}
             {/* 항상 1 Row 유지. 브랜드가 길면 말줄임표, 그래도 넘치면
                 가로 스크롤로 흐르게 한다. */}
             <ScrollView
