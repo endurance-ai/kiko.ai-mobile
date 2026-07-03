@@ -87,8 +87,7 @@
       ]
     ],
     "experiments": {
-      "typedRoutes": true,
-      "reactCompiler": true
+      "typedRoutes": true
     },
     "extra": {
       "apiBaseUrl": "https://dev-ai.kikoai.me",
