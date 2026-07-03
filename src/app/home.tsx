@@ -681,6 +681,7 @@ export default function ChatEntryScreen() {
           subtitle: isTooLarge
             ? "1MB 이하로 줄여서 다시 시도해주세요."
             : "잠시 후 다시 시도해주세요.",
+          autoDismissMs: 4000,
         });
         return;
       }
