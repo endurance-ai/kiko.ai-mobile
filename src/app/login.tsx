@@ -22,7 +22,6 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { GlassSurface } from '@/components/glass-surface';
 import { Haptic } from '@/constants/ios';
 import { ApiError } from '@/lib/api';
 import { useAuth } from '@/state/auth';
@@ -216,18 +215,12 @@ function MarqueeRow({
     return () => loop.stop();
   }, [halfWidth, direction, durationMs, translateX]);
 
-  // Liquid Glass on iOS 26+ — GlassSurface with bordered={false} forces
-  // glassStyle='clear' so the chip reads as a floating bubble on the
-  // peach gradient. On older iOS the fallback is a transparent View.
+  // 버블 배경 (유리 / 흰 상자 등) 없이 브랜드 워드마크 텍스트만 그라디언트
+  // 위를 지나가게 한다.
   const renderChip = (chip: Chip, idx: number) => (
-    <GlassSurface
-      key={`${chip.label}-${idx}`}
-      variant="pill"
-      bordered={false}
-      style={styles.chip}
-    >
+    <View key={`${chip.label}-${idx}`} style={styles.chip}>
       <Text style={[styles.chipText, chipTextStyle(chip.s)]}>{chip.label}</Text>
-    </GlassSurface>
+    </View>
   );
 
   return (
