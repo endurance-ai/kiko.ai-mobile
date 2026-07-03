@@ -32,7 +32,7 @@ import {
   sendCallbackStream,
   sendMessageStream,
 } from "@/lib/chat";
-import { trackEvent } from "@/lib/analytics";
+import { FREE_LIMIT_VERSION, trackEvent } from "@/lib/analytics";
 import { ApiError } from "@/lib/api";
 import { getMe } from "@/lib/me";
 import { stripFamilyName } from "@/lib/name";
@@ -304,6 +304,14 @@ export default function ChatEntryScreen() {
   const scrollRef = useRef<ScrollView | null>(null);
   const nextIdRef = useRef(1);
   const sessionIdRef = useRef<string | null>(null);
+  // 스레드 내 유저 쿼리 카운터 — 앰플리튜드 search_query 이벤트에 함께
+  // 실어보내 성공률/이탈 지점을 세그먼트 별로 볼 수 있게 한다. 새 세션
+  // 시작 시 0 으로 리셋.
+  const queryIndexRef = useRef(0);
+  // 이번 앱 라이프사이클에서 첫 번째 스레드인지 여부를 대략 판단하는 플래그.
+  // 세션 로딩 시 활성 세션이 하나도 없었으면 true. thread_start 이벤트의
+  // is_new_user 프로퍼티로 실어 이후 코호트 세그멘테이션에 사용.
+  const threadStartFiredRef = useRef(false);
   const streamRef = useRef<ChatStreamController | null>(null);
   // 스트림이 마지막 이벤트 이후 아무 응답도 없이 오래 걸리면 스피너가 무한
   // 히 도는 케이스가 있어, 클라이언트에서 강제 타임아웃을 건다. 이벤트가
@@ -660,7 +668,12 @@ export default function ChatEntryScreen() {
     const hasImage = pickedImage !== null;
     Haptic.medium();
     lastSendFromCritiqueRef.current = false;
-    trackEvent("chat_send", {
+    // 기획 스펙: search_query — thread_id, user_id, query_index 필수.
+    // (user_id 는 analytics 헬퍼가 자동 첨부).
+    queryIndexRef.current += 1;
+    trackEvent("search_query", {
+      thread_id: sessionIdRef.current,
+      query_index: queryIndexRef.current,
       has_image: hasImage,
       has_pinned_product: pinnedId != null,
       char_len: trimmed.length,
@@ -854,7 +867,25 @@ export default function ChatEntryScreen() {
     const handlers = {
       onSession: (sessionId: string, cap?: CapMeta) => {
         bumpTimeout();
+        const wasNewThread = sessionIdRef.current !== sessionId;
         sessionIdRef.current = sessionId;
+        if (wasNewThread && !threadStartFiredRef.current) {
+          // 이번 로그인 후 첫 스레드면 is_new_user=true 로 태그.
+          const isNewUser = messages.length === 0;
+          threadStartFiredRef.current = true;
+          queryIndexRef.current = 0;
+          trackEvent("thread_start", {
+            thread_id: sessionId,
+            is_new_user: isNewUser,
+          });
+        } else if (wasNewThread) {
+          // 두 번째 이후 스레드도 카운터 리셋.
+          queryIndexRef.current = 0;
+          trackEvent("thread_start", {
+            thread_id: sessionId,
+            is_new_user: false,
+          });
+        }
         if (cap) {
           applyCapMeta(cap);
           if (cap.cap_remaining <= 0) {
@@ -924,10 +955,15 @@ export default function ChatEntryScreen() {
         patch(() => ({ streamDone: true, status: "results" as const }));
         streamRef.current = null;
         Haptic.warning();
-        trackEvent("cap_reached", {
+        // 기획 스펙: cap_banner_shown — cum_success_sessions, total_threads,
+        // free_limit_version 필수. cum_success_sessions 는 서버 cap.used 로,
+        // total_threads 는 유저 전체 스레드 수 (프론트가 정확히 몰라 서버
+        // 이벤트 payload 로 대체 — 추후 서버 확장).
+        trackEvent("cap_banner_shown", {
           user_tier: info.user_tier,
-          used: info.used,
-          cap: info.cap,
+          cum_success_sessions: info.used,
+          total_threads: info.used,
+          free_limit_version: FREE_LIMIT_VERSION,
         });
         // 앱 전역 캡 상태 잠금 (context 가 reset_at 까지 unlock 타이머도 관리).
         markCapReached(info);

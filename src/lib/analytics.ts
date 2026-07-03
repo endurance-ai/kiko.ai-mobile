@@ -13,7 +13,14 @@ import { SessionReplayPlugin } from '@amplitude/plugin-session-replay-react-nati
 // SDK key 는 원래 노출 대상이라 안전. 서버 API key 는 별개.
 const KEY = process.env.EXPO_PUBLIC_AMPLITUDE_API_KEY;
 
+// 자유 제한 정책 버전 — 기획자 이벤트 스펙에 free_limit_version 이 필수.
+// 정책 바꿀 때 이 값을 올려 코호트 분석에 반영.
+export const FREE_LIMIT_VERSION = "v1";
+
 let initialized = false;
+// setUserId 는 SDK 안에 저장되지만 매 이벤트 프로퍼티에도 user_id 를 실어
+// 달라는 요구가 있어 편의상 module-level 캐시로 유지. resetAnalytics 시 해제.
+let cachedUserId: string | null = null;
 
 /** 앱 부팅 시 한 번 호출. 키가 없거나 실패해도 조용히 pass. */
 export async function initAnalytics(): Promise<void> {
@@ -43,6 +50,7 @@ export function identifyUser(
   userId: string,
   traits?: Record<string, unknown>,
 ): void {
+  cachedUserId = userId;
   if (!initialized) return;
   try {
     setUserId(userId);
@@ -65,6 +73,7 @@ export function identifyUser(
 
 /** 로그아웃 시 호출 — 세션 / 유저 식별자 초기화. */
 export function resetAnalytics(): void {
+  cachedUserId = null;
   if (!initialized) return;
   try {
     reset();
@@ -73,14 +82,20 @@ export function resetAnalytics(): void {
   }
 }
 
-/** 이벤트 트래킹 — 실패해도 조용히 무시. */
+/** 이벤트 트래킹 — user_id 는 매 이벤트 프로퍼티에 자동 첨부.
+ * 실패해도 조용히 무시. */
 export function trackEvent(
   name: string,
   props?: Record<string, unknown>,
 ): void {
   if (!initialized) return;
   try {
-    track(name, props);
+    const payload: Record<string, unknown> = {
+      ts: Date.now(),
+      ...(cachedUserId ? { user_id: cachedUserId } : {}),
+      ...(props ?? {}),
+    };
+    track(name, payload);
   } catch {
     // silent
   }

@@ -17,6 +17,7 @@ import {
   FloatingHeader,
 } from "@/components/floating-header";
 import { IOSColors, IOSFont, IOSText } from "@/constants/ios";
+import { trackEvent } from "@/lib/analytics";
 import { getNotifications, updateNotifications } from "@/lib/devices";
 import type { NotificationCategories } from "@/types/api";
 
@@ -109,6 +110,8 @@ export default function NotificationsScreen() {
   // 알림 권한이 있어야 하고 (미결정이면 요청, 거부돼있으면 설정 앱으로 딥링크),
   // 끌 땐 그냥 서버 상태만 반영.
   const onMarketingChange = async (v: boolean) => {
+    // 기획 스펙: notification_signup_tap — tapped=true/false (turn on / off).
+    trackEvent("notification_signup_tap", { tapped: v });
     if (!v) {
       setMarketing(false);
       void persist({ release_alerts: false });
@@ -118,6 +121,7 @@ export default function NotificationsScreen() {
     if (current.status === "granted") {
       setMarketing(true);
       void persist({ release_alerts: true });
+      trackEvent("notification_signup_complete", { contact_type: "push" });
       return;
     }
     if (current.status === "undetermined" || current.canAskAgain) {
@@ -127,6 +131,7 @@ export default function NotificationsScreen() {
       if (next.status === "granted") {
         setMarketing(true);
         void persist({ release_alerts: true });
+        trackEvent("notification_signup_complete", { contact_type: "push" });
       }
       return;
     }
