@@ -9,7 +9,6 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "bundleIdentifier": "com.kikoai.app",
-      "icon": "./assets/expo.icon",
       "usesAppleSignIn": true,
       "infoPlist": {
         "CFBundleURLTypes": [
