@@ -281,15 +281,15 @@ export default function SidebarScreen() {
     me?.email?.charAt(0).toUpperCase() ||
     me?.provider?.charAt(0).toUpperCase() ||
     "?";
-  // Auto-scale: longer text → smaller glyph so it fits the 44pt circle.
+  // Auto-scale: longer text → smaller glyph so it fits the 56pt circle.
   const avatarFontSize =
     avatarLabelText.length >= 4
-      ? 10
+      ? 12
       : avatarLabelText.length === 3
-        ? 12
+        ? 15
         : avatarLabelText.length === 2
-          ? 14
-          : 18;
+          ? 18
+          : 22;
   const avatarLabel = displayName || me?.email?.split("@")[0] || "프로필";
 
   return (
@@ -389,7 +389,7 @@ export default function SidebarScreen() {
               <Pressable style={styles.newChatBtn} onPress={goNewChat}>
                 <SymbolView
                   name="plus"
-                  size={14}
+                  size={18}
                   tintColor={IOSColors.systemBackground}
                   weight="bold"
                 />
@@ -499,10 +499,12 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingVertical: 12,
   },
+  // 홈 컴포저 (height 56, borderRadius 28) 와 동일한 높이/각을 맞춰 시각
+  // 밸런스 유지. 원형 avatar 는 지름 = height.
   avatarBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: IOSColors.systemBackground,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: IOSColors.separator,
@@ -524,9 +526,9 @@ const styles = StyleSheet.create({
   newChatBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 18,
-    height: 44,
+    gap: 8,
+    paddingHorizontal: 22,
+    height: 56,
     borderRadius: 999,
     backgroundColor: IOSColors.label,
     shadowColor: "#000",
@@ -536,7 +538,7 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   newChatText: {
-    ...IOSText.subhead,
+    ...IOSText.body,
     fontWeight: "700",
     color: IOSColors.systemBackground,
     fontFamily: IOSFont.sans,
