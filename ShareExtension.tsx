@@ -23,7 +23,12 @@ export default function ShareExtension({ url, text, images }: InitialProps) {
       return;
     }
     // openHostApp 는 우리가 준 path 를 앱 scheme 뒤에 붙여 그대로 연다.
+    // v6 에선 자동으로 확장이 dismiss 되지 않는 케이스가 있어서 명시적으로
+    // close() 를 살짝 뒤에 호출해 안전망을 둔다.
     openHostApp(`share?${params.join('&')}`);
+    setTimeout(() => {
+      close();
+    }, 300);
   }, [url, text, images]);
 
   return (

@@ -1,5 +1,5 @@
-import { useRouter } from 'expo-router';
 import * as Linking from 'expo-linking';
+import { useRouter } from 'expo-router';
 import { useEffect } from 'react';
 
 /**
@@ -20,11 +20,16 @@ export function useShareIntent(): void {
 
   useEffect(() => {
     const handleUrl = (rawUrl: string | null | undefined) => {
+      console.log('[useShareIntent] handleUrl:', rawUrl);
       if (!rawUrl) return;
       const parsed = Linking.parse(rawUrl);
+      console.log('[useShareIntent] parsed:', JSON.stringify(parsed));
       // scheme 은 무시하고 path 만 본다 — kikoaimobile://share, 또는
       // Universal Link 로 왔을 때도 동일 hostname/path 규칙 적용.
-      if (parsed.hostname !== 'share' && parsed.path !== 'share') return;
+      if (parsed.hostname !== 'share' && parsed.path !== 'share') {
+        console.log('[useShareIntent] skipped: not a share URL');
+        return;
+      }
       const params = parsed.queryParams ?? {};
       const url = typeof params.url === 'string' ? params.url : undefined;
       const text = typeof params.text === 'string' ? params.text : undefined;
@@ -36,19 +41,32 @@ export function useShareIntent(): void {
       const seed =
         text ||
         (url ? `이거랑 비슷한 거 찾아줘\n${url}` : '이거랑 비슷한 거 찾아줘');
-      router.push({
-        pathname: '/home',
-        params: {
-          seed,
-          ...(image ? { pin_image: image, pin_label: '공유한 상품' } : {}),
-        },
-      });
+      console.log('[useShareIntent] routing to /home with seed:', seed);
+      // replace 로 하면 뒤로가기 스택이 깨끗해짐. 라우터 초기화 타이밍
+      // 이슈를 피하려고 다음 tick 으로 살짝 지연.
+      setTimeout(() => {
+        try {
+          router.replace({
+            pathname: '/home',
+            params: {
+              seed,
+              ...(image ? { pin_image: image, pin_label: '공유한 상품' } : {}),
+            },
+          });
+        } catch (err) {
+          console.log('[useShareIntent] router.replace failed:', err);
+        }
+      }, 100);
     };
 
     // 콜드 스타트: 딥링크로 앱이 뜨는 케이스.
-    void Linking.getInitialURL().then(handleUrl);
+    void Linking.getInitialURL().then((initial) => {
+      console.log('[useShareIntent] getInitialURL:', initial);
+      handleUrl(initial);
+    });
     // 앱이 이미 떠 있을 때: 수신 리스너.
     const sub = Linking.addEventListener('url', (event) => {
+      console.log('[useShareIntent] url event:', event.url);
       handleUrl(event.url);
     });
     return () => sub.remove();
