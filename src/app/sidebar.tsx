@@ -320,9 +320,6 @@ export default function SidebarScreen() {
           },
         ]}
       >
-        {/* 상단 (로고 + 세션 리스트) 만 흰 배경. 하단 버튼 영역은 이 밖으로
-            나가 있어 dim 처리된 홈 위에 그대로 뜬다. */}
-        <View style={styles.topFill}>
         <SafeAreaView edges={["top"]} style={styles.panelInner}>
           <View style={styles.body}>
             <ExpoImage
@@ -374,10 +371,8 @@ export default function SidebarScreen() {
               </ScrollView>
             )}
           </View>
-        </SafeAreaView>
-        </View>
 
-        <SafeAreaView edges={["bottom"]} style={styles.bottomSafe}>
+          <SafeAreaView edges={["bottom"]} style={styles.bottomSafe}>
           <View style={styles.bottomRow}>
             <Pressable
               onPress={goProfile}
@@ -407,6 +402,7 @@ export default function SidebarScreen() {
               <Text style={styles.newChatText}>새 채팅</Text>
             </Pressable>
           </View>
+          </SafeAreaView>
         </SafeAreaView>
       </Animated.View>
     </View>
@@ -430,21 +426,13 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     bottom: 0,
-    // 컨테이너는 투명 — 흰 배경은 topFill 만 담당하므로 하단 버튼 영역은
-    // 자연스레 dim 처리된 홈 위에 뜬다.
-    backgroundColor: "transparent",
-    borderRadius: 50,
-  },
-  // 상단(로고+세션 리스트) 영역만 흰 배경. flex:1 로 하단 버튼 만큼을
-  // 제외한 나머지 세로 공간을 채운다.
-  topFill: {
-    flex: 1,
     backgroundColor: IOSColors.systemBackground,
     shadowColor: "#000",
     shadowOffset: { width: 2, height: 0 },
     shadowOpacity: 0.18,
     shadowRadius: 16,
     elevation: 16,
+    borderRadius: 50,
   },
   panelInner: { flex: 1 },
 
