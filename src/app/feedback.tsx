@@ -14,6 +14,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Haptic, IOSColors, IOSFont, IOSText } from "@/constants/ios";
+import { trackEvent } from "@/lib/analytics";
 import { ApiError } from "@/lib/api";
 import { submitFeedback } from "@/lib/feedback";
 import {
@@ -84,6 +85,12 @@ export default function FeedbackScreen() {
         rating,
         reasons: picked,
         note: note.trim(),
+      });
+      trackEvent("feedback_submit", {
+        rating,
+        reasons: picked,
+        has_note: note.trim().length > 0,
+        search_id: searchId ?? null,
       });
       Haptic.success();
       Alert.alert(

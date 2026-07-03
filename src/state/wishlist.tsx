@@ -9,6 +9,7 @@ import {
   useState,
 } from 'react';
 
+import { trackEvent } from '@/lib/analytics';
 import { addSave, listSaves, removeSave } from '@/lib/saves';
 import type { SaveListItem } from '@/types/api';
 
@@ -64,6 +65,7 @@ export function WishlistProvider({ children }: { children: ReactNode }) {
 
       if (existing) {
         // Optimistic remove
+        trackEvent("wishlist_remove", { product_id: productId });
         const snapshot = items;
         setItems((prev) => prev.filter((it) => it.save_id !== existing.save_id));
         try {
@@ -75,6 +77,7 @@ export function WishlistProvider({ children }: { children: ReactNode }) {
         }
         return;
       }
+      trackEvent("wishlist_add", { product_id: productId });
 
       // Optimistic add — refetch after success to pull product details
       try {

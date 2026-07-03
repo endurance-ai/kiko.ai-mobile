@@ -3,6 +3,7 @@
   "main": "expo-router/entry",
   "version": "1.0.0",
   "dependencies": {
+    "@amplitude/analytics-react-native": "^1.6.1",
     "@expo/ui": "~56.0.18",
     "@react-native-community/slider": "5.2.0",
     "expo": "~56.0.12",

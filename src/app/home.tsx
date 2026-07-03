@@ -32,6 +32,7 @@ import {
   sendCallbackStream,
   sendMessageStream,
 } from "@/lib/chat";
+import { trackEvent } from "@/lib/analytics";
 import { ApiError } from "@/lib/api";
 import { getMe } from "@/lib/me";
 import { stripFamilyName } from "@/lib/name";
@@ -659,6 +660,12 @@ export default function ChatEntryScreen() {
     const hasImage = pickedImage !== null;
     Haptic.medium();
     lastSendFromCritiqueRef.current = false;
+    trackEvent("chat_send", {
+      has_image: hasImage,
+      has_pinned_product: pinnedId != null,
+      char_len: trimmed.length,
+      gender_filter: filter.gender,
+    });
 
     // If the user attached a photo, materialize it via POST /v1/uploads
     // before opening the SSE turn so the server can anchor on a stable
@@ -917,6 +924,11 @@ export default function ChatEntryScreen() {
         patch(() => ({ streamDone: true, status: "results" as const }));
         streamRef.current = null;
         Haptic.warning();
+        trackEvent("cap_reached", {
+          user_tier: info.user_tier,
+          used: info.used,
+          cap: info.cap,
+        });
         // 앱 전역 캡 상태 잠금 (context 가 reset_at 까지 unlock 타이머도 관리).
         markCapReached(info);
         // 90% 안내 배너가 떠 있었다면 정식 소진 배너가 이를 덮도록 정리.

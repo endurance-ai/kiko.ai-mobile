@@ -19,6 +19,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { GlassSurface } from '@/components/glass-surface';
 import { Haptic, IOSColors, IOSFont, IOSText } from '@/constants/ios';
+import { trackEvent } from '@/lib/analytics';
 import { ApiError } from '@/lib/api';
 import { checkProductLink, getProduct, recordProductView } from '@/lib/products';
 import { useCap } from '@/state/cap';
@@ -195,7 +196,12 @@ export default function ProductDetailScreen() {
     void recordProductView(product.id, { session_id: session }).catch(() => {
       // 24h dedup or transient failure — silent
     });
-  }, [product, session]);
+    trackEvent("product_view", {
+      product_id: String(product.id),
+      brand: product.brand,
+      search_id: search_id ?? null,
+    });
+  }, [product, session, search_id]);
 
   // Background link-check — dead-link / 404 catches stale catalog rows so we
   // don't dump users into a broken external page. Fail-open: leave the CTA

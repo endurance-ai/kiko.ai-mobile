@@ -4,6 +4,7 @@ import { ReactNode, useEffect } from 'react';
 import { useColorScheme } from 'react-native';
 
 import { useRegisterDevice } from '@/hooks/use-register-device';
+import { initAnalytics } from '@/lib/analytics';
 import { AuthProvider } from '@/state/auth';
 import { BannerProvider } from '@/state/banner';
 import { CapProvider } from '@/state/cap';
@@ -20,6 +21,7 @@ const PRELOAD_ASSETS = [require('../../assets/brand/kiko-wordmark.png')];
 function AuthSideEffects({ children }: { children: ReactNode }) {
   useRegisterDevice();
   useEffect(() => {
+    void initAnalytics();
     void ExpoImage.prefetch(PRELOAD_ASSETS, 'memory-disk');
   }, []);
   return <>{children}</>;
