@@ -59,7 +59,24 @@
         }
       ],
       "expo-secure-store",
-      "expo-apple-authentication"
+      "expo-apple-authentication",
+      [
+        "expo-share-extension",
+        {
+          "activationRules": [
+            { "type": "url", "max": 1 },
+            { "type": "text" },
+            { "type": "image", "max": 1 }
+          ],
+          "backgroundColor": {
+            "red": 255,
+            "green": 255,
+            "blue": 255,
+            "alpha": 1
+          },
+          "height": 320
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
