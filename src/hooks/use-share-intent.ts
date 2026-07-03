@@ -2,8 +2,6 @@ import * as Linking from 'expo-linking';
 import { useRouter } from 'expo-router';
 import { useEffect } from 'react';
 
-import { fetchLinkPreviewImage } from '@/lib/og-image';
-
 /**
  * Share Extension → 메인 앱 딥링크 수신 훅.
  *
@@ -12,20 +10,22 @@ import { fetchLinkPreviewImage } from '@/lib/og-image';
  * 로 우리를 연다. 여기서 payload 를 뽑아 홈으로 넘기고 자동 검색을
  * 시작하게 한다.
  *
- * 서버는 raw URL 을 "링크로는 직접 분석이 안 돼요" 로 리젝트하기 때문에
- * URL 만 온 케이스는 여기서 og:image / twitter:image 를 뽑아 `pin_image`
- * 로 승격시킨 뒤 홈으로 넘긴다. 실패하면 URL 을 시드 텍스트에 남겨서
- * 유저가 상황을 인지할 수 있게 한다.
+ * 홈은 `seed` 파라미터가 있으면 즉시 첫 턴을 돌리는 로직이 이미 있음
+ * (`src/app/home.tsx` seedParam useEffect). 이미지 URL 은 `pin_image` 로
+ * 넘겨서 서버 비전 단계가 사진을 보게 하고, URL 만 온 경우엔 시드 텍스트
+ * 안에 URL 자체를 넣어 서버 링크 크롤러가 og:image 를 뽑는다.
  */
 export function useShareIntent(): void {
   const router = useRouter();
 
   useEffect(() => {
-    const handleUrl = async (rawUrl: string | null | undefined) => {
+    const handleUrl = (rawUrl: string | null | undefined) => {
       console.log('[useShareIntent] handleUrl:', rawUrl);
       if (!rawUrl) return;
       const parsed = Linking.parse(rawUrl);
       console.log('[useShareIntent] parsed:', JSON.stringify(parsed));
+      // scheme 은 무시하고 path 만 본다 — kikoaimobile://share, 또는
+      // Universal Link 로 왔을 때도 동일 hostname/path 규칙 적용.
       if (parsed.hostname !== 'share' && parsed.path !== 'share') {
         console.log('[useShareIntent] skipped: not a share URL');
         return;
@@ -33,28 +33,17 @@ export function useShareIntent(): void {
       const params = parsed.queryParams ?? {};
       const url = typeof params.url === 'string' ? params.url : undefined;
       const text = typeof params.text === 'string' ? params.text : undefined;
-      let image = typeof params.image === 'string' ? params.image : undefined;
-
-      // URL 만 온 경우: og:image 를 fetch 해서 pin_image 로 승격.
-      // 서버는 raw URL 로는 검색을 못 하고 이미지가 있어야 비전 파이프라인
-      // 이 돈다.
-      if (!image && url) {
-        console.log('[useShareIntent] resolving og:image for', url);
-        const og = await fetchLinkPreviewImage(url);
-        console.log('[useShareIntent] og:image =', og);
-        if (og) image = og;
-      }
-
-      const seed = image
-        ? '이 상품이랑 비슷한 거 찾아줘'
-        : text ||
-          (url ? `이거랑 비슷한 거 찾아줘\n${url}` : '이거랑 비슷한 거 찾아줘');
-      console.log(
-        '[useShareIntent] routing to /home, seed=',
-        seed,
-        'image=',
-        image,
-      );
+      const image = typeof params.image === 'string' ? params.image : undefined;
+      // 홈이 기대하는 파라미터 형태로 정리.
+      //  - image 가 있으면 pin_image 로 넘겨 서버가 사진 기반 검색.
+      //  - text 는 시드 문장 그대로.
+      //  - URL 만 있으면 "이거랑 비슷한 거 찾아줘\n<url>" 로 감싼다.
+      const seed =
+        text ||
+        (url ? `이거랑 비슷한 거 찾아줘\n${url}` : '이거랑 비슷한 거 찾아줘');
+      console.log('[useShareIntent] routing to /home with seed:', seed);
+      // replace 로 하면 뒤로가기 스택이 깨끗해짐. 라우터 초기화 타이밍
+      // 이슈를 피하려고 다음 tick 으로 살짝 지연.
       setTimeout(() => {
         try {
           router.replace({
@@ -70,13 +59,15 @@ export function useShareIntent(): void {
       }, 100);
     };
 
+    // 콜드 스타트: 딥링크로 앱이 뜨는 케이스.
     void Linking.getInitialURL().then((initial) => {
       console.log('[useShareIntent] getInitialURL:', initial);
-      void handleUrl(initial);
+      handleUrl(initial);
     });
+    // 앱이 이미 떠 있을 때: 수신 리스너.
     const sub = Linking.addEventListener('url', (event) => {
       console.log('[useShareIntent] url event:', event.url);
-      void handleUrl(event.url);
+      handleUrl(event.url);
     });
     return () => sub.remove();
   }, [router]);
