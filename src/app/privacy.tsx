@@ -45,7 +45,11 @@ export default function PrivacyScreen() {
       <ScrollView
         contentContainerStyle={[
           styles.body,
-          { paddingTop: insets.top + FLOATING_HEADER_OFFSET },
+          {
+            paddingTop: insets.top + FLOATING_HEADER_OFFSET,
+            flexGrow: 1,
+            justifyContent: "center",
+          },
         ]}
         showsVerticalScrollIndicator={false}
       >
