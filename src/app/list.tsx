@@ -5,19 +5,24 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Dimensions,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FLOATING_HEADER_OFFSET, FloatingHeader } from '@/components/floating-header';
+import { GlassSurface } from '@/components/glass-surface';
 import { Haptic, IOSColors, IOSFont, IOSText } from '@/constants/ios';
 import { ApiError } from '@/lib/api';
 import { getResultSetPage } from '@/lib/results';
 import { useBanner } from '@/state/banner';
+import { useCap } from '@/state/cap';
 import { formatPrice } from '@/state/products';
 import { useWishlist } from '@/state/wishlist';
 import type { ResultProduct, ResultSetPageResponse } from '@/types/api';
@@ -34,11 +39,27 @@ export default function ListScreen() {
   const searchId = (params.search as string | undefined) || null;
   const sessionId = (params.session as string | undefined) || null;
   const { show: showBanner } = useBanner();
+  const { locked: capLocked } = useCap();
 
   const [page, setPage] = useState<ResultSetPageResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [loadingMore, setLoadingMore] = useState<boolean>(false);
   const [errored, setErrored] = useState<boolean>(false);
+  const [text, setText] = useState('');
+  const canSend = !capLocked && text.trim().length > 0;
+
+  // 컴포저 send — 리스트 컨텍스트 유지한 채 홈으로 이동해 새 쿼리를 이어감.
+  // 세션 파라미터가 있으면 그 세션에 계속 채팅이 붙고, 없으면 홈이 새 세션
+  // 생성 후 진행. seed 는 유저가 입력한 텍스트.
+  const handleSend = () => {
+    const trimmed = text.trim();
+    if (!trimmed || capLocked) return;
+    Haptic.medium();
+    setText('');
+    const qs: string[] = [`seed=${encodeURIComponent(trimmed)}`];
+    if (sessionId) qs.push(`session=${encodeURIComponent(sessionId)}`);
+    router.push(`/home?${qs.join('&')}` as never);
+  };
 
   const load = useCallback(async () => {
     if (!searchId) return;
@@ -97,10 +118,14 @@ export default function ListScreen() {
           styles.body,
           {
             paddingTop: insets.top + FLOATING_HEADER_OFFSET,
-            paddingBottom: insets.bottom + 24,
+            // 컴포저가 하단에 float 하므로 그리드 마지막 행이 안 가려지게
+            // 여유. safe area + composer(56) + margin ~= 110.
+            paddingBottom: insets.bottom + 110,
           },
         ]}
         onScrollEndDrag={loadMore}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         showsVerticalScrollIndicator={false}
       >
         {searchId && (
@@ -155,6 +180,46 @@ export default function ListScreen() {
       </ScrollView>
 
       <FloatingHeader title="리스트" />
+
+      {/* Composer — 홈/PDP 와 같은 하단 float. 세션 컨텍스트를 유지하면서
+          검색 결과 리스트를 보면서 이어서 쿼리할 수 있게 한다. */}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.composerFloat}
+        pointerEvents="box-none"
+      >
+        <View style={[styles.composerWrap, { paddingBottom: insets.bottom + 12 }]}>
+          <GlassSurface variant="composer" style={styles.composer}>
+            <TextInput
+              value={text}
+              onChangeText={setText}
+              placeholder={
+                capLocked
+                  ? '오늘 사용량이 다 소진됐어요'
+                  : '이 리스트에서 이어서 찾아볼까?'
+              }
+              placeholderTextColor={IOSColors.placeholderText}
+              style={styles.input}
+              returnKeyType="send"
+              onSubmitEditing={handleSend}
+              editable={!capLocked}
+            />
+            <Pressable
+              hitSlop={6}
+              disabled={!canSend}
+              style={[styles.sendBtn, !canSend && styles.sendBtnDisabled]}
+              onPress={handleSend}
+            >
+              <SymbolView
+                name="arrow.up"
+                size={18}
+                tintColor={IOSColors.systemBackground}
+                weight="bold"
+              />
+            </Pressable>
+          </GlassSurface>
+        </View>
+      </KeyboardAvoidingView>
     </View>
   );
 }
@@ -377,5 +442,45 @@ const styles = StyleSheet.create({
   footerLoad: {
     paddingVertical: 20,
     alignItems: 'center',
+  },
+
+  // ── Composer (하단 float) ─────────────────────────────────────
+  composerFloat: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 40,
+  },
+  composerWrap: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    gap: 10,
+  },
+  composer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 56,
+    borderRadius: 28,
+    paddingLeft: 16,
+    paddingRight: 6,
+    overflow: 'hidden',
+  },
+  input: {
+    flex: 1,
+    ...IOSText.body,
+    color: IOSColors.label,
+    fontFamily: IOSFont.sans,
+  },
+  sendBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: IOSColors.label,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  sendBtnDisabled: {
+    backgroundColor: IOSColors.systemGray3,
   },
 });
