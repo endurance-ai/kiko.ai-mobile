@@ -88,6 +88,8 @@ type Turn = {
   streamPlaceholder?: string;
   /** search_id from the server (SSE 'search' event) — tags feedback / view records. */
   streamSearchId?: string;
+  /** 검색 결과 세트 전체 크기 — SSE 'search' 이벤트의 total. [더보기 (N)] 표시. */
+  streamSearchTotal?: number;
   /** Inline-keyboard prompt (pick_item / gender / category_pick / ...).
    *  Retained across tap so the chat log preserves the choice history.
    *  `streamClarifyPicks` — set of already-searched option callbacks.
@@ -241,6 +243,9 @@ function messageItemsToTurns(
       isStream: true,
       streamText: assistantMsg?.content ?? "",
       streamProducts: assistantMsg?.product_refs ?? [],
+      // 서버가 어시스턴트 턴에 결과 세트 search_id 를 실어 보내므로,
+      // 재접속 시에도 [더보기] CTA 를 복원 가능.
+      streamSearchId: assistantMsg?.search_id ?? undefined,
       streamDone: true,
     });
     i += assistantMsg ? 2 : 1;
@@ -889,9 +894,12 @@ export default function ChatEntryScreen() {
           streamProducts: [...(t.streamProducts ?? []), product],
         }));
       },
-      onSearch: (searchId: string) => {
+      onSearch: (searchId: string, total?: number) => {
         bumpTimeout();
-        patch(() => ({ streamSearchId: searchId }));
+        patch(() => ({
+          streamSearchId: searchId,
+          streamSearchTotal: total,
+        }));
       },
       onClarify: (payload: ClarifyPayload) => {
         // Inline-keyboard prompt (pick_item carousel / gender ask /
@@ -1092,9 +1100,12 @@ export default function ChatEntryScreen() {
           streamProducts: [...(t.streamProducts ?? []), product],
         }));
       },
-      onSearch: (searchId) => {
+      onSearch: (searchId, total) => {
         bumpCbTimeout();
-        patch(() => ({ streamSearchId: searchId }));
+        patch(() => ({
+          streamSearchId: searchId,
+          streamSearchTotal: total,
+        }));
       },
       onClarify: (payload) => {
         bumpCbTimeout();
@@ -1521,7 +1532,11 @@ export default function ChatEntryScreen() {
                             router.push(`/list?${qs}` as never);
                           }}
                         >
-                          <Text style={styles.seeMoreText}>더보기 (15)</Text>
+                          <Text style={styles.seeMoreText}>
+                            {turn.streamSearchTotal != null
+                              ? `더보기 (${turn.streamSearchTotal})`
+                              : "더보기"}
+                          </Text>
                           <SymbolView
                             name="chevron.right"
                             size={13}
