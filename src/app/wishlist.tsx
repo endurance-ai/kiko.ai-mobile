@@ -175,7 +175,7 @@ const styles = StyleSheet.create({
     ...IOSText.footnote,
     color: IOSColors.secondaryLabel,
     marginBottom: 16,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
 
   center: {
@@ -186,7 +186,7 @@ const styles = StyleSheet.create({
   muted: {
     ...IOSText.body,
     color: IOSColors.secondaryLabel,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   retry: {
     paddingHorizontal: 16,
@@ -197,7 +197,7 @@ const styles = StyleSheet.create({
   retryText: {
     ...IOSText.callout,
     color: IOSColors.label,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
 
   emptyBlock: {
@@ -208,7 +208,7 @@ const styles = StyleSheet.create({
   emptyText: {
     ...IOSText.body,
     color: IOSColors.secondaryLabel,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
 
   grid: {
@@ -251,13 +251,13 @@ const styles = StyleSheet.create({
     ...IOSText.caption1,
     fontWeight: "700",
     color: "#1C1C1E",
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   brand: {
     ...IOSText.footnote,
     fontWeight: "600",
     color: IOSColors.label,
     marginTop: 6,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
 });

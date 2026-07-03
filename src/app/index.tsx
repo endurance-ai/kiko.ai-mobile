@@ -179,7 +179,7 @@ const styles = StyleSheet.create({
     fontSize: 48,
     fontWeight: '800',
     color: '#FFFFFF',
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
     letterSpacing: -1.85,
   },
 });

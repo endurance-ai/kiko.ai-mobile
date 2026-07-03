@@ -258,7 +258,7 @@ const styles = StyleSheet.create({
     ...IOSText.caption1,
     fontWeight: "700",
     color: "#FFFFFF",
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   center: {
     paddingVertical: 80,
@@ -268,11 +268,11 @@ const styles = StyleSheet.create({
   muted: {
     ...IOSText.body,
     color: IOSColors.secondaryLabel,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   mutedSmall: {
     ...IOSText.caption1,
     color: IOSColors.tertiaryLabel,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
 });

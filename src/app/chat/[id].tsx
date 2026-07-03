@@ -480,7 +480,7 @@ const styles = StyleSheet.create({
   muted: {
     ...IOSText.body,
     color: IOSColors.secondaryLabel,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   retry: {
     marginTop: 12,
@@ -492,7 +492,7 @@ const styles = StyleSheet.create({
   retryText: {
     ...IOSText.callout,
     color: IOSColors.label,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   msg: {
     paddingHorizontal: 16,
@@ -520,7 +520,7 @@ const styles = StyleSheet.create({
   },
   bubbleText: {
     ...IOSText.body,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
     lineHeight: 22,
   },
   bubbleTextUser: {
@@ -548,7 +548,7 @@ const styles = StyleSheet.create({
   productCaption: {
     ...IOSText.caption1,
     color: IOSColors.label,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
     padding: 8,
   },
   composerFloat: {
@@ -576,7 +576,7 @@ const styles = StyleSheet.create({
     flex: 1,
     ...IOSText.body,
     color: IOSColors.label,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
     paddingVertical: 8,
     maxHeight: 120,
   },

@@ -189,12 +189,12 @@ const styles = StyleSheet.create({
   emailText: {
     ...IOSText.body,
     color: IOSColors.label,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   sectionLabel: {
     ...IOSText.footnote,
     color: IOSColors.secondaryLabel,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
     paddingHorizontal: 4,
     marginTop: 6,
     marginBottom: -4, // tighten gap to the card below
@@ -231,12 +231,12 @@ const styles = StyleSheet.create({
     ...IOSText.body,
     fontWeight: "400",
     color: IOSColors.label,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   rowSubtitle: {
     ...IOSText.footnote,
     color: IOSColors.secondaryLabel,
     marginTop: 2,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
 });

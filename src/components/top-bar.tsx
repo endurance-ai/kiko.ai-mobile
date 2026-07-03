@@ -93,6 +93,6 @@ const styles = StyleSheet.create({
     ...IOSText.subhead,
     fontWeight: '600',
     color: IOSColors.label,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
 });

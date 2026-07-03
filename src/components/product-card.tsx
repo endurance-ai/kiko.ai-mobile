@@ -107,19 +107,19 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     // Always dark — sits on a white tag pinned over the photo.
     color: '#1C1C1E',
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   brand: {
     ...IOSText.subhead,
     fontWeight: '700',
     color: IOSColors.label,
     marginTop: 10,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   name: {
     ...IOSText.footnote,
     color: IOSColors.secondaryLabel,
     marginTop: 2,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
 });

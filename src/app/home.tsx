@@ -1929,7 +1929,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5,
     textAlign: "center",
     color: IOSColors.label,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   cursor: {
     color: IOSColors.label,
@@ -1970,7 +1970,7 @@ const styles = StyleSheet.create({
   userBubbleText: {
     ...IOSText.body,
     color: IOSColors.systemBackground,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   userImageSmall: {
     width: 76,
@@ -1986,7 +1986,7 @@ const styles = StyleSheet.create({
   pickerPrompt: {
     ...IOSText.subhead,
     color: IOSColors.label,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   pickerGrid: {
     flexDirection: "row",
@@ -2015,7 +2015,7 @@ const styles = StyleSheet.create({
     ...IOSText.subhead,
     fontWeight: "600",
     color: IOSColors.label,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   pickerLabelPicked: {
     color: IOSColors.systemBackground,
@@ -2030,7 +2030,7 @@ const styles = StyleSheet.create({
   botStatusText: {
     ...IOSText.subhead,
     color: IOSColors.secondaryLabel,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
 
   // Result feed
@@ -2057,7 +2057,7 @@ const styles = StyleSheet.create({
   botBubbleText: {
     ...IOSText.body,
     color: IOSColors.label,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
     lineHeight: 22,
   },
   streamProductCard: {
@@ -2078,7 +2078,7 @@ const styles = StyleSheet.create({
   streamProductCaption: {
     ...IOSText.caption1,
     color: IOSColors.label,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
     padding: 8,
   },
   // 카드 우상단 액션 스택. 순서: [체크(anchor), 찜]. PDP 비슷한 카드와
@@ -2143,7 +2143,7 @@ const styles = StyleSheet.create({
     ...IOSText.subhead,
     fontWeight: "600",
     color: IOSColors.secondaryLabel,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   clarifyBlock: {
     paddingHorizontal: 4,
@@ -2161,7 +2161,7 @@ const styles = StyleSheet.create({
   clarifyOptionText: {
     ...IOSText.subhead,
     color: IOSColors.label,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   // Already-searched option: subtle gray fill (systemGray5 auto-adapts to
   // dark mode via IOSColors palette lookup) + muted secondary-label text.
@@ -2177,7 +2177,7 @@ const styles = StyleSheet.create({
   agentText: {
     ...IOSText.body,
     color: IOSColors.label,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
     flexShrink: 1,
   },
   cardRow: {
@@ -2195,7 +2195,7 @@ const styles = StyleSheet.create({
     ...IOSText.subhead,
     fontWeight: "700",
     color: IOSColors.label,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
 
   // Narrowing block — soft muted greyscale, no hard B/W contrast.
@@ -2211,7 +2211,7 @@ const styles = StyleSheet.create({
     ...IOSText.subhead,
     fontWeight: "600",
     color: IOSColors.secondaryLabel,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   narrowingChipRow: {
     flexDirection: "row",
@@ -2230,7 +2230,7 @@ const styles = StyleSheet.create({
     ...IOSText.subhead,
     fontWeight: "600",
     color: IOSColors.label,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   narrowDismiss: {
     paddingHorizontal: 14,
@@ -2242,7 +2242,7 @@ const styles = StyleSheet.create({
     ...IOSText.subhead,
     fontWeight: "500",
     color: IOSColors.tertiaryLabel,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
 
   // Composer
@@ -2272,7 +2272,7 @@ const styles = StyleSheet.create({
     ...IOSText.subhead,
     fontWeight: "500",
     color: IOSColors.label,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   critiqueChip: {
     paddingHorizontal: 16,
@@ -2284,7 +2284,7 @@ const styles = StyleSheet.create({
     ...IOSText.subhead,
     fontWeight: "500",
     color: IOSColors.label,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
 
   // Attachment chip
@@ -2311,7 +2311,7 @@ const styles = StyleSheet.create({
     ...IOSText.footnote,
     fontWeight: "700",
     color: IOSColors.label,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
 
   // Empty fallback
@@ -2323,7 +2323,7 @@ const styles = StyleSheet.create({
   fallbackText: {
     ...IOSText.body,
     color: IOSColors.label,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
     marginBottom: 4,
   },
   fallbackAction: {
@@ -2339,7 +2339,7 @@ const styles = StyleSheet.create({
     ...IOSText.body,
     fontWeight: "500",
     color: IOSColors.label,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
 
   previewRow: {
@@ -2389,7 +2389,7 @@ const styles = StyleSheet.create({
     ...IOSText.body,
     color: IOSColors.label,
     paddingHorizontal: 6,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   sendBtn: {
     width: 44,

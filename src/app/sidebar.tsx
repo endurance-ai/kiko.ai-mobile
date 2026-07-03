@@ -454,7 +454,7 @@ const styles = StyleSheet.create({
     color: IOSColors.secondaryLabel,
     marginBottom: 2,
     paddingHorizontal: 12,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
 
   listLoading: {
@@ -466,7 +466,7 @@ const styles = StyleSheet.create({
     color: IOSColors.tertiaryLabel,
     paddingHorizontal: 12,
     paddingVertical: 12,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
 
   historyList: {
@@ -484,7 +484,7 @@ const styles = StyleSheet.create({
   historyTitle: {
     ...IOSText.body,
     color: IOSColors.label,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   historyTitleActive: {
     fontWeight: "400",
@@ -517,7 +517,7 @@ const styles = StyleSheet.create({
   avatarText: {
     fontWeight: "400",
     color: IOSColors.label,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
     letterSpacing: -0.3,
   },
 
@@ -539,6 +539,6 @@ const styles = StyleSheet.create({
     ...IOSText.subhead,
     fontWeight: "700",
     color: IOSColors.systemBackground,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
 });

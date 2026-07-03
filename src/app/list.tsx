@@ -281,13 +281,13 @@ const styles = StyleSheet.create({
   title: {
     ...IOSText.title2,
     color: IOSColors.label,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
     flexShrink: 1,
   },
   countText: {
     ...IOSText.subhead,
     color: IOSColors.secondaryLabel,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
     marginLeft: 14,
   },
   // 3-col grid edge-to-edge (mirrors PDP similar grid).
@@ -367,12 +367,12 @@ const styles = StyleSheet.create({
   muted: {
     ...IOSText.body,
     color: IOSColors.secondaryLabel,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   mutedSmall: {
     ...IOSText.caption1,
     color: IOSColors.tertiaryLabel,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   footerLoad: {
     paddingVertical: 20,

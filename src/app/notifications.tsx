@@ -187,13 +187,13 @@ const styles = StyleSheet.create({
     ...IOSText.body,
     fontWeight: "400",
     color: IOSColors.label,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   rowHint: {
     ...IOSText.footnote,
     color: IOSColors.secondaryLabel,
     marginTop: 2,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
 
   footerNote: {
@@ -202,6 +202,6 @@ const styles = StyleSheet.create({
     marginTop: 14,
     lineHeight: 18,
     paddingHorizontal: 4,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
 });

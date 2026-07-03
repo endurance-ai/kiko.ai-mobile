@@ -741,7 +741,7 @@ const styles = StyleSheet.create({
   muted: {
     ...IOSText.body,
     color: IOSColors.secondaryLabel,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   retry: {
     paddingHorizontal: 16,
@@ -752,7 +752,7 @@ const styles = StyleSheet.create({
   retryText: {
     ...IOSText.callout,
     color: IOSColors.label,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
 
   // Hero
@@ -865,7 +865,7 @@ const styles = StyleSheet.create({
     ...IOSText.footnote,
     color: IOSColors.systemRed,
     marginTop: 8,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
 
   ctaWrap: {
@@ -887,7 +887,7 @@ const styles = StyleSheet.create({
   ctaText: {
     ...IOSText.headline,
     color: IOSColors.systemBackground,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
 
   composerFloat: {
@@ -927,13 +927,13 @@ const styles = StyleSheet.create({
     ...IOSText.footnote,
     fontWeight: '700',
     color: IOSColors.label,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   scopeBrand: {
     ...IOSText.footnote,
     fontWeight: '500',
     color: IOSColors.secondaryLabel,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
     // 브랜드가 매우 길 때 chip 이 컴포저 폭을 다 잡아먹지 않도록 상한.
     maxWidth: 120,
   },
@@ -947,7 +947,7 @@ const styles = StyleSheet.create({
     ...IOSText.subhead,
     fontWeight: '500',
     color: IOSColors.label,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   composer: {
     flexDirection: 'row',
@@ -969,7 +969,7 @@ const styles = StyleSheet.create({
     ...IOSText.body,
     color: IOSColors.label,
     paddingHorizontal: 6,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   sendBtn: {
     width: 44,
@@ -991,7 +991,7 @@ const styles = StyleSheet.create({
   similarHeader: {
     ...IOSText.headline,
     color: IOSColors.label,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
     paddingHorizontal: 20,
     marginBottom: 12,
   },
@@ -1025,7 +1025,7 @@ const styles = StyleSheet.create({
   similarEmptyHint: {
     ...IOSText.footnote,
     color: IOSColors.tertiaryLabel,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
     textAlign: 'center',
     paddingHorizontal: 20,
     paddingTop: 12,
@@ -1061,23 +1061,23 @@ const styles = StyleSheet.create({
     ...IOSText.footnote,
     fontWeight: '600',
     color: IOSColors.label,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   similarPrice: {
     ...IOSText.footnote,
     color: IOSColors.secondaryLabel,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   similarPriceOriginal: {
     ...IOSText.caption1,
     color: IOSColors.tertiaryLabel,
     textDecorationLine: 'line-through',
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   similarPriceSale: {
     ...IOSText.footnote,
     fontWeight: '600',
     color: IOSColors.systemRed,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
 });

@@ -128,7 +128,7 @@ const styles = StyleSheet.create({
     ...IOSText.subhead,
     fontWeight: '500',
     color: IOSColors.label,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   chipTextActive: {
     color: IOSColors.systemBackground,
@@ -145,7 +145,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: IOSColors.label,
     marginBottom: 12,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   slider: {
     width: '100%',
@@ -159,7 +159,7 @@ const styles = StyleSheet.create({
   scaleLabel: {
     ...IOSText.caption1,
     color: IOSColors.tertiaryLabel,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
 
   footer: {
@@ -176,6 +176,6 @@ const styles = StyleSheet.create({
   applyText: {
     ...IOSText.headline,
     color: IOSColors.systemBackground,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
 });

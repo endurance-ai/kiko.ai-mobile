@@ -162,13 +162,13 @@ const styles = StyleSheet.create({
     ...IOSText.body,
     fontWeight: '600',
     color: IOSColors.label,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   subtitle: {
     ...IOSText.footnote,
     color: IOSColors.secondaryLabel,
     marginTop: 2,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   actionBtn: {
     flexDirection: 'row',
@@ -183,7 +183,7 @@ const styles = StyleSheet.create({
     ...IOSText.footnote,
     fontWeight: '600',
     color: IOSColors.systemBackground,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   // Billing (캡 소진) 전용 — 검정 배경 + 흰 텍스트.
   billingCard: {
@@ -208,6 +208,6 @@ const styles = StyleSheet.create({
     ...IOSText.footnote,
     fontWeight: '600',
     color: '#0A0A0A',
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
 });

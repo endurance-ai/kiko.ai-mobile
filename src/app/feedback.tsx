@@ -179,7 +179,7 @@ const styles = StyleSheet.create({
     ...IOSText.title3,
     color: IOSColors.label,
     marginBottom: 18,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
 
   chipRow: {
@@ -202,7 +202,7 @@ const styles = StyleSheet.create({
     ...IOSText.subhead,
     fontWeight: "400",
     color: IOSColors.label,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
   chipTextActive: {
     color: IOSColors.label,
@@ -221,7 +221,7 @@ const styles = StyleSheet.create({
     borderColor: IOSColors.separator,
     backgroundColor: IOSColors.secondarySystemBackground,
     textAlignVertical: "top",
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
 
   consentBox: {
@@ -234,7 +234,7 @@ const styles = StyleSheet.create({
     ...IOSText.footnote,
     color: IOSColors.secondaryLabel,
     lineHeight: 18,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
 
   footer: {
@@ -257,6 +257,6 @@ const styles = StyleSheet.create({
   submitText: {
     ...IOSText.headline,
     color: IOSColors.systemBackground,
-    fontFamily: IOSFont.rounded,
+    fontFamily: IOSFont.sans,
   },
 });
