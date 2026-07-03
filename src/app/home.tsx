@@ -38,7 +38,7 @@ import { stripFamilyName } from "@/lib/name";
 import type { CapMeta, CapReachedInfo, ChatStreamController } from "@/lib/sse";
 import { uploadImage } from "@/lib/uploads";
 import { useBanner } from "@/state/banner";
-import { formatCapResetHint, useCap } from "@/state/cap";
+import { useCap } from "@/state/cap";
 import { buildFilterLabel, PRICE_MAX, useFilter } from "@/state/filter";
 import { MOCK_PRODUCTS, type Product } from "@/state/products";
 import { useWishlist } from "@/state/wishlist";
@@ -851,7 +851,7 @@ export default function ChatEntryScreen() {
               priority: "billing",
               kicker: "DAILY CAP",
               title: "오늘 무료 사용량을 다 썼어요",
-              subtitle: `${formatCapResetHint(cap.cap_reset_at)} 다시 시작돼요`,
+              subtitle: "오늘 자정 이후 다시 시작돼요",
             });
           } else {
             // 잔여 크레딧이 있음 → 이전에 남아 있던 소진 배너 제거.
@@ -866,7 +866,7 @@ export default function ChatEntryScreen() {
                 priority: "notice",
                 kicker: "DAILY CAP",
                 title: "일일 사용량의 90%를 사용했어요",
-                subtitle: `${formatCapResetHint(cap.cap_reset_at)} 다시 시작돼요`,
+                subtitle: "오늘 자정 이후 다시 시작돼요",
               });
             } else {
               clearBanner("chat-cap-warn");
@@ -913,7 +913,7 @@ export default function ChatEntryScreen() {
           priority: "billing",
           kicker: "DAILY CAP",
           title: "오늘 무료 사용량을 다 썼어요",
-          subtitle: `${formatCapResetHint(info.reset_at)} 다시 시작돼요`,
+          subtitle: "오늘 자정 이후 다시 시작돼요",
           // autoDismiss 없음 — 유저가 컴포저 잠금 이유를 계속 볼 수 있어야 함.
           // action 비활성: IAP 들어오면 다시 활성화
           // action: {
@@ -1072,7 +1072,7 @@ export default function ChatEntryScreen() {
             priority: "billing",
             kicker: "DAILY CAP",
             title: "오늘 무료 사용량을 다 썼어요",
-            subtitle: `${formatCapResetHint(cap.cap_reset_at)} 다시 시작돼요`,
+            subtitle: "오늘 자정 이후 다시 시작돼요",
           });
         }
       },
@@ -1107,7 +1107,7 @@ export default function ChatEntryScreen() {
           priority: "billing",
           kicker: "DAILY CAP",
           title: "오늘 무료 사용량을 다 썼어요",
-          subtitle: `${formatCapResetHint(info.reset_at)} 다시 시작돼요`,
+          subtitle: "오늘 자정 이후 다시 시작돼요",
         });
       },
       onDone: () => {

@@ -29,7 +29,7 @@ import type {
   ChatStreamController,
 } from "@/lib/sse";
 import { useBanner } from "@/state/banner";
-import { formatCapResetHint, useCap } from "@/state/cap";
+import { useCap } from "@/state/cap";
 import type { MessageItem, ProductRef } from "@/types/api";
 
 const PAGE_SIZE = 30;
@@ -246,7 +246,7 @@ export default function ChatDetailScreen() {
               priority: "billing",
               kicker: "DAILY CAP",
               title: "오늘 무료 사용량을 다 썼어요",
-              subtitle: `${formatCapResetHint(cap.cap_reset_at)} 다시 시작돼요`,
+              subtitle: "오늘 자정 이후 다시 시작돼요",
             });
           } else {
             clearBanner("chat-cap-reached");
@@ -259,7 +259,7 @@ export default function ChatDetailScreen() {
                 priority: "notice",
                 kicker: "DAILY CAP",
                 title: "일일 사용량의 90%를 사용했어요",
-                subtitle: `${formatCapResetHint(cap.cap_reset_at)} 다시 시작돼요`,
+                subtitle: "오늘 자정 이후 다시 시작돼요",
               });
             } else {
               clearBanner("chat-cap-warn");
@@ -300,7 +300,7 @@ export default function ChatDetailScreen() {
             priority: "billing",
             kicker: "DAILY CAP",
             title: "오늘 무료 사용량을 다 썼어요",
-            subtitle: `${formatCapResetHint(info.reset_at)} 다시 시작돼요`,
+            subtitle: "오늘 자정 이후 다시 시작돼요",
           });
         },
         onDone: () => {
