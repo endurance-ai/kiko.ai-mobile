@@ -19,6 +19,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { GlassSurface } from "@/components/glass-surface";
 import { Haptic, IOSColors, IOSFont, IOSText } from "@/constants/ios";
 import { ApiError } from "@/lib/api";
 import { deleteSession, listSessions, renameSession } from "@/lib/chat";
@@ -374,26 +375,37 @@ export default function SidebarScreen() {
           <SafeAreaView edges={["bottom"]} style={styles.bottomSafe}>
             <View style={styles.bottomRow}>
               <Pressable
-                style={styles.avatarBtn}
                 onPress={goProfile}
                 accessibilityLabel={`${avatarLabel} 프로필 설정`}
               >
-                <Text
-                  style={[styles.avatarText, { fontSize: avatarFontSize }]}
-                  numberOfLines={1}
+                <GlassSurface
+                  variant="composer"
+                  isInteractive
+                  style={styles.avatarBtn}
                 >
-                  {avatarLabelText}
-                </Text>
+                  <Text
+                    style={[styles.avatarText, { fontSize: avatarFontSize }]}
+                    numberOfLines={1}
+                  >
+                    {avatarLabelText}
+                  </Text>
+                </GlassSurface>
               </Pressable>
 
-              <Pressable style={styles.newChatBtn} onPress={goNewChat}>
-                <SymbolView
-                  name="plus"
-                  size={18}
-                  tintColor={IOSColors.systemBackground}
-                  weight="bold"
-                />
-                <Text style={styles.newChatText}>새 채팅</Text>
+              <Pressable onPress={goNewChat}>
+                <GlassSurface
+                  variant="composer"
+                  isInteractive
+                  style={styles.newChatBtn}
+                >
+                  <SymbolView
+                    name="plus"
+                    size={18}
+                    tintColor={IOSColors.label}
+                    weight="bold"
+                  />
+                  <Text style={styles.newChatText}>새 채팅</Text>
+                </GlassSurface>
               </Pressable>
             </View>
           </SafeAreaView>
@@ -499,22 +511,15 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingVertical: 12,
   },
-  // 홈 컴포저 (height 56, borderRadius 28) 와 동일한 높이/각을 맞춰 시각
-  // 밸런스 유지. 원형 avatar 는 지름 = height.
+  // Liquid Glass 원형 아바타 — 홈 컴포저와 같은 언어이되 살짝 작게 (50pt)
+  // 로 사이드바 하단에 자연스럽게 얹힘.
   avatarBtn: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: IOSColors.systemBackground,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: IOSColors.separator,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
     justifyContent: "center",
     alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 4,
+    overflow: "hidden",
   },
   avatarText: {
     fontWeight: "400",
@@ -527,20 +532,15 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    paddingHorizontal: 22,
-    height: 56,
+    paddingHorizontal: 20,
+    height: 50,
     borderRadius: 999,
-    backgroundColor: IOSColors.label,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.18,
-    shadowRadius: 10,
-    elevation: 5,
+    overflow: "hidden",
   },
   newChatText: {
     ...IOSText.body,
     fontWeight: "400",
-    color: IOSColors.systemBackground,
+    color: IOSColors.label,
     fontFamily: IOSFont.sans,
   },
 });
