@@ -1533,9 +1533,7 @@ export default function ChatEntryScreen() {
                           }}
                         >
                           <Text style={styles.seeMoreText}>
-                            {turn.streamSearchTotal != null
-                              ? `더보기 (${turn.streamSearchTotal})`
-                              : "더보기"}
+                            {`더보기 (${turn.streamSearchTotal ?? 15})`}
                           </Text>
                           <SymbolView
                             name="chevron.right"
@@ -2140,7 +2138,6 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
     paddingHorizontal: 4,
     paddingVertical: 6,
-    marginTop: 4,
   },
   seeMoreText: {
     ...IOSText.subhead,
