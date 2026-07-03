@@ -1,6 +1,6 @@
 {
   "name": "kikoai-mobile",
-  "main": "expo-router/entry",
+  "main": "index.js",
   "version": "1.0.0",
   "dependencies": {
     "@amplitude/analytics-react-native": "^1.6.1",
