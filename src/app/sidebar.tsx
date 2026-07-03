@@ -392,20 +392,14 @@ export default function SidebarScreen() {
                 </GlassSurface>
               </Pressable>
 
-              <Pressable onPress={goNewChat}>
-                <GlassSurface
-                  variant="composer"
-                  isInteractive
-                  style={styles.newChatBtn}
-                >
-                  <SymbolView
-                    name="plus"
-                    size={18}
-                    tintColor={IOSColors.label}
-                    weight="bold"
-                  />
-                  <Text style={styles.newChatText}>새 채팅</Text>
-                </GlassSurface>
+              <Pressable style={styles.newChatBtn} onPress={goNewChat}>
+                <SymbolView
+                  name="plus"
+                  size={18}
+                  tintColor={IOSColors.systemBackground}
+                  weight="bold"
+                />
+                <Text style={styles.newChatText}>새 채팅</Text>
               </Pressable>
             </View>
           </SafeAreaView>
@@ -535,12 +529,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     height: 50,
     borderRadius: 999,
-    overflow: "hidden",
+    backgroundColor: IOSColors.label,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+    elevation: 5,
   },
   newChatText: {
     ...IOSText.body,
     fontWeight: "400",
-    color: IOSColors.label,
+    color: IOSColors.systemBackground,
     fontFamily: IOSFont.sans,
   },
 });
