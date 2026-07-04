@@ -17,6 +17,12 @@
               "kikoaimobile",
               "com.googleusercontent.apps.205071192266-4cq6itbajkhcothilspdlcg2tqevmdpd"
             ]
+          },
+          {
+            "CFBundleURLSchemes": [
+              "kikoaimobile",
+              "com.googleusercontent.apps.205071192266-4cq6itbajkhcothilspdlcg2tqevmdpd"
+            ]
           }
         ],
         "ITSAppUsesNonExemptEncryption": false
@@ -32,6 +38,7 @@
       },
       "predictiveBackGestureEnabled": false,
       "permissions": [
+        "android.permission.RECORD_AUDIO",
         "android.permission.RECORD_AUDIO"
       ]
     },
@@ -71,9 +78,17 @@
         "expo-share-extension",
         {
           "activationRules": [
-            { "type": "url", "max": 1 },
-            { "type": "text" },
-            { "type": "image", "max": 1 }
+            {
+              "type": "url",
+              "max": 1
+            },
+            {
+              "type": "text"
+            },
+            {
+              "type": "image",
+              "max": 1
+            }
           ],
           "backgroundColor": {
             "red": 255,
@@ -97,6 +112,12 @@
         "projectId": "3eca8caa-f979-4d07-8a63-d418df878533"
       }
     },
-    "owner": "chldbsdud"
+    "owner": "chldbsdud",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/3eca8caa-f979-4d07-8a63-d418df878533"
+    }
   }
 }
