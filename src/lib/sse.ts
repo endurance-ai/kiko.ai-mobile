@@ -54,6 +54,12 @@ export interface ChatStreamHandlers {
    * option.label) which resumes the turn.
    */
   onClarify?: (payload: ClarifyPayload) => void;
+  /**
+   * Silent heartbeat during long server-side steps (e.g. Vision extract, ~15s).
+   * Not user-visible — the client uses it only to reset its stall-timeout so a
+   * slow-but-alive turn is not falsely cancelled.
+   */
+  onProgress?: (stage: string) => void;
   /** Emitted after products are persisted as a result set (server PR #96). */
   onSearch?: (searchId: string, total?: number) => void;
   /** Daily token cap hit — server skips graph run and doesn't save the turn. */
@@ -150,6 +156,11 @@ function dispatch(event: SseEvent, handlers: ChatStreamHandlers): boolean {
       const id = data.search_id;
       const total = typeof data.total === 'number' ? data.total : undefined;
       if (typeof id === 'string') handlers.onSearch?.(id, total);
+      return false;
+    }
+    case 'progress': {
+      const stage = typeof data.stage === 'string' ? data.stage : '';
+      handlers.onProgress?.(stage);
       return false;
     }
     case 'clarify': {

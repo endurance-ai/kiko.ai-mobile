@@ -282,6 +282,10 @@ export default function ChatDetailScreen() {
           updateAssistant((m) => ({ ...m, content: m.content + delta }));
           scrollToEnd();
         },
+        onProgress: () => {
+          // Silent heartbeat — server is still alive, just crunching (e.g. Vision).
+          bumpTimeout();
+        },
         onProduct: (product) => {
           bumpTimeout();
           updateAssistant((m) => ({

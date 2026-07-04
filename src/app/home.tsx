@@ -953,6 +953,10 @@ export default function ChatEntryScreen() {
         bumpTimeout();
         patch((t) => ({ streamText: (t.streamText ?? "") + delta }));
       },
+      onProgress: () => {
+        // Silent heartbeat — server is still alive, just crunching (e.g. Vision).
+        bumpTimeout();
+      },
       onProduct: (product: ProductRef) => {
         bumpTimeout();
         patch((t) => ({
@@ -1178,6 +1182,9 @@ export default function ChatEntryScreen() {
       onTextDelta: (delta) => {
         bumpCbTimeout();
         patch((t) => ({ streamText: (t.streamText ?? "") + delta }));
+      },
+      onProgress: () => {
+        bumpCbTimeout();
       },
       onProduct: (product) => {
         bumpCbTimeout();
