@@ -1808,7 +1808,12 @@ export default function ChatEntryScreen() {
         </ScrollView>
       ) : (
         // 배경 탭 → 키보드 내리기. emptyHero 자체엔 인터랙션이 없어 안전.
-        <Pressable style={styles.emptyHero} onPress={Keyboard.dismiss}>
+        // 키보드가 올라오면 마진을 그만큼 더해서 hero 컨텐츠가 시각적 중앙에
+        // 유지되도록 함 (컴포저는 위에서 이미 lift 됨).
+        <Pressable
+          style={[styles.emptyHero, { marginBottom: kbHeight }]}
+          onPress={Keyboard.dismiss}
+        >
           <Text style={styles.emptyHeadline}>
             {emptyGreeting.slice(0, revealedChars)}
             {!typingDone && <Text style={styles.cursor}>▍</Text>}
