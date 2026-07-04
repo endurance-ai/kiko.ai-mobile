@@ -26,6 +26,7 @@ import { GlassSurface } from "@/components/glass-surface";
 import { PRODUCT_CARD_WIDTH, ProductCard } from "@/components/product-card";
 import { TopBar } from "@/components/top-bar";
 import { Haptic, IOSColors, IOSFont, IOSText } from "@/constants/ios";
+import { useKeyboardHeight } from "@/hooks/use-keyboard-height";
 import {
   createSessionStream,
   getMessages,
@@ -544,7 +545,9 @@ export default function ChatEntryScreen() {
     return pool[Math.floor(Math.random() * pool.length)];
   }, [capLocked, isBusy, hasResults, pinnedProduct]);
 
-  // Auto-scroll to bottom whenever messages or status change.
+  const kbHeight = useKeyboardHeight();
+
+  // Auto-scroll to bottom whenever messages, status, or keyboard change.
   useEffect(() => {
     if (!scrollRef.current) return;
     const t = setTimeout(
@@ -552,7 +555,7 @@ export default function ChatEntryScreen() {
       60,
     );
     return () => clearTimeout(t);
-  }, [messages]);
+  }, [messages, kbHeight]);
 
   const updateTurn = (id: number, patch: Partial<Turn>) => {
     setMessages((prev) =>
@@ -1275,7 +1278,10 @@ export default function ChatEntryScreen() {
           ref={scrollRef}
           contentContainerStyle={[
             styles.chatContent,
-            { paddingTop: topPad, paddingBottom: insets.bottom + 180 },
+            {
+              paddingTop: topPad,
+              paddingBottom: insets.bottom + 180 + kbHeight,
+            },
           ]}
           keyboardShouldPersistTaps="handled"
           // 스크롤(드래그) 시작하는 순간 키보드 내려감. 흔한 iOS 메시징 앱 UX.

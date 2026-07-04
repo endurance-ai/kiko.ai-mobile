@@ -22,6 +22,7 @@ import {
   FloatingHeader,
 } from "@/components/floating-header";
 import { Haptic, IOSColors, IOSFont, IOSText } from "@/constants/ios";
+import { useKeyboardHeight } from "@/hooks/use-keyboard-height";
 import { getMessages, sendMessageStream } from "@/lib/chat";
 import {
   isCapExhausted,
@@ -368,6 +369,10 @@ export default function ChatDetailScreen() {
   const isEmpty = messages !== null && messages.length === 0 && !error;
 
   const composerBottom = useMemo(() => insets.bottom + 12, [insets.bottom]);
+  const kbHeight = useKeyboardHeight();
+  useEffect(() => {
+    if (kbHeight > 0) scrollToEnd();
+  }, [kbHeight, scrollToEnd]);
 
   return (
     <View style={styles.root}>
@@ -394,7 +399,7 @@ export default function ChatDetailScreen() {
           renderItem={({ item }) => <MessageRow item={item} />}
           contentContainerStyle={{
             paddingTop: insets.top + FLOATING_HEADER_OFFSET,
-            paddingBottom: composerBottom + 80,
+            paddingBottom: composerBottom + 80 + kbHeight,
           }}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
