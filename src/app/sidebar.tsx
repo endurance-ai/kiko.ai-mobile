@@ -25,6 +25,7 @@ import { ApiError } from "@/lib/api";
 import { deleteSession, listSessions, renameSession } from "@/lib/chat";
 import { getMe } from "@/lib/me";
 import { stripFamilyName } from "@/lib/name";
+import { useAuth } from "@/state/auth";
 import type { SessionSummary, UserProfile } from "@/types/api";
 
 // Hoist the require out of the render path so the bundler resolves the
@@ -50,6 +51,8 @@ export default function SidebarScreen() {
   const wordmarkTint = scheme === "dark" ? "#FFFFFF" : "#0A0A0A";
   const [sessions, setSessions] = useState<SessionSummary[] | null>(null);
   const [me, setMe] = useState<UserProfile | null>(null);
+  const { status: authStatus } = useAuth();
+  const isGuest = authStatus !== "authenticated";
 
   useEffect(() => {
     let cancelled = false;
@@ -140,6 +143,14 @@ export default function SidebarScreen() {
     animateClose(() => {
       router.back();
       setTimeout(() => router.push("/settings"), 30);
+    });
+  };
+
+  const goLogin = () => {
+    Haptic.light();
+    animateClose(() => {
+      router.back();
+      setTimeout(() => router.push("/login"), 30);
     });
   };
 
@@ -337,7 +348,25 @@ export default function SidebarScreen() {
                 <ActivityIndicator />
               </View>
             ) : sessions.length === 0 ? (
-              <Text style={styles.emptyHint}>아직 대화가 없어요</Text>
+              isGuest ? (
+                <View style={styles.emptyGuestBlock}>
+                  <Text style={styles.emptyGuestHint}>
+                    로그인하면 대화 내역이{"\n"}이곳에 저장돼요
+                  </Text>
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.emptyGuestBtn,
+                      pressed && styles.emptyGuestBtnPressed,
+                    ]}
+                    onPress={goLogin}
+                    accessibilityLabel="로그인"
+                  >
+                    <Text style={styles.emptyGuestBtnText}>Log in</Text>
+                  </Pressable>
+                </View>
+              ) : (
+                <Text style={styles.emptyHint}>아직 대화가 없어요</Text>
+              )
             ) : (
               <ScrollView
                 contentContainerStyle={styles.historyList}
@@ -374,26 +403,29 @@ export default function SidebarScreen() {
         </SafeAreaView>
 
         {/* 하단 버튼 클러스터는 패널 안에 절대 위치로 얹어, 그 뒤로 세션
-            리스트가 스크롤돼 지나가면서 글래스 아바타에 자연스럽게 비침. */}
+            리스트가 스크롤돼 지나가면서 글래스 아바타에 자연스럽게 비침.
+            게스트 상태에선 프로필 아바타는 숨기지만 "새 채팅"은 유지. */}
         <SafeAreaView edges={["bottom"]} style={styles.bottomSafe}>
           <View style={styles.bottomRow}>
-            <Pressable
-              onPress={goProfile}
-              accessibilityLabel={`${avatarLabel} 프로필 설정`}
-            >
-              <GlassSurface
-                variant="composer"
-                isInteractive
-                style={styles.avatarBtn}
+            {!isGuest && (
+              <Pressable
+                onPress={goProfile}
+                accessibilityLabel={`${avatarLabel} 프로필 설정`}
               >
-                <Text
-                  style={[styles.avatarText, { fontSize: avatarFontSize }]}
-                  numberOfLines={1}
+                <GlassSurface
+                  variant="composer"
+                  isInteractive
+                  style={styles.avatarBtn}
                 >
-                  {avatarLabelText}
-                </Text>
-              </GlassSurface>
-            </Pressable>
+                  <Text
+                    style={[styles.avatarText, { fontSize: avatarFontSize }]}
+                    numberOfLines={1}
+                  >
+                    {avatarLabelText}
+                  </Text>
+                </GlassSurface>
+              </Pressable>
+            )}
 
             <Pressable style={styles.newChatBtn} onPress={goNewChat}>
               <SymbolView
@@ -529,6 +561,63 @@ const styles = StyleSheet.create({
     color: IOSColors.label,
     fontFamily: IOSFont.sans,
     letterSpacing: -0.3,
+  },
+
+  // 게스트 하단 로그인 — 원형 dot + 얇은 "Log in" 텍스트, 갭 좁게.
+  avatarRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  // 게스트 상태 아바타 자리에 얹히는 아주 연한 회색 원형 (물음표 없음).
+  guestAvatarDot: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: "#D8D8DA",
+  },
+  loginLabel: {
+    ...IOSText.body,
+    fontWeight: "400",
+    color: IOSColors.label,
+    fontFamily: IOSFont.sans,
+    letterSpacing: -0.2,
+  },
+
+  // 최근 항목 empty state (게스트) — 남은 세로 공간을 채워 수직 중앙정렬.
+  // 게스트 상태에선 하단 버튼 클러스터가 숨겨지므로 별도 offset 불필요.
+  emptyGuestBlock: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 12,
+    gap: 16,
+  },
+  emptyGuestHint: {
+    ...IOSText.footnote,
+    color: IOSColors.secondaryLabel,
+    textAlign: "center",
+    fontFamily: IOSFont.sans,
+    lineHeight: 18,
+  },
+  // 새 채팅 버튼과 언어 통일 — 배경은 IOSColors.label (라이트: 검정, 다크: 흰색)
+  // + IOSColors.systemBackground 텍스트. 크기만 empty state 성격에 맞게 살짝 작게.
+  emptyGuestBtn: {
+    paddingHorizontal: 22,
+    height: 44,
+    borderRadius: 999,
+    backgroundColor: IOSColors.label,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  emptyGuestBtnPressed: {
+    opacity: 0.85,
+  },
+  emptyGuestBtnText: {
+    ...IOSText.body,
+    fontWeight: "400",
+    color: IOSColors.systemBackground,
+    fontFamily: IOSFont.sans,
   },
 
   newChatBtn: {

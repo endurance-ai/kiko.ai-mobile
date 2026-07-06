@@ -43,8 +43,17 @@ export default function RootLayout() {
                     <FeedbackProvider>
                       <Stack screenOptions={{ headerShown: false }}>
                         <Stack.Screen name="index" />
-                        <Stack.Screen name="login" options={{ animation: 'fade' }}
-  />
+                        <Stack.Screen
+                          name="login"
+                          options={{
+                            presentation: 'formSheet',
+                            sheetAllowedDetents: [0.92],
+                            sheetGrabberVisible: true,
+                            sheetCornerRadius: 28,
+                            gestureEnabled: true,
+                            animation: 'slide_from_bottom',
+                          }}
+                        />
                         <Stack.Screen name="home" />
                         <Stack.Screen name="history" />
                         <Stack.Screen name="list" />

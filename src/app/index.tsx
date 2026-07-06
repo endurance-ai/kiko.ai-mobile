@@ -128,7 +128,7 @@ export default function SplashScreen() {
   useEffect(() => {
     if (!animationDone || status === 'loading' || navigatedRef.current) return;
     navigatedRef.current = true;
-    router.replace(status === 'authenticated' ? '/home' : '/login');
+    router.replace('/home');
   }, [animationDone, status]);
 
   if (useLottie && LottieView) {
