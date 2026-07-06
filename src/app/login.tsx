@@ -448,7 +448,7 @@ const styles = StyleSheet.create({
   // Marquee
   marquee: {
     gap: 10,
-    paddingTop: 8,
+    paddingTop: 40,
   },
   marqueeRow: {
     height: 40,

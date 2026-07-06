@@ -18,6 +18,7 @@ import {
   FloatingHeader,
 } from "@/components/floating-header";
 import { Haptic, IOSColors, IOSFont, IOSText } from "@/constants/ios";
+import { useAuth } from "@/state/auth";
 import { useWishlist } from "@/state/wishlist";
 import type { SaveListItem } from "@/types/api";
 
@@ -34,9 +35,14 @@ function formatPrice(price: number | null): string {
 export default function WishlistScreen() {
   const insets = useSafeAreaInsets();
   const { items, status, error, toggle, refresh } = useWishlist();
+  const { status: authStatus } = useAuth();
+  const isGuest = authStatus !== "authenticated";
 
-  const isLoading = status === "loading" && items.length === 0;
-  const isError = status === "error" && items.length === 0;
+  // 게스트: 저장이 불가하므로 로딩/에러 대신 항상 빈 상태로 취급.
+  const isLoading = !isGuest && status === "loading" && items.length === 0;
+  const isError = !isGuest && status === "error" && items.length === 0;
+  const isEmpty =
+    isGuest || (status === "ready" && items.length === 0);
 
   return (
     <View style={styles.root}>
@@ -71,7 +77,7 @@ export default function WishlistScreen() {
           </View>
         )}
 
-        {status === "ready" && items.length === 0 && (
+        {isEmpty && (
           <View style={styles.emptyBlock}>
             <Text style={styles.emptyText}>저장할수록 더 똑똑해져요</Text>
           </View>

@@ -4,7 +4,6 @@ import { router, useLocalSearchParams } from "expo-router";
 import { SymbolView } from "expo-symbols";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   Alert,
   Keyboard,
   KeyboardAvoidingView,
@@ -23,6 +22,7 @@ import { Image as ExpoImage } from "expo-image";
 import { Banner } from "@/components/banner";
 import { FeedbackTrigger } from "@/components/feedback-trigger";
 import { GlassSurface } from "@/components/glass-surface";
+import { PixelSpinner, ShimmerText } from "@/components/pixel-spinner";
 import { PRODUCT_CARD_WIDTH, ProductCard } from "@/components/product-card";
 import { TopBar } from "@/components/top-bar";
 import { Haptic, IOSColors, IOSFont, IOSText } from "@/constants/ios";
@@ -44,6 +44,7 @@ import {
   type ChatStreamController,
 } from "@/lib/sse";
 import { uploadImage } from "@/lib/uploads";
+import { useAuth } from "@/state/auth";
 import { useBanner } from "@/state/banner";
 import { useCap } from "@/state/cap";
 import { buildFilterLabel, PRICE_MAX, useFilter } from "@/state/filter";
@@ -291,6 +292,7 @@ export default function ChatEntryScreen() {
   }>();
   const { value: filter, setValue: setFilter } = useFilter();
   const { isSaved: isWishlisted, toggle: toggleWishlist } = useWishlist();
+  const { status: authStatus } = useAuth();
   const {
     active: activeBanner,
     show: showBanner,
@@ -679,6 +681,34 @@ export default function ChatEntryScreen() {
 
   const handleSend = async () => {
     if (!canSend || uploading) return;
+    // 게스트: 사용자 말풍선만 먼저 렌더링해서 "보냈다"는 체감을 준 뒤,
+    // 짧은 딜레이 후 로그인 바텀시트 유도 (Kimi 방식).
+    if (authStatus !== "authenticated") {
+      const trimmedGuest = text.trim();
+      const localUri = pickedImage;
+      Haptic.medium();
+      const turnId = nextIdRef.current++;
+      const guestTurn: Turn = {
+        id: turnId,
+        user: {
+          text: trimmedGuest,
+          imageUri: localUri ?? undefined,
+        },
+        // "results" + 빈 results 배열 → 봇 사이드는 아무것도 렌더하지 않음.
+        status: "results",
+        isStream: false,
+        streamText: "",
+        streamProducts: [],
+        streamDone: true,
+        results: [],
+      };
+      setMessages((prev) => [...prev, guestTurn]);
+      setText("");
+      setPickedImage(null);
+      pickedAssetRef.current = null;
+      setTimeout(() => router.push("/login"), 450);
+      return;
+    }
     const trimmed = text.trim();
     const hasImage = pickedImage !== null;
     Haptic.medium();
@@ -755,6 +785,13 @@ export default function ChatEntryScreen() {
       serverImageUrl?: string;
     },
   ) => {
+    // 비로그인 상태에선 어떤 경로로 들어오든 (composer send / seedParam /
+    // critique / retry) 로그인 화면으로 유도. Apple 5.1.1(v) 대응 —
+    // 계정 없이도 홈 진입은 가능하되 실제 검색은 로그인 후 실행.
+    if (authStatus !== "authenticated") {
+      router.push("/login");
+      return;
+    }
     // 캡 잠금 상태에선 어떤 경로로 들어오든 (composer send / seedParam /
     // critique / retry) 서버 호출 금지. 새 채팅에서 seed 로 들어오는 케이스
     // 도 여기 방어선 하나로 막힌다.
@@ -1376,11 +1413,10 @@ export default function ChatEntryScreen() {
                 {/* Analyzing */}
                 {turn.status === "analyzing" && (
                   <View style={styles.botStatusRow}>
-                    <ActivityIndicator
-                      size="small"
-                      color={IOSColors.secondaryLabel}
-                    />
-                    <Text style={styles.botStatusText}>{ANALYZE_HINT}</Text>
+                    <PixelSpinner />
+                    <ShimmerText style={styles.botStatusText}>
+                      {ANALYZE_HINT}
+                    </ShimmerText>
                   </View>
                 )}
 
@@ -1444,11 +1480,10 @@ export default function ChatEntryScreen() {
                 {/* Searching (mock pipeline only) */}
                 {turn.status === "searching" && !turn.isStream && (
                   <View style={styles.botStatusRow}>
-                    <ActivityIndicator
-                      size="small"
-                      color={IOSColors.secondaryLabel}
-                    />
-                    <Text style={styles.botStatusText}>{SEARCH_HINT}</Text>
+                    <PixelSpinner />
+                    <ShimmerText style={styles.botStatusText}>
+                      {SEARCH_HINT}
+                    </ShimmerText>
                   </View>
                 )}
 
@@ -1480,13 +1515,10 @@ export default function ChatEntryScreen() {
                       (!turn.streamProducts ||
                         turn.streamProducts.length === 0) && (
                         <View style={styles.botStatusRow}>
-                          <ActivityIndicator
-                            size="small"
-                            color={IOSColors.secondaryLabel}
-                          />
-                          <Text style={styles.botStatusText}>
+                          <PixelSpinner />
+                          <ShimmerText style={styles.botStatusText}>
                             {turn.streamPlaceholder ?? '비슷한 거 찾는 중…'}
-                          </Text>
+                          </ShimmerText>
                         </View>
                       )}
                     {turn.streamProducts && turn.streamProducts.length > 0 && (
@@ -1818,6 +1850,24 @@ export default function ChatEntryScreen() {
             {emptyGreeting.slice(0, revealedChars)}
             {!typingDone && <Text style={styles.cursor}>▍</Text>}
           </Text>
+          {authStatus !== "authenticated" && typingDone && (
+            <Pressable
+              onPress={() => {
+                Haptic.light();
+                router.push("/login");
+              }}
+              hitSlop={12}
+              style={styles.emptyLoginBtnWrap}
+            >
+              <GlassSurface
+                variant="composer"
+                isInteractive
+                style={styles.emptyLoginBtn}
+              >
+                <Text style={styles.emptyLoginBtnText}>Log in</Text>
+              </GlassSurface>
+            </Pressable>
+          )}
         </Pressable>
       )}
 
@@ -2040,6 +2090,26 @@ const styles = StyleSheet.create({
   cursor: {
     color: IOSColors.label,
     opacity: 0.65,
+  },
+  // 게스트 상태 hero 아래 노출되는 Liquid Glass 로그인 pill.
+  // 배경은 유리, 텍스트는 Apple system blue + 얇은 웨이트.
+  emptyLoginBtnWrap: {
+    marginTop: 24,
+  },
+  emptyLoginBtn: {
+    paddingHorizontal: 14,
+    height: 34,
+    borderRadius: 17,
+    justifyContent: "center",
+    alignItems: "center",
+    overflow: "hidden",
+  },
+  emptyLoginBtnText: {
+    fontSize: 17,
+    fontWeight: "300",
+    color: "#007AFF",
+    fontFamily: IOSFont.sans,
+    letterSpacing: -0.2,
   },
 
   // Conversation
