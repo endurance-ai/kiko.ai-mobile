@@ -180,6 +180,27 @@ function containsVisionLink(text: string | undefined): boolean {
   return !!text && VISION_LINK_RE.test(text);
 }
 
+// 스트리밍 카드 safety dedup — 서버 다양화 파이프라인이 근사 중복 (다른
+// product_id 지만 동일 이미지/캡션) 을 놓칠 때 프론트에서 최종 방어.
+// key 우선순위: product_id → image_url → caption. 하나라도 겹치면 drop.
+function appendUniqueProduct(
+  existing: ProductRef[] | undefined,
+  next: ProductRef,
+): ProductRef[] {
+  const list = existing ?? [];
+  for (const p of list) {
+    if (
+      next.product_id != null &&
+      p.product_id != null &&
+      p.product_id === next.product_id
+    )
+      return list;
+    if (p.image_url && p.image_url === next.image_url) return list;
+    if (p.caption && next.caption && p.caption === next.caption) return list;
+  }
+  return [...list, next];
+}
+
 const URL_RE = /https?:\/\/[^\s]+/i;
 
 function extractFirstUrl(text: string): string | null {
@@ -997,7 +1018,7 @@ export default function ChatEntryScreen() {
       onProduct: (product: ProductRef) => {
         bumpTimeout();
         patch((t) => ({
-          streamProducts: [...(t.streamProducts ?? []), product],
+          streamProducts: appendUniqueProduct(t.streamProducts, product),
         }));
       },
       onSearch: (searchId: string, total?: number) => {
@@ -1226,7 +1247,7 @@ export default function ChatEntryScreen() {
       onProduct: (product) => {
         bumpCbTimeout();
         patch((t) => ({
-          streamProducts: [...(t.streamProducts ?? []), product],
+          streamProducts: appendUniqueProduct(t.streamProducts, product),
         }));
       },
       onSearch: (searchId, total) => {
@@ -1643,12 +1664,16 @@ export default function ChatEntryScreen() {
                       </ScrollView>
                     )}
                     {/* "더보기" CTA — opens the full ranked result-set grid.
-                        Only rendered once the SSE `search` event delivered a
-                        server-persisted search_id (before that, tapping
-                        would land on an unresolvable route). */}
+                        Rendered only when:
+                          1. search_id 도착 (라우팅 가능)
+                          2. 현재 뜬 카드보다 실제 결과가 더 있음
+                        서버가 total 을 안 주거나 total ≤ 카드 수면 숨김 —
+                        모두 이미 보이는데 CTA 만 노출되는 걸 방지. */}
                     {turn.streamProducts &&
                       turn.streamProducts.length > 0 &&
-                      turn.streamSearchId && (
+                      turn.streamSearchId &&
+                      typeof turn.streamSearchTotal === "number" &&
+                      turn.streamSearchTotal > turn.streamProducts.length && (
                         <Pressable
                           style={styles.seeMoreCta}
                           onPress={() => {
@@ -1666,7 +1691,7 @@ export default function ChatEntryScreen() {
                           }}
                         >
                           <Text style={styles.seeMoreText}>
-                            {`더보기 (${turn.streamSearchTotal ?? 15})`}
+                            {`더보기 (${turn.streamSearchTotal})`}
                           </Text>
                           <SymbolView
                             name="chevron.right"
