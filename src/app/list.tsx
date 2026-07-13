@@ -19,6 +19,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FLOATING_HEADER_OFFSET, FloatingHeader } from '@/components/floating-header';
 import { GlassSurface } from '@/components/glass-surface';
 import { Haptic, IOSColors, IOSFont, IOSText } from '@/constants/ios';
+import { trackProductImpression } from '@/lib/analytics';
 import { ApiError } from '@/lib/api';
 import { getResultSetPage } from '@/lib/results';
 import { useBanner } from '@/state/banner';
@@ -190,7 +191,7 @@ export default function ListScreen() {
 
         {items.length > 0 && (
           <View style={styles.grid}>
-            {items.map((p) => {
+            {items.map((p, idx) => {
               const pidStr = String(p.product_id);
               return (
                 <GridCard
@@ -198,6 +199,7 @@ export default function ListScreen() {
                   product={p}
                   sessionId={sessionId}
                   searchId={searchId}
+                  position={idx}
                   pinned={pinnedProductId === pidStr}
                   onTogglePin={() => togglePinnedProduct(pidStr)}
                 />
@@ -290,18 +292,30 @@ function GridCard({
   product,
   sessionId,
   searchId,
+  position,
   pinned,
   onTogglePin,
 }: {
   product: ResultProduct;
   sessionId: string | null;
   searchId: string | null;
+  position: number;
   pinned: boolean;
   onTogglePin: () => void;
 }) {
   const { isSaved, toggle: toggleSaved } = useWishlist();
   const productIdStr = String(product.product_id);
   const saved = isSaved(productIdStr);
+
+  useEffect(() => {
+    trackProductImpression({
+      productId: productIdStr,
+      brand: product.brand,
+      searchId,
+      position,
+      source: "search",
+    });
+  }, [productIdStr, product.brand, searchId, position]);
   const openPdp = () => {
     Haptic.light();
     const qs = [
