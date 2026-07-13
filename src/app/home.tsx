@@ -1792,13 +1792,16 @@ export default function ChatEntryScreen() {
                         snapToInterval={PRODUCT_CARD_WIDTH + 12}
                         decelerationRate="fast"
                       >
-                        {turn.results.slice(0, 5).map((p) => (
+                        {turn.results.slice(0, 5).map((p, idx) => (
                           <ProductCard
                             key={p.id}
                             product={p}
                             pinned={isLast && pinnedId === p.id}
                             onPress={() => router.push(`/product/${p.id}`)}
                             onPin={() => isLast && handlePin(p)}
+                            searchId={turn.streamSearchId ?? null}
+                            position={idx}
+                            source="search"
                           />
                         ))}
                       </ScrollView>

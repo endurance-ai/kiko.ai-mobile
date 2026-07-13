@@ -1,8 +1,10 @@
 import { Image } from 'expo-image';
 import { SymbolView } from 'expo-symbols';
+import { useEffect } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Haptic, IOSColors, IOSFont, IOSText } from '@/constants/ios';
+import { trackProductImpression } from '@/lib/analytics';
 import { formatPrice, type Product } from '@/state/products';
 
 const CARD_WIDTH = 156;
@@ -13,9 +15,32 @@ type Props = {
   pinned?: boolean;
   onPress?: () => void;
   onPin?: () => void;
+  /** 이 노출을 발생시킨 검색의 search_id. 없으면 impression 미발사. */
+  searchId?: string | null;
+  /** 리스트에서의 0-based 위치. */
+  position?: number | null;
+  /** 노출 경로. 기본 "search". 향후 큐레이션 등 확장. */
+  source?: string;
 };
 
-export function ProductCard({ product, pinned = false, onPress, onPin }: Props) {
+export function ProductCard({
+  product,
+  pinned = false,
+  onPress,
+  onPin,
+  searchId,
+  position,
+  source,
+}: Props) {
+  useEffect(() => {
+    trackProductImpression({
+      productId: String(product.id),
+      brand: product.brand,
+      searchId,
+      position,
+      source,
+    });
+  }, [product.id, product.brand, searchId, position, source]);
   const handlePress = () => {
     Haptic.light();
     onPress?.();
