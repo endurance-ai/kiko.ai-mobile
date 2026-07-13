@@ -91,13 +91,16 @@ const SECTION_DEFS = [
   { title: '지금 뜨는 베트남 핫걸 ST', subtitle: '사이공 트렌드세터의 여름 무드' },
 ];
 
+// 유도 칩 — GET /v1/curation 응답 chips[]와 동일 계약. 문형 슬롯 P1~P5 각 1개,
+// 값은 골든셋 검증 쿼리에서만 선별(윤영 전달 대기 — 아래는 mock).
+// 배열 순서 = 노출 순서: 안전·보편 문형(P1) 앞 → Kiko다운 문형(P5) 뒤.
 const SUGGESTION_CHIPS = [
-  '버건디 가디건',
-  '하객룩 원피스',
-  'Y2K 데님',
-  '미니멀 오피스룩',
-  '빈티지 레더 자켓',
-];
+  { id: 'chip-p1', pattern: 'P1', label: '아이보리 린넨 셔츠' }, // 컬러 + 카테고리
+  { id: 'chip-p2', pattern: 'P2', label: '미니멀한 여름 원피스' }, // 무드 + 카테고리
+  { id: 'chip-p3', pattern: 'P3', label: '하객룩인데 무난하지 않게' }, // 상황 + 스타일
+  { id: 'chip-p4', pattern: 'P4', label: '10만원 아래 데일리 백' }, // 가격 + 카테고리
+  { id: 'chip-p5', pattern: 'P5', label: '베트남 핫걸 스타일 탑' }, // 레퍼런스
+] as const;
 
 const GREETING = '머릿속 그 옷,\n마법처럼 찾아드릴게요';
 
@@ -619,7 +622,7 @@ function AnimatedProductCard({
 // 0번 칩("공용 · 가격무관")은 필터 토글이라 mock 전송을 트리거하지 않고
 // 기존처럼 selection 햅틱만 준다. 그 외 칩은 라벨을 쿼리로 mock 전송한다.
 function SuggestionChips({ onSend }: { onSend: (query: string) => void }) {
-  const chips = ['공용 · 가격무관', ...SUGGESTION_CHIPS];
+  const chips = ['공용 · 가격무관', ...SUGGESTION_CHIPS.map((c) => c.label)];
   return (
     <ScrollView
       horizontal
