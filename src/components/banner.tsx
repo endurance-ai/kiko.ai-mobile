@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 
 import { GlassSurface } from '@/components/glass-surface';
-import { Haptic, IOSColors, IOSFont, IOSText } from '@/theme';
+import { Haptic, IOSColors, IOSFont, IOSText, Radius } from '@/theme';
 import { useBanner } from '@/state/banner';
 
 const FADE_MS = 220;
@@ -152,7 +152,7 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingHorizontal: 16,
     paddingVertical: 14,
-    borderRadius: 22,
+    borderRadius: Radius.xl,
     overflow: 'hidden',
   },
   textCol: {
@@ -177,7 +177,7 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingHorizontal: 14,
     paddingVertical: 9,
-    borderRadius: 999,
+    borderRadius: Radius.pill,
     backgroundColor: IOSColors.label,
   },
   actionLabel: {
@@ -202,7 +202,7 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingHorizontal: 14,
     paddingVertical: 9,
-    borderRadius: 999,
+    borderRadius: Radius.pill,
     backgroundColor: '#FFFFFF',
   },
   billingActionLabel: {

@@ -3,7 +3,7 @@ import { SymbolView } from 'expo-symbols';
 import { useEffect } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { Haptic, IOSColors, IOSFont, IOSText } from '@/theme';
+import { Haptic, IOSColors, IOSFont, IOSText, Radius } from '@/theme';
 import { trackProductImpression } from '@/lib/analytics';
 import { formatPrice, type Product } from '@/state/products';
 
@@ -99,7 +99,7 @@ const styles = StyleSheet.create({
   imageWrap: {
     width: CARD_WIDTH,
     height: CARD_HEIGHT,
-    borderRadius: 20,
+    borderRadius: Radius.xl,
     overflow: 'hidden',
     position: 'relative',
   },
@@ -113,7 +113,8 @@ const styles = StyleSheet.create({
     right: 10,
     width: 28,
     height: 28,
-    borderRadius: 14,
+    borderRadius: Radius.pill,
+    // TODO: surface + alpha 조합 헬퍼 도입 후 마이그 (Phase 3 후속)
     backgroundColor: 'rgba(255,255,255,0.85)',
     justifyContent: 'center',
     alignItems: 'center',
@@ -124,7 +125,8 @@ const styles = StyleSheet.create({
     left: 10,
     paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 10,
+    borderRadius: Radius.md,
+    // TODO: surface + alpha 조합 헬퍼 도입 후 마이그 (Phase 3 후속)
     backgroundColor: 'rgba(255,255,255,0.92)',
   },
   priceText: {
