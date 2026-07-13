@@ -17,7 +17,7 @@ import {
   FLOATING_HEADER_OFFSET,
   FloatingHeader,
 } from "@/components/floating-header";
-import { Haptic, IOSColors, IOSFont, IOSText , Radius } from "@/theme";
+import { Haptic, IOSColors, IOSFont, IOSText , Radius , withAlpha , Opacity } from "@/theme";
 import { useAuth } from "@/state/auth";
 import { useWishlist } from "@/state/wishlist";
 import type { SaveListItem } from "@/types/api";
@@ -239,7 +239,7 @@ const styles = StyleSheet.create({
     height: 26,
     borderRadius: Radius.pill,
     borderWidth: 1.5,
-    borderColor: "rgba(255,255,255,0.95)",
+    borderColor: withAlpha('#FFFFFF', Opacity.nearFull),
     backgroundColor: IOSColors.label,
     justifyContent: "center",
     alignItems: "center",
@@ -251,7 +251,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: Radius.sm,
-    backgroundColor: "rgba(255,255,255,0.92)",
+    backgroundColor: withAlpha('#FFFFFF', Opacity.nearFull),
   },
   priceText: {
     ...IOSText.caption1,

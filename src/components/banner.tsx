@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 
 import { GlassSurface } from '@/components/glass-surface';
-import { Haptic, IOSColors, IOSFont, IOSText, Radius } from '@/theme';
+import { Haptic, IOSColors, IOSFont, IOSText, Radius , withAlpha , Opacity } from '@/theme';
 import { useBanner } from '@/state/banner';
 
 const FADE_MS = 220;
@@ -194,7 +194,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   billingSubtitle: {
-    color: 'rgba(255,255,255,0.72)',
+    color: withAlpha('#FFFFFF', Opacity.softened),
   },
   billingActionBtn: {
     flexDirection: 'row',

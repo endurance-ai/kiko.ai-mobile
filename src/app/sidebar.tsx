@@ -20,7 +20,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { GlassSurface } from "@/components/glass-surface";
-import { Haptic, IOSColors, IOSFont, IOSText, Opacity , Radius } from "@/theme";
+import { Haptic, IOSColors, IOSFont, IOSText, Opacity , Radius , withAlpha , Scrim } from "@/theme";
 import { ApiError } from "@/lib/api";
 import { deleteSession, listSessions, renameSession } from "@/lib/chat";
 import { getMe } from "@/lib/me";
@@ -453,7 +453,7 @@ const styles = StyleSheet.create({
     right: 0,
     top: 0,
     bottom: 0,
-    backgroundColor: "rgba(0,0,0,0.30)",
+    backgroundColor: withAlpha('#000000', Scrim.standard),
   },
   panel: {
     position: "absolute",

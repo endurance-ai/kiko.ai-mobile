@@ -25,7 +25,7 @@ import { GlassSurface } from "@/components/glass-surface";
 import { PixelSpinner, ShimmerText } from "@/components/pixel-spinner";
 import { PRODUCT_CARD_WIDTH, ProductCard } from "@/components/product-card";
 import { TopBar } from "@/components/top-bar";
-import { Haptic, IOSColors, IOSFont, IOSText, Opacity , Radius } from "@/theme";
+import { Haptic, IOSColors, IOSFont, IOSText, Opacity , Radius , withAlpha , Scrim } from "@/theme";
 import { useKeyboardHeight } from "@/hooks/use-keyboard-height";
 import {
   createSessionStream,
@@ -1614,7 +1614,7 @@ export default function ChatEntryScreen() {
                                       tintColor={
                                         pinned
                                           ? IOSColors.systemBackground
-                                          : "rgba(255,255,255,0.7)"
+                                          : withAlpha('#FFFFFF', Opacity.softened)
                                       }
                                       weight="bold"
                                     />
@@ -1646,7 +1646,7 @@ export default function ChatEntryScreen() {
                                         productId != null &&
                                         isWishlisted(String(productId))
                                           ? IOSColors.systemBackground
-                                          : "rgba(255,255,255,0.85)"
+                                          : withAlpha('#FFFFFF', Opacity.nearFull)
                                       }
                                       weight="bold"
                                     />
@@ -2306,7 +2306,7 @@ const styles = StyleSheet.create({
     height: 22,
     borderRadius: Radius.pill,
     borderWidth: 1.5,
-    borderColor: "rgba(255,255,255,0.95)",
+    borderColor: withAlpha('#FFFFFF', Opacity.nearFull),
     backgroundColor: "rgba(0,0,0,0.22)",
     justifyContent: "center",
     alignItems: "center",
@@ -2320,7 +2320,7 @@ const styles = StyleSheet.create({
     height: 22,
     borderRadius: Radius.pill,
     borderWidth: 1.5,
-    borderColor: "rgba(255,255,255,0.95)",
+    borderColor: withAlpha('#FFFFFF', Opacity.nearFull),
     backgroundColor: "rgba(0,0,0,0.22)",
     justifyContent: "center",
     alignItems: "center",
@@ -2574,7 +2574,7 @@ const styles = StyleSheet.create({
     width: 20,
     height: 20,
     borderRadius: Radius.pill,
-    backgroundColor: "rgba(0,0,0,0.6)",
+    backgroundColor: withAlpha('#000000', Scrim.heavy),
     justifyContent: "center",
     alignItems: "center",
   },

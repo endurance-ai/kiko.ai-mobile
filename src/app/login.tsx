@@ -22,7 +22,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { Haptic, Opacity , Radius } from '@/theme';
+import { Haptic, Opacity , Radius , withAlpha , Scrim } from '@/theme';
 import { ApiError } from '@/lib/api';
 import { useAuth } from '@/state/auth';
 
@@ -436,8 +436,8 @@ export default function LoginScreen() {
 // ─── Styles ──────────────────────────────────────────────────────────────
 
 const INK = '#0a0a0a';
-const INK_SUBTLE = 'rgba(10,10,10,0.55)';
-const INK_LINK = 'rgba(10,10,10,0.85)';
+const INK_SUBTLE = withAlpha('#0A0A0A', Scrim.heavy);
+const INK_LINK = withAlpha('#0A0A0A', Opacity.nearFull);
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#FFFFFF' },
