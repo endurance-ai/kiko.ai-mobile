@@ -22,7 +22,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { Haptic, Opacity } from '@/theme';
+import { Haptic, Opacity , Radius } from '@/theme';
 import { ApiError } from '@/lib/api';
 import { useAuth } from '@/state/auth';
 
@@ -465,7 +465,7 @@ const styles = StyleSheet.create({
   chip: {
     height: 40,
     paddingHorizontal: 16,
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -499,7 +499,7 @@ const styles = StyleSheet.create({
   },
   appleBtn: {
     height: 50,
-    borderRadius: 50,
+    borderRadius: Radius.pill,
     backgroundColor: INK,
     flexDirection: 'row',
     alignItems: 'center',
@@ -517,7 +517,7 @@ const styles = StyleSheet.create({
   // theme. Text/logo stay ink (readable on white).
   googleBtn: {
     height: 50,
-    borderRadius: 50,
+    borderRadius: Radius.pill,
     backgroundColor: '#FFFFFF',
     flexDirection: 'row',
     alignItems: 'center',

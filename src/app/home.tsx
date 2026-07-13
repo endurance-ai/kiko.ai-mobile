@@ -25,7 +25,7 @@ import { GlassSurface } from "@/components/glass-surface";
 import { PixelSpinner, ShimmerText } from "@/components/pixel-spinner";
 import { PRODUCT_CARD_WIDTH, ProductCard } from "@/components/product-card";
 import { TopBar } from "@/components/top-bar";
-import { Haptic, IOSColors, IOSFont, IOSText, Opacity } from "@/theme";
+import { Haptic, IOSColors, IOSFont, IOSText, Opacity , Radius } from "@/theme";
 import { useKeyboardHeight } from "@/hooks/use-keyboard-height";
 import {
   createSessionStream,
@@ -2133,7 +2133,7 @@ const styles = StyleSheet.create({
   emptyLoginBtn: {
     paddingHorizontal: 14,
     height: 34,
-    borderRadius: 17,
+    borderRadius: Radius.lg,
     justifyContent: "center",
     alignItems: "center",
     overflow: "hidden",
@@ -2163,7 +2163,7 @@ const styles = StyleSheet.create({
   userImage: {
     width: 96,
     height: 96,
-    borderRadius: 16,
+    borderRadius: Radius.lg,
   },
   userTextRow: {
     flexDirection: "row",
@@ -2173,7 +2173,7 @@ const styles = StyleSheet.create({
     maxWidth: "80%",
     paddingHorizontal: 14,
     paddingVertical: 10,
-    borderRadius: 18,
+    borderRadius: Radius.xl,
     borderTopRightRadius: 6,
     backgroundColor: IOSColors.label,
   },
@@ -2185,7 +2185,7 @@ const styles = StyleSheet.create({
   userImageSmall: {
     width: 76,
     height: 76,
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     opacity: Opacity.softened,
   },
   pickerBlock: {
@@ -2209,7 +2209,7 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingHorizontal: 14,
     paddingVertical: 10,
-    borderRadius: 999,
+    borderRadius: Radius.pill,
     backgroundColor: IOSColors.systemBackground,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: IOSColors.separator,
@@ -2260,7 +2260,7 @@ const styles = StyleSheet.create({
     maxWidth: "85%",
     paddingHorizontal: 14,
     paddingVertical: 10,
-    borderRadius: 18,
+    borderRadius: Radius.xl,
     borderTopLeftRadius: 6,
     backgroundColor: IOSColors.systemBackground,
   },
@@ -2273,7 +2273,7 @@ const styles = StyleSheet.create({
   streamProductCard: {
     width: 140,
     backgroundColor: IOSColors.systemBackground,
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     overflow: "hidden",
   },
   streamProductImageWrap: {
@@ -2304,7 +2304,7 @@ const styles = StyleSheet.create({
   streamCardCheck: {
     width: 22,
     height: 22,
-    borderRadius: 11,
+    borderRadius: Radius.pill,
     borderWidth: 1.5,
     borderColor: "rgba(255,255,255,0.95)",
     backgroundColor: "rgba(0,0,0,0.22)",
@@ -2318,7 +2318,7 @@ const styles = StyleSheet.create({
   streamCardHeartBtn: {
     width: 22,
     height: 22,
-    borderRadius: 11,
+    borderRadius: Radius.pill,
     borderWidth: 1.5,
     borderColor: "rgba(255,255,255,0.95)",
     backgroundColor: "rgba(0,0,0,0.22)",
@@ -2363,7 +2363,7 @@ const styles = StyleSheet.create({
   clarifyOption: {
     paddingVertical: 12,
     paddingHorizontal: 14,
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     backgroundColor: IOSColors.tertiarySystemBackground,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: IOSColors.separator,
@@ -2413,7 +2413,7 @@ const styles = StyleSheet.create({
     marginTop: 6,
     paddingHorizontal: 16,
     paddingVertical: 16,
-    borderRadius: 18,
+    borderRadius: Radius.xl,
     backgroundColor: IOSColors.systemFill,
     gap: 12,
   },
@@ -2431,7 +2431,7 @@ const styles = StyleSheet.create({
   narrowChip: {
     paddingHorizontal: 16,
     paddingVertical: 9,
-    borderRadius: 999,
+    borderRadius: Radius.pill,
     backgroundColor: IOSColors.systemBackground,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: IOSColors.separator,
@@ -2445,7 +2445,7 @@ const styles = StyleSheet.create({
   narrowDismiss: {
     paddingHorizontal: 14,
     paddingVertical: 9,
-    borderRadius: 999,
+    borderRadius: Radius.pill,
     backgroundColor: "transparent",
   },
   narrowDismissText: {
@@ -2475,7 +2475,7 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingHorizontal: 16,
     paddingVertical: 8,
-    borderRadius: 999,
+    borderRadius: Radius.pill,
     overflow: "hidden",
   },
   filterChipText: {
@@ -2487,7 +2487,7 @@ const styles = StyleSheet.create({
   critiqueChip: {
     paddingHorizontal: 16,
     paddingVertical: 8,
-    borderRadius: 999,
+    borderRadius: Radius.pill,
     overflow: "hidden",
   },
   critiqueChipText: {
@@ -2509,13 +2509,13 @@ const styles = StyleSheet.create({
     paddingLeft: 6,
     paddingRight: 10,
     paddingVertical: 6,
-    borderRadius: 999,
+    borderRadius: Radius.pill,
     backgroundColor: IOSColors.tertiarySystemBackground,
   },
   attachmentThumb: {
     width: 24,
     height: 24,
-    borderRadius: 12,
+    borderRadius: Radius.pill,
   },
   attachmentBrand: {
     ...IOSText.footnote,
@@ -2538,7 +2538,7 @@ const styles = StyleSheet.create({
   },
   fallbackAction: {
     height: 56,
-    borderRadius: 16,
+    borderRadius: Radius.lg,
     borderWidth: 1,
     borderColor: IOSColors.separator,
     backgroundColor: IOSColors.systemBackground,
@@ -2559,7 +2559,7 @@ const styles = StyleSheet.create({
   previewWrap: {
     width: 64,
     height: 64,
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     overflow: "hidden",
     position: "relative",
   },
@@ -2573,7 +2573,7 @@ const styles = StyleSheet.create({
     right: 4,
     width: 20,
     height: 20,
-    borderRadius: 10,
+    borderRadius: Radius.pill,
     backgroundColor: "rgba(0,0,0,0.6)",
     justifyContent: "center",
     alignItems: "center",
@@ -2583,7 +2583,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     height: 56,
-    borderRadius: 28,
+    borderRadius: Radius.xxl,
     paddingLeft: 8,
     paddingRight: 6,
     overflow: "hidden",
@@ -2604,7 +2604,7 @@ const styles = StyleSheet.create({
   sendBtn: {
     width: 44,
     height: 44,
-    borderRadius: 22,
+    borderRadius: Radius.pill,
     backgroundColor: IOSColors.label,
     justifyContent: "center",
     alignItems: "center",

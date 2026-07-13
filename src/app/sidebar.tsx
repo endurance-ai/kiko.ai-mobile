@@ -20,7 +20,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { GlassSurface } from "@/components/glass-surface";
-import { Haptic, IOSColors, IOSFont, IOSText, Opacity } from "@/theme";
+import { Haptic, IOSColors, IOSFont, IOSText, Opacity , Radius } from "@/theme";
 import { ApiError } from "@/lib/api";
 import { deleteSession, listSessions, renameSession } from "@/lib/chat";
 import { getMe } from "@/lib/me";
@@ -466,6 +466,10 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.18,
     shadowRadius: 16,
     elevation: 16,
+    // Drawer panel 은 세로 화면 전체(~800px)를 채우는 큰 컨테이너 — 50 은
+    // 부분 라운드 의도. Radius 스케일에 없는 특수값이라 로컬 유지 (Rule of
+    // Three 미달, 다른 데서 재사용 없음). Phase 3-c 획일 반올림에서 pill 로
+    // 잘못 매핑돼 캡슐형으로 변형된 것 원복.
     borderRadius: 50,
   },
   panelInner: { flex: 1 },
@@ -516,7 +520,7 @@ const styles = StyleSheet.create({
   historyRow: {
     paddingHorizontal: 12,
     paddingVertical: 12,
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     marginBottom: 2,
   },
   historyRowActive: {
@@ -551,7 +555,8 @@ const styles = StyleSheet.create({
   avatarBtn: {
     width: 50,
     height: 50,
-    borderRadius: 25,
+    // 50×50 원형 아바타 — 25 는 완전 원 목적. Radius.pill 사용.
+    borderRadius: Radius.pill,
     justifyContent: "center",
     alignItems: "center",
     overflow: "hidden",
@@ -573,7 +578,8 @@ const styles = StyleSheet.create({
   guestAvatarDot: {
     width: 50,
     height: 50,
-    borderRadius: 25,
+    // 50×50 원형 아바타 dot — 완전 원 목적. Radius.pill.
+    borderRadius: Radius.pill,
     backgroundColor: "#D8D8DA",
   },
   loginLabel: {
@@ -605,7 +611,7 @@ const styles = StyleSheet.create({
   emptyGuestBtn: {
     paddingHorizontal: 22,
     height: 44,
-    borderRadius: 999,
+    borderRadius: Radius.pill,
     backgroundColor: IOSColors.label,
     justifyContent: "center",
     alignItems: "center",
@@ -626,7 +632,7 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingHorizontal: 20,
     height: 50,
-    borderRadius: 999,
+    borderRadius: Radius.pill,
     backgroundColor: IOSColors.label,
   },
   newChatText: {
