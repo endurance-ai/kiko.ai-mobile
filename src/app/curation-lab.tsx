@@ -18,7 +18,7 @@
  */
 import { router } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -26,14 +26,20 @@ import {
   Text,
   View,
   useWindowDimensions,
+  type LayoutChangeEvent,
 } from 'react-native';
 import Animated, {
   Extrapolation,
   interpolate,
+  runOnJS,
+  scrollTo,
+  useAnimatedReaction,
+  useAnimatedRef,
   useAnimatedScrollHandler,
   useAnimatedStyle,
   useSharedValue,
   withSpring,
+  withTiming,
   type SharedValue,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -41,6 +47,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GlassSurface } from '@/components/glass-surface';
 import { PRODUCT_CARD_WIDTH, ProductCard } from '@/components/product-card';
 import {
+  Duration,
   Glass,
   Haptic,
   IOSColors,
@@ -76,10 +83,12 @@ function buildMockCatalog(): Product[] {
   return [...MOCK_PRODUCTS, ...extras];
 }
 
+// 구좌 4종 — 인기/검색량/가격대/자유 큐레이션 (취향 데이터 0 가정, 7/13 확정). 실데이터 API 연동 전 mock.
 const SECTION_DEFS = [
-  { title: '지금 뜨는 인디 브랜드', subtitle: '이번 주 가장 많이 저장된 브랜드부터' },
-  { title: '이번 주 화제의 무드', subtitle: '지금 취향 데이터에서 뜨는 무드 조합' },
-  { title: '무신사엔 없는 발견', subtitle: '큰 플랫폼엔 안 뜨는 인디 · 빈티지 브랜드' },
+  { title: '지금 인기 브랜드', subtitle: '키코에서 가장 사랑받는 브랜드' },
+  { title: '요즘 많이 찾는 브랜드', subtitle: '검색량이 빠르게 오르는 중' },
+  { title: 'Under $100', subtitle: '10만원 아래, 안목은 그대로' },
+  { title: '지금 뜨는 베트남 핫걸 ST', subtitle: '사이공 트렌드세터의 여름 무드' },
 ];
 
 const SUGGESTION_CHIPS = [
@@ -91,6 +100,11 @@ const SUGGESTION_CHIPS = [
 ];
 
 const GREETING = '머릿속 그 옷,\n마법처럼 찾아드릴게요';
+
+// 컴포저 전송 버튼 탭 시 사용하는 mock 캔드 쿼리 & 에이전트 응답 문구.
+// 실제 전송/추론은 없음 — UI 상호작용만 시연.
+const CANNED_QUERY = '베이지 니트 조끼 찾아줘';
+const AGENT_REPLY_TEXT = '이런 거 어때? 골라봐';
 
 export default function CurationLabScreen() {
   const [pinnedIds, setPinnedIds] = useState<Set<string>>(new Set());
@@ -111,13 +125,111 @@ export default function CurationLabScreen() {
     },
   });
 
-  // 6개씩 3섹션으로 분배 (마지막 섹션은 나머지 전부, 4~6개 범위 보장)
+  // ── discovery↔chat 공존: mock 대화 ──────────────────────────────────────
+  // 실제 전송/추론 없이 UI 상호작용만 시연하는 로컬 상태. 칩 탭/전송 버튼
+  // 탭이 대화 블록을 append 하고, 큐레이션 영역과 같은 스크롤 안에 공존한다.
+  const [conversation, setConversation] = useState<{ id: string; query: string }[]>([]);
+  const [jumpButtonVisible, setJumpButtonVisible] = useState(false);
+
+  // reanimated 4 의 scrollTo(animatedRef, x, y, animated) 로 큐레이션↔대화
+  // 사이를 프로그래밍적으로 스크롤한다 — web(react-native-web)에서도
+  // 동작하는 경로(scrollTo.web.ts 가 animatedRef() 로 얻은 엘리먼트에
+  // scrollView.scrollTo 를 직접 호출)라서 별도 분기 없이 그대로 쓴다.
+  const scrollRef = useAnimatedRef<Animated.ScrollView>();
+
+  // 대화 컨테이너의 y offset. UI 스레드에서 읽는 점프 버튼 가시성 계산
+  // (useAnimatedReaction/useAnimatedStyle)엔 shared value 미러가, JS
+  // 스레드에서 쓰는 scrollTo 타깃 계산엔 plain ref 미러가 필요해 둘 다
+  // onLayout 에서 같이 갱신한다.
+  const conversationY = useSharedValue(Number.MAX_SAFE_INTEGER);
+  const conversationYRef = useRef(0);
+
+  // 전송 직후엔 대화 컨테이너 레이아웃이 아직 없거나(첫 전송 = 이때 처음
+  // 마운트) 새 블록 높이가 반영 전이라, setTimeout(0) 시점의 y 는 stale 하다
+  // (첫 전송 시 0 → 최상단으로 튀는 버그). 스크롤 의도를 ref 에 걸어두고
+  // onLayout(마운트/높이 변화 시 재발화)에서 실제 스크롤을 수행한다.
+  const pendingScrollRef = useRef<'none' | 'first' | 'end'>('none');
+
+  const handleConversationLayout = (event: LayoutChangeEvent) => {
+    const y = event.nativeEvent.layout.y;
+    conversationYRef.current = y;
+    conversationY.value = y;
+    if (pendingScrollRef.current === 'none') return;
+    const mode = pendingScrollRef.current;
+    pendingScrollRef.current = 'none';
+    requestAnimationFrame(() => {
+      if (mode === 'first') {
+        scrollTo(scrollRef, 0, Math.max(y - CONVERSATION_TOP_CLEARANCE, 0), true);
+      } else {
+        scrollRef.current?.scrollToEnd?.({ animated: true });
+      }
+    });
+  };
+
+  // 점프 버튼(↓)의 pointerEvents 는 style 로 애니메이션할 수 없으니
+  // useAnimatedReaction + runOnJS 로 React state 를 미러링한다 — opacity 는
+  // 아래 useAnimatedStyle 에서 scrollY 를 직접 읽어 별도로 처리한다.
+  useAnimatedReaction(
+    () =>
+      conversation.length > 0 &&
+      scrollY.value < conversationY.value - windowHeight * JUMP_BUTTON_VISIBILITY_RATIO,
+    (visible, previous) => {
+      if (visible !== previous) {
+        runOnJS(setJumpButtonVisible)(visible);
+      }
+    },
+  );
+
+  const jumpButtonStyle = useAnimatedStyle(() => {
+    const visible =
+      conversation.length > 0 &&
+      scrollY.value < conversationY.value - windowHeight * JUMP_BUTTON_VISIBILITY_RATIO;
+    return {
+      opacity: withTiming(visible ? 1 : 0, { duration: Duration.fast }),
+    };
+  });
+
+  // [큐레이션] 복귀 필 — 대화 존재 여부가 아니라 스크롤 위치 기준으로
+  // 노출한다: 큐레이션 구좌의 95% 이상이 뷰포트 위로 지나갔을 때만 등장,
+  // 다시 위로 올라와 큐레이션이 화면에 많이 보이면 자동으로 줄어들며
+  // 사라진다. scrollY 직결이라 스크롤 도중 잡아도 즉시 역방향 반응.
+  const [curationPillVisible, setCurationPillVisible] = useState(false);
+  useAnimatedReaction(
+    () =>
+      conversation.length > 0 &&
+      scrollY.value > conversationY.value * CURATION_PILL_REVEAL_RATIO,
+    (visible, previous) => {
+      if (visible !== previous) {
+        runOnJS(setCurationPillVisible)(visible);
+      }
+    },
+  );
+  const curationPillStyle = useAnimatedStyle(() => {
+    const visible =
+      conversation.length > 0 &&
+      scrollY.value > conversationY.value * CURATION_PILL_REVEAL_RATIO;
+    return {
+      // scale 폭을 0.85→0.96 으로 줄임 — 팝하는 느낌 없이 은은하게 (과함 피드백)
+      opacity: withTiming(visible ? 1 : 0, { duration: Duration.fast }),
+      transform: [
+        { scale: withTiming(visible ? 1 : 0.96, { duration: Duration.fast }) },
+      ],
+    };
+  });
+
+  // 4~5개씩 4섹션으로 분배 (5, 4, 5, 4 = 18개)
   const sections = useMemo(() => {
-    const chunk = 6;
-    return SECTION_DEFS.map((def, i) => ({
-      ...def,
-      products: catalog.slice(i * chunk, i * chunk + chunk),
-    })).filter((s) => s.products.length > 0);
+    const chunks = [5, 4, 5, 4];
+    let startIdx = 0;
+    return SECTION_DEFS.map((def, i) => {
+      const chunkSize = chunks[i];
+      const products = catalog.slice(startIdx, startIdx + chunkSize);
+      startIdx += chunkSize;
+      return {
+        ...def,
+        products,
+      };
+    }).filter((s) => s.products.length > 0);
   }, [catalog]);
 
   const togglePin = (id: string) => {
@@ -137,9 +249,33 @@ export default function CurationLabScreen() {
     haptic();
   };
 
+  // mock 전송: 제안 칩 탭(칩 라벨을 쿼리로) 또는 컴포저 전송 버튼 탭(캔드
+  // 쿼리)이 모두 이 경로를 탄다. 첫 전송은 대화 시작점으로, 이후 전송은
+  // 최신 블록이 보이도록 맨 끝으로 스크롤 — 실행은 onLayout 쪽에서.
+  const handleSend = (query: string) => {
+    Haptic.medium();
+    const isFirstMessage = conversation.length === 0;
+    // 스크롤은 여기서 직접 하지 않는다 — 새 블록의 레이아웃이 커밋되면
+    // handleConversationLayout 이 pendingScrollRef 를 읽어 수행한다.
+    pendingScrollRef.current = isFirstMessage ? 'first' : 'end';
+    setConversation((prev) => [...prev, { id: `conv-${prev.length}-${Date.now()}`, query }]);
+  };
+
+  const handleJumpToTop = () => {
+    Haptic.light();
+    scrollTo(scrollRef, 0, 0, true);
+  };
+
+  const handleJumpToConversation = () => {
+    Haptic.light();
+    // 대화 시작점이 아니라 맨 아래(최신 블록)까지 완전히 내려간다.
+    scrollRef.current?.scrollToEnd?.({ animated: true });
+  };
+
   return (
     <View style={styles.root}>
       <Animated.ScrollView
+        ref={scrollRef}
         style={styles.scroll}
         contentContainerStyle={[
           styles.scrollContent,
@@ -163,6 +299,22 @@ export default function CurationLabScreen() {
           />
         ))}
 
+        {/* discovery↔chat 공존 — mock 대화가 큐레이션 아래로 append 된다 */}
+        {conversation.length > 0 && (
+          <View onLayout={handleConversationLayout} style={styles.conversationContainer}>
+            {conversation.map((entry, index) => (
+              <ConversationBlock
+                key={entry.id}
+                query={entry.query}
+                products={pickConversationProducts(catalog, index)}
+                pinnedIds={pinnedIds}
+                onPressProduct={handleProductPress}
+                onTogglePin={togglePin}
+              />
+            ))}
+          </View>
+        )}
+
         <View style={{ height: COMPOSER_CLEARANCE + insets.bottom }} />
       </Animated.ScrollView>
 
@@ -180,6 +332,26 @@ export default function CurationLabScreen() {
         </Pressable>
 
         <View style={styles.topPillsRight}>
+          {conversation.length > 0 && (
+            // 스크롤 위치 기반 노출 — opacity/scale 은 curationPillStyle 이
+            // scrollY 를 직접 읽어 처리하고, 탭 가능 여부는 state 미러로 제어.
+            <Animated.View
+              style={curationPillStyle}
+              pointerEvents={curationPillVisible ? 'auto' : 'none'}
+            >
+              <Pressable hitSlop={6} onPress={handleJumpToTop}>
+                <GlassSurface {...Glass.chip} isInteractive style={styles.textPill}>
+                  <SymbolView
+                    name="sparkles"
+                    size={16}
+                    tintColor={IOSColors.label}
+                    weight="medium"
+                  />
+                  <Text style={styles.pillText}>큐레이션</Text>
+                </GlassSurface>
+              </Pressable>
+            </Animated.View>
+          )}
           <Pressable hitSlop={6} onPress={noop(Haptic.light)}>
             <GlassSurface {...Glass.chip} isInteractive style={styles.textPill}>
               <SymbolView
@@ -205,10 +377,23 @@ export default function CurationLabScreen() {
         </View>
       </View>
 
+      {/* 대화 시작점으로 돌아가는 점프 버튼 — 대화가 있고, 사용자가
+          큐레이션 영역까지 위로 스크롤해 있을 때만 노출된다. */}
+      <Animated.View
+        style={[styles.jumpButton, { bottom: JUMP_BUTTON_BOTTOM + insets.bottom }, jumpButtonStyle]}
+        pointerEvents={jumpButtonVisible ? 'auto' : 'none'}
+      >
+        <Pressable hitSlop={6} onPress={handleJumpToConversation}>
+          <GlassSurface {...Glass.chip} isInteractive style={styles.jumpButtonGlass}>
+            <SymbolView name="chevron.down" size={16} tintColor={IOSColors.label} weight="medium" />
+          </GlassSurface>
+        </Pressable>
+      </Animated.View>
+
       {/* 하단 플로팅 컴포저 */}
       <View style={[styles.composerArea, { paddingBottom: insets.bottom + Spacing.one }]}>
-        <SuggestionChips />
-        <ComposerMock />
+        <SuggestionChips onSend={handleSend} />
+        <ComposerMock onSend={() => handleSend(CANNED_QUERY)} />
       </View>
     </View>
   );
@@ -316,6 +501,62 @@ function CurationRow({
   );
 }
 
+// ── ConversationBlock (discovery↔chat 공존 — mock 대화 1턴) ────────────────
+// 사용자 버블(우측 정렬 pill) → 에이전트 응답 한 줄 → CurationRow 와 동일한
+// 가로 스크롤 상품 행. 실제 대화가 아니라 큐레이션 아래 append 되는 mock
+// 블록이라 섹션 헤더/더보기는 없다.
+function ConversationBlock({
+  query,
+  products,
+  pinnedIds,
+  onPressProduct,
+  onTogglePin,
+}: {
+  query: string;
+  products: Product[];
+  pinnedIds: Set<string>;
+  onPressProduct: (product: Product) => void;
+  onTogglePin: (id: string) => void;
+}) {
+  return (
+    <View>
+      <View style={styles.userBubbleRow}>
+        <View style={styles.userBubble}>
+          <Text style={styles.userBubbleText}>{query}</Text>
+        </View>
+      </View>
+      <Text style={styles.agentReplyText}>{AGENT_REPLY_TEXT}</Text>
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.rowScroll}
+        contentContainerStyle={styles.rowScrollContent}
+      >
+        {products.map((product) => (
+          <AnimatedProductCard
+            key={product.id}
+            product={product}
+            pinned={pinnedIds.has(product.id)}
+            onPress={() => onPressProduct(product)}
+            onPin={() => onTogglePin(product.id)}
+          />
+        ))}
+      </ScrollView>
+    </View>
+  );
+}
+
+// 대화 인덱스로 catalog 를 회전시켜 매 턴마다 다른 4개를 결정적으로 뽑는다
+// (진짜 추천 로직 없음 — mock).
+function pickConversationProducts(catalog: Product[], conversationIndex: number): Product[] {
+  const start = (conversationIndex * CONVERSATION_PRODUCT_COUNT) % catalog.length;
+  return Array.from(
+    { length: CONVERSATION_PRODUCT_COUNT },
+    (_, i) => catalog[(start + i) % catalog.length],
+  );
+}
+
 // ── AnimatedProductCard (3안 — press-scale 래퍼) ──────────────────────────
 // ProductCard 는 내부적으로 이미지 영역에만 자체 Pressable(내비게이션용)을
 // 갖고 있다 — 그 컴포넌트는 건드리지 않는다는 규칙이 있어 press-scale 은
@@ -375,7 +616,9 @@ function AnimatedProductCard({
 }
 
 // ── SuggestionChips ──────────────────────────────────────────────────────
-function SuggestionChips() {
+// 0번 칩("공용 · 가격무관")은 필터 토글이라 mock 전송을 트리거하지 않고
+// 기존처럼 selection 햅틱만 준다. 그 외 칩은 라벨을 쿼리로 mock 전송한다.
+function SuggestionChips({ onSend }: { onSend: (query: string) => void }) {
   const chips = ['공용 · 가격무관', ...SUGGESTION_CHIPS];
   return (
     <ScrollView
@@ -383,29 +626,36 @@ function SuggestionChips() {
       showsHorizontalScrollIndicator={false}
       contentContainerStyle={styles.chipsRow}
     >
-      {chips.map((label, i) => (
-        <Pressable key={label} hitSlop={4} onPress={() => Haptic.selection()}>
-          <GlassSurface
-            {...Glass.chip}
-            isInteractive
-            style={[styles.suggestionChip, i === 0 && styles.filterChip]}
+      {chips.map((label, i) => {
+        const isFilterChip = i === 0;
+        return (
+          <Pressable
+            key={label}
+            hitSlop={4}
+            onPress={() => (isFilterChip ? Haptic.selection() : onSend(label))}
           >
-            <Text style={styles.suggestionChipText}>{label}</Text>
-          </GlassSurface>
-        </Pressable>
-      ))}
+            <GlassSurface
+              {...Glass.chip}
+              isInteractive
+              style={[styles.suggestionChip, isFilterChip && styles.filterChip]}
+            >
+              <Text style={styles.suggestionChipText}>{label}</Text>
+            </GlassSurface>
+          </Pressable>
+        );
+      })}
     </ScrollView>
   );
 }
 
 // ── ComposerMock ─────────────────────────────────────────────────────────
-function ComposerMock() {
+function ComposerMock({ onSend }: { onSend: () => void }) {
   return (
     <GlassSurface {...Glass.composer} style={styles.composer}>
       <Text style={styles.composerPlaceholder} numberOfLines={1}>
         이미지/링크를 추가하거나 요청...
       </Text>
-      <Pressable hitSlop={6} onPress={() => Haptic.medium()} style={styles.sendBtn}>
+      <Pressable hitSlop={6} onPress={onSend} style={styles.sendBtn}>
         {/* 버튼 배경이 IOSColors.label(라이트=검정/다크=흰색)이라 아이콘은
             반대로 적응하는 systemBackground 를 써서 라이트/다크 모두 대비를
             보장한다 — 리터럴 흰색 하드코딩을 피한다. */}
@@ -418,6 +668,24 @@ function ComposerMock() {
 // ── 레이아웃 상수 (구조적 수치 — 하드코딩 예외 대상) ───────────────────────
 const TOP_PILL_HEIGHT = 40;
 const COMPOSER_CLEARANCE = 140;
+
+// discovery↔chat 공존 — mock 대화 관련 구조적 수치.
+// 대화 시작점으로 스크롤할 때 상단 플로팅 필에 가리지 않도록 두는 여유.
+const CONVERSATION_TOP_CLEARANCE = TOP_PILL_HEIGHT + Spacing.four;
+// 점프 버튼(↓) 크기 — spec: ~44px 원형 글래스 버튼.
+const JUMP_BUTTON_SIZE = 44;
+// 점프 버튼을 컴포저 영역 위에 띄우는 위치 — COMPOSER_CLEARANCE 가 이미
+// 컴포저 영역 높이의 근사치이므로 그 위에 Spacing.two 만큼 더 띄운다.
+const JUMP_BUTTON_BOTTOM = COMPOSER_CLEARANCE + Spacing.two;
+// 대화 시작점이 화면 높이의 이 비율 이상 위로 스크롤되면 점프 버튼을 노출.
+const JUMP_BUTTON_VISIBILITY_RATIO = 0.5;
+
+// [큐레이션] 복귀 필 노출 임계 — 큐레이션 구좌(0 ~ conversationY)의 95%
+// 이상이 뷰포트 위로 지나갔을 때 등장. 그보다 큐레이션이 많이 보이면
+// 자동으로 축소·소멸.
+const CURATION_PILL_REVEAL_RATIO = 0.95;
+// 대화 블록 하나당 노출할 상품 개수.
+const CONVERSATION_PRODUCT_COUNT = 4;
 // top-anchored 히어로 — 추가 여백. 상단 플로팅 필의 clearance는
 // scrollContent의 paddingTop(insets.top + TOP_PILL_HEIGHT + Spacing.two)
 // 에서 이미 보장되므로, 이 비율은 그 아래 추가 spacing만 담당한다.
@@ -498,6 +766,34 @@ const styles = StyleSheet.create({
   rowScrollContent: {
     paddingHorizontal: Spacing.three,
     gap: Spacing.two,
+  },
+
+  // ConversationBlock (discovery↔chat 공존 — mock 대화)
+  conversationContainer: {
+    gap: Spacing.five,
+  },
+  userBubbleRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+  },
+  userBubble: {
+    maxWidth: '80%',
+    backgroundColor: IOSColors.tertiarySystemFill,
+    borderRadius: RadiusRole.chip,
+    paddingVertical: Spacing.two,
+    paddingHorizontal: Spacing.three,
+  },
+  userBubbleText: {
+    ...IOSText.body,
+    color: IOSColors.label,
+    fontFamily: IOSFont.sans,
+  },
+  agentReplyText: {
+    ...IOSText.body,
+    color: IOSColors.label,
+    fontFamily: IOSFont.sans,
+    marginTop: Spacing.three,
+    marginBottom: Spacing.three,
   },
 
   // Top pills
@@ -588,5 +884,21 @@ const styles = StyleSheet.create({
     backgroundColor: IOSColors.label,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+
+  // 대화 시작점으로 돌아가는 점프 버튼
+  jumpButton: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+  },
+  jumpButtonGlass: {
+    width: JUMP_BUTTON_SIZE,
+    height: JUMP_BUTTON_SIZE,
+    borderRadius: RadiusRole.chip,
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
   },
 });
