@@ -33,3 +33,19 @@ export const Scrim = {
   /** Heavy — full-screen modal blocking content */
   heavy: 0.55,
 } as const;
+
+/**
+ * `#RRGGBB` hex 색상을 alpha 를 적용한 `rgba(r,g,b,a)` 문자열로 변환.
+ *
+ * IOSColors 는 `PlatformColor` 기반이라 문자열이 아니므로 이 헬퍼로 감쌀 수
+ * 없다. 순수 흰/검·픽셀 이펙트처럼 다크모드 대응 없이 강제로 하드코딩된 색상
+ * 위에 반투명이 필요할 때만 사용. Semantic 상 opacity 값은 `Opacity` /
+ * `Scrim` 토큰에서 골라 넘기는 게 원칙 (직접 숫자 지양).
+ */
+export function withAlpha(hex: string, alpha: number): string {
+  const h = hex.replace('#', '');
+  const r = parseInt(h.substring(0, 2), 16);
+  const g = parseInt(h.substring(2, 4), 16);
+  const b = parseInt(h.substring(4, 6), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}

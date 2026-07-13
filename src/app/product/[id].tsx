@@ -18,7 +18,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { GlassSurface } from '@/components/glass-surface';
-import { Haptic, IOSColors, IOSFont, IOSText, Opacity , Radius } from '@/theme';
+import { Haptic, IOSColors, IOSFont, IOSText, Opacity , Radius , withAlpha , Scrim } from '@/theme';
 import { trackEvent } from '@/lib/analytics';
 import { ApiError } from '@/lib/api';
 import { checkProductLink, getProduct, recordProductView } from '@/lib/products';
@@ -339,7 +339,7 @@ export default function ProductDetailScreen() {
                     tintColor={
                       anchorId === mainId
                         ? IOSColors.systemBackground
-                        : 'rgba(255,255,255,0.75)'
+                        : withAlpha('#FFFFFF', Opacity.softened)
                     }
                     weight="bold"
                   />
@@ -360,7 +360,7 @@ export default function ProductDetailScreen() {
                   tintColor={
                     saved
                       ? IOSColors.systemBackground
-                      : 'rgba(255,255,255,0.85)'
+                      : withAlpha('#FFFFFF', Opacity.nearFull)
                   }
                   weight="bold"
                 />
@@ -673,7 +673,7 @@ function SimilarProducts({
                             tintColor={
                               checked
                                 ? IOSColors.systemBackground
-                                : "rgba(255,255,255,0.7)"
+                                : withAlpha('#FFFFFF', Opacity.softened)
                             }
                             weight="bold"
                           />
@@ -699,7 +699,7 @@ function SimilarProducts({
                                 tintColor={
                                   savedFlag
                                     ? IOSColors.systemBackground
-                                    : 'rgba(255,255,255,0.85)'
+                                    : withAlpha('#FFFFFF', Opacity.nearFull)
                                 }
                                 weight="bold"
                               />
@@ -811,8 +811,8 @@ const styles = StyleSheet.create({
     height: 28,
     borderRadius: Radius.pill,
     borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.95)',
-    backgroundColor: 'rgba(0,0,0,0.35)',
+    borderColor: withAlpha('#FFFFFF', Opacity.nearFull),
+    backgroundColor: withAlpha('#000000', Scrim.standard),
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -833,7 +833,7 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: Radius.pill,
-    backgroundColor: 'rgba(255,255,255,0.55)',
+    backgroundColor: withAlpha('#FFFFFF', Scrim.heavy),
   },
   dotActive: {
     width: 18,
@@ -1056,7 +1056,7 @@ const styles = StyleSheet.create({
     height: 22,
     borderRadius: Radius.pill,
     borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.95)',
+    borderColor: withAlpha('#FFFFFF', Opacity.nearFull),
     backgroundColor: 'rgba(0,0,0,0.22)',
     alignItems: 'center',
     justifyContent: 'center',

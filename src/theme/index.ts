@@ -13,7 +13,7 @@
 export { Motion, Duration, Easing, springMove, springRotation, springDrawer, springSnappy, springGentle, springBouncy } from './motion';
 export { Radius, RadiusRole } from './radius';
 export { Elevation } from './elevation';
-export { Opacity, Scrim } from './opacity';
+export { Opacity, Scrim, withAlpha } from './opacity';
 export { BrandColors, BrandRole, BrandGradient } from './brand';
 export { Glass } from './glass';
 

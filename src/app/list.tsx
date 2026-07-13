@@ -18,7 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FLOATING_HEADER_OFFSET, FloatingHeader } from '@/components/floating-header';
 import { GlassSurface } from '@/components/glass-surface';
-import { Haptic, IOSColors, IOSFont, IOSText , Radius } from '@/theme';
+import { Haptic, IOSColors, IOSFont, IOSText , Radius , withAlpha , Scrim , Opacity } from '@/theme';
 import { trackProductImpression } from '@/lib/analytics';
 import { ApiError } from '@/lib/api';
 import { getResultSetPage } from '@/lib/results';
@@ -351,7 +351,7 @@ function GridCard({
               name="checkmark"
               size={11}
               tintColor={
-                pinned ? IOSColors.systemBackground : 'rgba(255,255,255,0.7)'
+                pinned ? IOSColors.systemBackground : withAlpha('#FFFFFF', Opacity.softened)
               }
               weight="bold"
             />
@@ -368,7 +368,7 @@ function GridCard({
               name={saved ? 'heart.fill' : 'heart'}
               size={12}
               tintColor={
-                saved ? IOSColors.systemBackground : 'rgba(255,255,255,0.85)'
+                saved ? IOSColors.systemBackground : withAlpha('#FFFFFF', Opacity.nearFull)
               }
               weight="bold"
             />
@@ -457,7 +457,7 @@ const styles = StyleSheet.create({
     height: 22,
     borderRadius: Radius.pill,
     borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.95)',
+    borderColor: withAlpha('#FFFFFF', Opacity.nearFull),
     backgroundColor: 'rgba(0,0,0,0.22)',
     justifyContent: 'center',
     alignItems: 'center',
@@ -471,7 +471,7 @@ const styles = StyleSheet.create({
     height: 22,
     borderRadius: Radius.pill,
     borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.95)',
+    borderColor: withAlpha('#FFFFFF', Opacity.nearFull),
     backgroundColor: 'rgba(0,0,0,0.22)',
     justifyContent: 'center',
     alignItems: 'center',
