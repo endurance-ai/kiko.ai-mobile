@@ -371,9 +371,15 @@ export default function ChatEntryScreen() {
     [],
   );
 
-  // Fetch display_name once for the personalized empty-state greeting.
-  // Silent on failure — generic greetings still fill the hero.
+  // Fetch display_name for the personalized empty-state greeting.
+  // 로그인/로그아웃 전환 시 즉시 반응하도록 authStatus 를 deps 에 포함 —
+  // 이전엔 mount 시 1회만 실행돼서 로그아웃 후에도 이전 사용자 이름이
+  // "○○님, 사진 한 장이면…" 그리팅으로 남았음.
   useEffect(() => {
+    if (authStatus !== 'authenticated') {
+      setDisplayName(null);
+      return;
+    }
     let cancelled = false;
     (async () => {
       try {
@@ -386,7 +392,7 @@ export default function ChatEntryScreen() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [authStatus]);
 
   // Random empty-state greeting. Re-picks once when display_name loads
   // (so the named variants become eligible) and then stays stable.
