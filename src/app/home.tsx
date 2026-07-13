@@ -2163,7 +2163,7 @@ const styles = StyleSheet.create({
   userImage: {
     width: 96,
     height: 96,
-    borderRadius: Radius.pill,
+    borderRadius: Radius.lg,
   },
   userTextRow: {
     flexDirection: "row",
@@ -2185,7 +2185,7 @@ const styles = StyleSheet.create({
   userImageSmall: {
     width: 76,
     height: 76,
-    borderRadius: Radius.pill,
+    borderRadius: Radius.lg,
     opacity: Opacity.softened,
   },
   pickerBlock: {
@@ -2559,7 +2559,7 @@ const styles = StyleSheet.create({
   previewWrap: {
     width: 64,
     height: 64,
-    borderRadius: Radius.pill,
+    borderRadius: Radius.lg,
     overflow: "hidden",
     position: "relative",
   },
