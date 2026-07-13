@@ -123,6 +123,32 @@
 
 ---
 
+## 6.5 진행 결과 (2026-07-13)
+
+| Phase | 상태 | 비고 |
+|---|---|---|
+| Phase 1 — import 경로 마이그 (`@/constants/*` → `@/theme`) | ✅ 머지 | 23 파일, 값 변경 zero |
+| Phase 2 — `Colors` / `Fonts` / `useTheme` / `use-color-scheme` dead code 제거 | ✅ 머지 | Phase 0 grep 으로 소비 zero 확인 후 shim 없이 삭제. 5 파일, -106 순감 |
+| Phase 3-a — `src/components/*` 하드값 마이그 (리허설) | ✅ 머지 | 4 파일, Radius/Elevation/Opacity 매핑 정책 확립 |
+| Phase 3-b — `src/app/*` opacity 마이그 | ✅ 머지 | 6 파일, 13 지점 |
+| Phase 3-c — `src/app/*` borderRadius 마이그 | ✅ 머지 | 15 파일, 78 지점. 사이드바 drawer + 유저 이미지 원형 오매핑 후속 원복 포함 |
+| Phase 3-d — `withAlpha` 헬퍼 도입 + `rgba` 리터럴 마이그 | ✅ 머지 | 10 파일, 23 지점 |
+| Phase 3-e — motion (`withTiming` / `Animated.timing`) | ⏭️ 스킵 | 아래 정책 참조 |
+
+### Phase 3-e 스킵 근거 + motion 정책
+
+실사 결과:
+- Reanimated `withTiming` 소비 = **1건** (`app/index.tsx` splash)
+- react-native `Animated.timing` 소비 = 9건, 전부 컴포넌트 로컬 상수(`FADE_MS`, `OPEN_MS`, `CLOSE_MS` 등)로 이미 semantic 이름 부여됨
+- `Motion.*` / `Duration.*` 토큰 소비 = **0**
+
+**정책**
+- **로컬 튜닝된 애니메이션 상수는 `Motion` / `Duration` 스케일로 승격하지 않는다.** splash / drawer / banner fade 등은 각각 화면 특수 튜닝이 필요하고, 스케일 강제는 튜닝 자유도만 훼손함 (Rule of Three 미달 + 시각적 통일 이득 없음).
+- **`Motion` / `Duration` / `Easing` 토큰은 신규 UI 작업 시 스프링·타이밍 선택의 기본값으로 사용.** 로컬 튜닝이 필요할 때만 상수로 뽑는다.
+- 예외: 스케일과 정확 매치되는 특수 상수 (예: `RISE_MS = 500` = `Duration.slow`) 도 억지 마이그 대신 로컬 유지 — 튜닝 시 값을 살짝 조정할 수도 있는 semantic 이 강함.
+
+---
+
 ## 7. 부록 — 이미 통합돼 있는 것 (참고)
 
 `src/theme/index.ts` 에서 기존 상수를 아래처럼 re-export 함:
