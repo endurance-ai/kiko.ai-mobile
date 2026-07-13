@@ -20,7 +20,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { GlassSurface } from "@/components/glass-surface";
-import { Haptic, IOSColors, IOSFont, IOSText, Opacity } from "@/theme";
+import { Haptic, IOSColors, IOSFont, IOSText, Opacity , Radius } from "@/theme";
 import { ApiError } from "@/lib/api";
 import { deleteSession, listSessions, renameSession } from "@/lib/chat";
 import { getMe } from "@/lib/me";
@@ -466,7 +466,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.18,
     shadowRadius: 16,
     elevation: 16,
-    borderRadius: 50,
+    borderRadius: Radius.pill,
   },
   panelInner: { flex: 1 },
 
@@ -516,7 +516,7 @@ const styles = StyleSheet.create({
   historyRow: {
     paddingHorizontal: 12,
     paddingVertical: 12,
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     marginBottom: 2,
   },
   historyRowActive: {
@@ -551,7 +551,7 @@ const styles = StyleSheet.create({
   avatarBtn: {
     width: 50,
     height: 50,
-    borderRadius: 25,
+    borderRadius: Radius.xxl,
     justifyContent: "center",
     alignItems: "center",
     overflow: "hidden",
@@ -573,7 +573,7 @@ const styles = StyleSheet.create({
   guestAvatarDot: {
     width: 50,
     height: 50,
-    borderRadius: 25,
+    borderRadius: Radius.xxl,
     backgroundColor: "#D8D8DA",
   },
   loginLabel: {
@@ -605,7 +605,7 @@ const styles = StyleSheet.create({
   emptyGuestBtn: {
     paddingHorizontal: 22,
     height: 44,
-    borderRadius: 999,
+    borderRadius: Radius.pill,
     backgroundColor: IOSColors.label,
     justifyContent: "center",
     alignItems: "center",
@@ -626,7 +626,7 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingHorizontal: 20,
     height: 50,
-    borderRadius: 999,
+    borderRadius: Radius.pill,
     backgroundColor: IOSColors.label,
   },
   newChatText: {

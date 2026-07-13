@@ -17,7 +17,7 @@ import {
   FLOATING_HEADER_OFFSET,
   FloatingHeader,
 } from "@/components/floating-header";
-import { Haptic, IOSColors, IOSFont, IOSText } from "@/theme";
+import { Haptic, IOSColors, IOSFont, IOSText , Radius } from "@/theme";
 import { useAuth } from "@/state/auth";
 import { useWishlist } from "@/state/wishlist";
 import type { SaveListItem } from "@/types/api";
@@ -197,7 +197,7 @@ const styles = StyleSheet.create({
   retry: {
     paddingHorizontal: 16,
     paddingVertical: 8,
-    borderRadius: 999,
+    borderRadius: Radius.pill,
     backgroundColor: IOSColors.tertiarySystemBackground,
   },
   retryText: {
@@ -226,7 +226,7 @@ const styles = StyleSheet.create({
   cardImageWrap: {
     width: CARD_W,
     height: CARD_W,
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     overflow: "hidden",
     position: "relative",
   },
@@ -237,7 +237,7 @@ const styles = StyleSheet.create({
     right: 8,
     width: 26,
     height: 26,
-    borderRadius: 13,
+    borderRadius: Radius.md,
     borderWidth: 1.5,
     borderColor: "rgba(255,255,255,0.95)",
     backgroundColor: IOSColors.label,
@@ -250,7 +250,7 @@ const styles = StyleSheet.create({
     left: 8,
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 8,
+    borderRadius: Radius.sm,
     backgroundColor: "rgba(255,255,255,0.92)",
   },
   priceText: {

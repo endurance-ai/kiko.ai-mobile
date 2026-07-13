@@ -17,7 +17,7 @@ import {
   FLOATING_HEADER_OFFSET,
   FloatingHeader,
 } from "@/components/floating-header";
-import { Haptic, IOSColors, IOSFont, IOSText } from "@/theme";
+import { Haptic, IOSColors, IOSFont, IOSText , Radius } from "@/theme";
 import { ApiError } from "@/lib/api";
 import { listHistory } from "@/lib/history";
 import { useBanner } from "@/state/banner";
@@ -249,7 +249,7 @@ const styles = StyleSheet.create({
     minWidth: 28,
     height: 24,
     paddingHorizontal: 8,
-    borderRadius: 12,
+    borderRadius: Radius.md,
     backgroundColor: "rgba(0,0,0,0.72)",
     alignItems: "center",
     justifyContent: "center",

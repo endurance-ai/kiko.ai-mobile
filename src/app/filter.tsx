@@ -4,7 +4,7 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { Haptic, IOSColors, IOSFont, IOSText } from '@/theme';
+import { Haptic, IOSColors, IOSFont, IOSText , Radius } from '@/theme';
 import {
   buildPriceLabel,
   GENDER_LABEL,
@@ -115,7 +115,7 @@ const styles = StyleSheet.create({
   chip: {
     paddingHorizontal: 16,
     paddingVertical: 10,
-    borderRadius: 999,
+    borderRadius: Radius.pill,
     borderWidth: 1,
     borderColor: IOSColors.separator,
     overflow: 'hidden',
@@ -168,7 +168,7 @@ const styles = StyleSheet.create({
   },
   applyBtn: {
     height: 52,
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     backgroundColor: IOSColors.label,
     justifyContent: 'center',
     alignItems: 'center',

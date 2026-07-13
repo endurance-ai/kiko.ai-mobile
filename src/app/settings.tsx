@@ -15,7 +15,7 @@ import {
   FLOATING_HEADER_OFFSET,
   FloatingHeader,
 } from "@/components/floating-header";
-import { Haptic, IOSColors, IOSFont, IOSText } from "@/theme";
+import { Haptic, IOSColors, IOSFont, IOSText , Radius } from "@/theme";
 import { getMe } from "@/lib/me";
 import { useAuth } from "@/state/auth";
 import type { UserProfile } from "@/types/api";
@@ -183,7 +183,7 @@ const styles = StyleSheet.create({
   emailPill: {
     paddingHorizontal: 18,
     paddingVertical: 16,
-    borderRadius: 16,
+    borderRadius: Radius.lg,
     backgroundColor: IOSColors.systemBackground,
   },
   emailText: {
@@ -200,7 +200,7 @@ const styles = StyleSheet.create({
     marginBottom: -4, // tighten gap to the card below
   },
   card: {
-    borderRadius: 20,
+    borderRadius: Radius.xl,
     backgroundColor: IOSColors.systemBackground,
     overflow: "hidden",
   },
@@ -218,7 +218,7 @@ const styles = StyleSheet.create({
   iconBox: {
     width: 40,
     height: 40,
-    borderRadius: 20,
+    borderRadius: Radius.xl,
     backgroundColor: IOSColors.tertiarySystemBackground,
     justifyContent: "center",
     alignItems: "center",

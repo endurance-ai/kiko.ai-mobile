@@ -18,7 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FLOATING_HEADER_OFFSET, FloatingHeader } from '@/components/floating-header';
 import { GlassSurface } from '@/components/glass-surface';
-import { Haptic, IOSColors, IOSFont, IOSText } from '@/theme';
+import { Haptic, IOSColors, IOSFont, IOSText , Radius } from '@/theme';
 import { trackProductImpression } from '@/lib/analytics';
 import { ApiError } from '@/lib/api';
 import { getResultSetPage } from '@/lib/results';
@@ -406,7 +406,7 @@ const styles = StyleSheet.create({
   dot: {
     width: 6,
     height: 6,
-    borderRadius: 3,
+    borderRadius: Radius.xs,
     backgroundColor: IOSColors.label,
     marginRight: 8,
   },
@@ -455,7 +455,7 @@ const styles = StyleSheet.create({
   checkBtn: {
     width: 22,
     height: 22,
-    borderRadius: 11,
+    borderRadius: Radius.md,
     borderWidth: 1.5,
     borderColor: 'rgba(255,255,255,0.95)',
     backgroundColor: 'rgba(0,0,0,0.22)',
@@ -469,7 +469,7 @@ const styles = StyleSheet.create({
   heartBtn: {
     width: 22,
     height: 22,
-    borderRadius: 11,
+    borderRadius: Radius.md,
     borderWidth: 1.5,
     borderColor: 'rgba(255,255,255,0.95)',
     backgroundColor: 'rgba(0,0,0,0.22)',
@@ -541,13 +541,13 @@ const styles = StyleSheet.create({
     paddingLeft: 6,
     paddingRight: 12,
     paddingVertical: 6,
-    borderRadius: 999,
+    borderRadius: Radius.pill,
     backgroundColor: IOSColors.tertiarySystemBackground,
   },
   pinThumb: {
     width: 22,
     height: 22,
-    borderRadius: 11,
+    borderRadius: Radius.md,
   },
   pinLabel: {
     ...IOSText.footnote,
@@ -560,7 +560,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     height: 56,
-    borderRadius: 28,
+    borderRadius: Radius.xxl,
     paddingLeft: 16,
     paddingRight: 6,
     overflow: 'hidden',
@@ -574,7 +574,7 @@ const styles = StyleSheet.create({
   sendBtn: {
     width: 40,
     height: 40,
-    borderRadius: 20,
+    borderRadius: Radius.xl,
     backgroundColor: IOSColors.label,
     justifyContent: 'center',
     alignItems: 'center',
