@@ -21,7 +21,7 @@ import {
   FLOATING_HEADER_OFFSET,
   FloatingHeader,
 } from "@/components/floating-header";
-import { Haptic, IOSColors, IOSFont, IOSText } from "@/constants/ios";
+import { Haptic, IOSColors, IOSFont, IOSText, Opacity , Radius } from "@/theme";
 import { useKeyboardHeight } from "@/hooks/use-keyboard-height";
 import { getMessages, sendMessageStream } from "@/lib/chat";
 import {
@@ -504,7 +504,7 @@ const styles = StyleSheet.create({
     marginTop: 12,
     paddingHorizontal: 16,
     paddingVertical: 8,
-    borderRadius: 999,
+    borderRadius: Radius.pill,
     backgroundColor: IOSColors.tertiarySystemBackground,
   },
   retryText: {
@@ -526,7 +526,7 @@ const styles = StyleSheet.create({
     maxWidth: "80%",
     paddingHorizontal: 14,
     paddingVertical: 10,
-    borderRadius: 18,
+    borderRadius: Radius.xl,
   },
   bubbleUser: {
     backgroundColor: IOSColors.label,
@@ -556,7 +556,7 @@ const styles = StyleSheet.create({
   productCard: {
     width: 120,
     backgroundColor: IOSColors.systemBackground,
-    borderRadius: 12,
+    borderRadius: Radius.md,
     overflow: "hidden",
   },
   productImage: {
@@ -584,7 +584,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "flex-end",
     minHeight: 52,
-    borderRadius: 26,
+    borderRadius: Radius.xxl,
     paddingLeft: 16,
     paddingRight: 6,
     paddingVertical: 6,
@@ -601,13 +601,13 @@ const styles = StyleSheet.create({
   sendBtn: {
     width: 40,
     height: 40,
-    borderRadius: 20,
+    borderRadius: Radius.pill,
     backgroundColor: IOSColors.label,
     justifyContent: "center",
     alignItems: "center",
     marginLeft: 6,
   },
   sendBtnDisabled: {
-    opacity: 0.35,
+    opacity: Opacity.faint,
   },
 });

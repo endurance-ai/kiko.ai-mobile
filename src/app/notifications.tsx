@@ -16,7 +16,7 @@ import {
   FLOATING_HEADER_OFFSET,
   FloatingHeader,
 } from "@/components/floating-header";
-import { IOSColors, IOSFont, IOSText } from "@/constants/ios";
+import { IOSColors, IOSFont, IOSText , Radius } from "@/theme";
 import { trackEvent } from "@/lib/analytics";
 import { getNotifications, updateNotifications } from "@/lib/devices";
 import type { NotificationCategories } from "@/types/api";
@@ -215,7 +215,7 @@ const styles = StyleSheet.create({
   },
 
   card: {
-    borderRadius: 16,
+    borderRadius: Radius.lg,
     backgroundColor: IOSColors.systemBackground,
     overflow: "hidden",
   },

@@ -11,6 +11,7 @@ import {
 
 import { trackEvent } from '@/lib/analytics';
 import { addSave, listSaves, removeSave } from '@/lib/saves';
+import { useAuth } from '@/state/auth';
 import type { SaveListItem } from '@/types/api';
 
 type WishlistStatus = 'idle' | 'loading' | 'ready' | 'error';
@@ -27,6 +28,7 @@ interface Ctx {
 const WishlistCtx = createContext<Ctx | null>(null);
 
 export function WishlistProvider({ children }: { children: ReactNode }) {
+  const { status: authStatus } = useAuth();
   const [items, setItems] = useState<SaveListItem[]>([]);
   const [status, setStatus] = useState<WishlistStatus>('idle');
   const [error, setError] = useState<string | null>(null);
@@ -45,9 +47,19 @@ export function WishlistProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // Auth 상태에 따라 로컬 캐시를 동기화. 로그아웃 시 이전 계정의 찜 목록이
+  // 그대로 남아 다음 화면(홈/위시리스트)에 노출되는 버그를 방지.
   useEffect(() => {
-    void refresh();
-  }, [refresh]);
+    if (authStatus === 'authenticated') {
+      void refresh();
+    } else if (authStatus === 'unauthenticated') {
+      setItems([]);
+      setError(null);
+      setStatus('idle');
+      inFlight.current.clear();
+    }
+    // 'loading' 상태에서는 아무것도 안 함 (아직 refresh_token 검증 중).
+  }, [authStatus, refresh]);
 
   const isSaved = useCallback(
     (productId: string) => items.some((it) => it.product?.id?.toString() === productId

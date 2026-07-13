@@ -18,7 +18,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FLOATING_HEADER_OFFSET, FloatingHeader } from '@/components/floating-header';
 import { GlassSurface } from '@/components/glass-surface';
-import { Haptic, IOSColors, IOSFont, IOSText } from '@/constants/ios';
+import { Haptic, IOSColors, IOSFont, IOSText , Radius , withAlpha , Scrim , Opacity } from '@/theme';
+import { trackProductImpression } from '@/lib/analytics';
 import { ApiError } from '@/lib/api';
 import { getResultSetPage } from '@/lib/results';
 import { useBanner } from '@/state/banner';
@@ -190,7 +191,7 @@ export default function ListScreen() {
 
         {items.length > 0 && (
           <View style={styles.grid}>
-            {items.map((p) => {
+            {items.map((p, idx) => {
               const pidStr = String(p.product_id);
               return (
                 <GridCard
@@ -198,6 +199,7 @@ export default function ListScreen() {
                   product={p}
                   sessionId={sessionId}
                   searchId={searchId}
+                  position={idx}
                   pinned={pinnedProductId === pidStr}
                   onTogglePin={() => togglePinnedProduct(pidStr)}
                 />
@@ -290,18 +292,30 @@ function GridCard({
   product,
   sessionId,
   searchId,
+  position,
   pinned,
   onTogglePin,
 }: {
   product: ResultProduct;
   sessionId: string | null;
   searchId: string | null;
+  position: number;
   pinned: boolean;
   onTogglePin: () => void;
 }) {
   const { isSaved, toggle: toggleSaved } = useWishlist();
   const productIdStr = String(product.product_id);
   const saved = isSaved(productIdStr);
+
+  useEffect(() => {
+    trackProductImpression({
+      productId: productIdStr,
+      brand: product.brand,
+      searchId,
+      position,
+      source: "search",
+    });
+  }, [productIdStr, product.brand, searchId, position]);
   const openPdp = () => {
     Haptic.light();
     const qs = [
@@ -337,7 +351,7 @@ function GridCard({
               name="checkmark"
               size={11}
               tintColor={
-                pinned ? IOSColors.systemBackground : 'rgba(255,255,255,0.7)'
+                pinned ? IOSColors.systemBackground : withAlpha('#FFFFFF', Opacity.softened)
               }
               weight="bold"
             />
@@ -354,7 +368,7 @@ function GridCard({
               name={saved ? 'heart.fill' : 'heart'}
               size={12}
               tintColor={
-                saved ? IOSColors.systemBackground : 'rgba(255,255,255,0.85)'
+                saved ? IOSColors.systemBackground : withAlpha('#FFFFFF', Opacity.nearFull)
               }
               weight="bold"
             />
@@ -392,7 +406,7 @@ const styles = StyleSheet.create({
   dot: {
     width: 6,
     height: 6,
-    borderRadius: 3,
+    borderRadius: Radius.pill,
     backgroundColor: IOSColors.label,
     marginRight: 8,
   },
@@ -441,9 +455,9 @@ const styles = StyleSheet.create({
   checkBtn: {
     width: 22,
     height: 22,
-    borderRadius: 11,
+    borderRadius: Radius.pill,
     borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.95)',
+    borderColor: withAlpha('#FFFFFF', Opacity.nearFull),
     backgroundColor: 'rgba(0,0,0,0.22)',
     justifyContent: 'center',
     alignItems: 'center',
@@ -455,9 +469,9 @@ const styles = StyleSheet.create({
   heartBtn: {
     width: 22,
     height: 22,
-    borderRadius: 11,
+    borderRadius: Radius.pill,
     borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.95)',
+    borderColor: withAlpha('#FFFFFF', Opacity.nearFull),
     backgroundColor: 'rgba(0,0,0,0.22)',
     justifyContent: 'center',
     alignItems: 'center',
@@ -527,13 +541,13 @@ const styles = StyleSheet.create({
     paddingLeft: 6,
     paddingRight: 12,
     paddingVertical: 6,
-    borderRadius: 999,
+    borderRadius: Radius.pill,
     backgroundColor: IOSColors.tertiarySystemBackground,
   },
   pinThumb: {
     width: 22,
     height: 22,
-    borderRadius: 11,
+    borderRadius: Radius.pill,
   },
   pinLabel: {
     ...IOSText.footnote,
@@ -546,7 +560,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     height: 56,
-    borderRadius: 28,
+    borderRadius: Radius.xxl,
     paddingLeft: 16,
     paddingRight: 6,
     overflow: 'hidden',
@@ -560,7 +574,7 @@ const styles = StyleSheet.create({
   sendBtn: {
     width: 40,
     height: 40,
-    borderRadius: 20,
+    borderRadius: Radius.pill,
     backgroundColor: IOSColors.label,
     justifyContent: 'center',
     alignItems: 'center',

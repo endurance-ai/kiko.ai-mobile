@@ -22,7 +22,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { Haptic } from '@/constants/ios';
+import { Haptic, Opacity , Radius , withAlpha , Scrim } from '@/theme';
 import { ApiError } from '@/lib/api';
 import { useAuth } from '@/state/auth';
 
@@ -436,8 +436,8 @@ export default function LoginScreen() {
 // ─── Styles ──────────────────────────────────────────────────────────────
 
 const INK = '#0a0a0a';
-const INK_SUBTLE = 'rgba(10,10,10,0.55)';
-const INK_LINK = 'rgba(10,10,10,0.85)';
+const INK_SUBTLE = withAlpha('#0A0A0A', Scrim.heavy);
+const INK_LINK = withAlpha('#0A0A0A', Opacity.nearFull);
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#FFFFFF' },
@@ -465,7 +465,7 @@ const styles = StyleSheet.create({
   chip: {
     height: 40,
     paddingHorizontal: 16,
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -499,14 +499,14 @@ const styles = StyleSheet.create({
   },
   appleBtn: {
     height: 50,
-    borderRadius: 50,
+    borderRadius: Radius.pill,
     backgroundColor: INK,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
   },
-  appleBtnPressed: { opacity: 0.86 },
+  appleBtnPressed: { opacity: Opacity.nearFull },
   appleBtnText: {
     fontSize: 15,
     fontWeight: '600',
@@ -517,7 +517,7 @@ const styles = StyleSheet.create({
   // theme. Text/logo stay ink (readable on white).
   googleBtn: {
     height: 50,
-    borderRadius: 50,
+    borderRadius: Radius.pill,
     backgroundColor: '#FFFFFF',
     flexDirection: 'row',
     alignItems: 'center',
@@ -536,8 +536,8 @@ const styles = StyleSheet.create({
     color: INK,
     letterSpacing: -0.15,
   },
-  btnPressed: { opacity: 0.9 },
-  btnBusy: { opacity: 0.5 },
+  btnPressed: { opacity: Opacity.nearFull },
+  btnBusy: { opacity: Opacity.muted },
 
   // Terms
   terms: {

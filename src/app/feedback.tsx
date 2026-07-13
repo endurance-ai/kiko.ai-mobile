@@ -13,7 +13,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { Haptic, IOSColors, IOSFont, IOSText } from "@/constants/ios";
+import { Haptic, IOSColors, IOSFont, IOSText , Radius } from "@/theme";
 import { trackEvent } from "@/lib/analytics";
 import { ApiError } from "@/lib/api";
 import { submitFeedback } from "@/lib/feedback";
@@ -197,7 +197,7 @@ const styles = StyleSheet.create({
   chip: {
     paddingHorizontal: 14,
     paddingVertical: 9,
-    borderRadius: 999,
+    borderRadius: Radius.pill,
     borderWidth: 1.5,
     borderColor: IOSColors.separator,
   },
@@ -223,7 +223,7 @@ const styles = StyleSheet.create({
     marginTop: 18,
     paddingHorizontal: 14,
     paddingVertical: 12,
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     borderWidth: 1,
     borderColor: IOSColors.separator,
     backgroundColor: IOSColors.secondarySystemBackground,
@@ -234,7 +234,7 @@ const styles = StyleSheet.create({
   consentBox: {
     marginTop: 14,
     padding: 12,
-    borderRadius: 12,
+    borderRadius: Radius.md,
     backgroundColor: IOSColors.secondarySystemBackground,
   },
   consentText: {
@@ -253,7 +253,7 @@ const styles = StyleSheet.create({
   },
   submit: {
     height: 52,
-    borderRadius: 14,
+    borderRadius: Radius.lg,
     backgroundColor: IOSColors.label,
     justifyContent: "center",
     alignItems: "center",

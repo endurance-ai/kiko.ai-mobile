@@ -17,7 +17,7 @@ import {
   FLOATING_HEADER_OFFSET,
   FloatingHeader,
 } from "@/components/floating-header";
-import { Haptic, IOSColors, IOSFont, IOSText } from "@/constants/ios";
+import { Haptic, IOSColors, IOSFont, IOSText , Radius } from "@/theme";
 import { formatKoreanDate, useSubscription } from "@/state/subscription";
 
 const PRO_ACCENT = "#4F46E5";
@@ -266,7 +266,7 @@ const styles = StyleSheet.create({
 
   featureCard: {
     width: "100%",
-    borderRadius: 18,
+    borderRadius: Radius.xl,
     backgroundColor: IOSColors.systemBackground,
     paddingVertical: 8,
     overflow: "hidden",
@@ -321,7 +321,7 @@ const styles = StyleSheet.create({
     width: "100%",
     marginTop: 16,
     padding: 18,
-    borderRadius: 18,
+    borderRadius: Radius.xl,
     backgroundColor: IOSColors.tertiarySystemBackground,
     gap: 8,
   },
@@ -351,7 +351,7 @@ const styles = StyleSheet.create({
   },
   upgradeBtn: {
     height: 56,
-    borderRadius: 999,
+    borderRadius: Radius.pill,
     backgroundColor: IOSColors.label,
     justifyContent: "center",
     alignItems: "center",
@@ -377,7 +377,7 @@ const styles = StyleSheet.create({
   },
   planCard: {
     padding: 18,
-    borderRadius: 16,
+    borderRadius: Radius.lg,
     backgroundColor: IOSColors.systemBackground,
   },
   planTopRow: {
@@ -404,7 +404,7 @@ const styles = StyleSheet.create({
     fontFamily: IOSFont.sans,
   },
   actionCard: {
-    borderRadius: 16,
+    borderRadius: Radius.lg,
     backgroundColor: IOSColors.systemBackground,
     overflow: "hidden",
   },

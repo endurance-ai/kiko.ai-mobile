@@ -19,7 +19,7 @@ import {
   FLOATING_HEADER_OFFSET,
   FloatingHeader,
 } from "@/components/floating-header";
-import { Haptic, IOSColors, IOSFont, IOSText } from "@/constants/ios";
+import { Haptic, IOSColors, IOSFont, IOSText, Opacity , Radius } from "@/theme";
 import { ApiError } from "@/lib/api";
 import { deleteMe, getMe, updateMe } from "@/lib/me";
 import { useAuth } from "@/state/auth";
@@ -183,7 +183,7 @@ export default function ProfileScreen() {
               <Pressable
                 onPress={confirmDelete}
                 disabled={deleting}
-                style={[styles.deleteCard, deleting && { opacity: 0.5 }]}
+                style={[styles.deleteCard, deleting && { opacity: Opacity.muted }]}
               >
                 <Text style={styles.deleteTitle}>계정 삭제</Text>
                 {deleting ? (
@@ -230,7 +230,7 @@ const styles = StyleSheet.create({
   retry: {
     paddingHorizontal: 16,
     paddingVertical: 8,
-    borderRadius: 999,
+    borderRadius: Radius.pill,
     backgroundColor: IOSColors.tertiarySystemBackground,
   },
   retryText: {
@@ -255,7 +255,7 @@ const styles = StyleSheet.create({
     color: IOSColors.label,
     height: 52,
     paddingHorizontal: 16,
-    borderRadius: 20,
+    borderRadius: Radius.xl,
     backgroundColor: IOSColors.systemBackground,
     marginBottom: 20,
     fontFamily: IOSFont.sans,
@@ -275,7 +275,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     height: 52,
     paddingHorizontal: 16,
-    borderRadius: 20,
+    borderRadius: Radius.xl,
     backgroundColor: IOSColors.systemBackground,
     marginTop: 4,
   },

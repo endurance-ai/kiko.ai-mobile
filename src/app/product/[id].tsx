@@ -18,7 +18,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { GlassSurface } from '@/components/glass-surface';
-import { Haptic, IOSColors, IOSFont, IOSText } from '@/constants/ios';
+import { Haptic, IOSColors, IOSFont, IOSText, Opacity , Radius , withAlpha , Scrim } from '@/theme';
 import { trackEvent } from '@/lib/analytics';
 import { ApiError } from '@/lib/api';
 import { checkProductLink, getProduct, recordProductView } from '@/lib/products';
@@ -339,7 +339,7 @@ export default function ProductDetailScreen() {
                     tintColor={
                       anchorId === mainId
                         ? IOSColors.systemBackground
-                        : 'rgba(255,255,255,0.75)'
+                        : withAlpha('#FFFFFF', Opacity.softened)
                     }
                     weight="bold"
                   />
@@ -360,7 +360,7 @@ export default function ProductDetailScreen() {
                   tintColor={
                     saved
                       ? IOSColors.systemBackground
-                      : 'rgba(255,255,255,0.85)'
+                      : withAlpha('#FFFFFF', Opacity.nearFull)
                   }
                   weight="bold"
                 />
@@ -504,7 +504,7 @@ export default function ProductDetailScreen() {
                   <GlassSurface
                     variant="pill"
                     isInteractive={!capLocked}
-                    style={[styles.critiqueChip, capLocked && { opacity: 0.4 }]}
+                    style={[styles.critiqueChip, capLocked && { opacity: Opacity.faint }]}
                   >
                     <Text style={styles.critiqueText}>{c.label}</Text>
                   </GlassSurface>
@@ -673,7 +673,7 @@ function SimilarProducts({
                             tintColor={
                               checked
                                 ? IOSColors.systemBackground
-                                : "rgba(255,255,255,0.7)"
+                                : withAlpha('#FFFFFF', Opacity.softened)
                             }
                             weight="bold"
                           />
@@ -699,7 +699,7 @@ function SimilarProducts({
                                 tintColor={
                                   savedFlag
                                     ? IOSColors.systemBackground
-                                    : 'rgba(255,255,255,0.85)'
+                                    : withAlpha('#FFFFFF', Opacity.nearFull)
                                 }
                                 weight="bold"
                               />
@@ -758,7 +758,7 @@ const styles = StyleSheet.create({
   retry: {
     paddingHorizontal: 16,
     paddingVertical: 8,
-    borderRadius: 999,
+    borderRadius: Radius.pill,
     backgroundColor: IOSColors.tertiarySystemBackground,
   },
   retryText: {
@@ -792,7 +792,7 @@ const styles = StyleSheet.create({
   heroBtn: {
     width: 40,
     height: 40,
-    borderRadius: 20,
+    borderRadius: Radius.pill,
     overflow: 'hidden',
     justifyContent: 'center',
     alignItems: 'center',
@@ -809,10 +809,10 @@ const styles = StyleSheet.create({
   heroInlineBtn: {
     width: 28,
     height: 28,
-    borderRadius: 14,
+    borderRadius: Radius.pill,
     borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.95)',
-    backgroundColor: 'rgba(0,0,0,0.35)',
+    borderColor: withAlpha('#FFFFFF', Opacity.nearFull),
+    backgroundColor: withAlpha('#000000', Scrim.standard),
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -832,8 +832,8 @@ const styles = StyleSheet.create({
   dot: {
     width: 6,
     height: 6,
-    borderRadius: 3,
-    backgroundColor: 'rgba(255,255,255,0.55)',
+    borderRadius: Radius.pill,
+    backgroundColor: withAlpha('#FFFFFF', Scrim.heavy),
   },
   dotActive: {
     width: 18,
@@ -890,11 +890,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 6,
     height: 56,
-    borderRadius: 28,
+    borderRadius: Radius.xxl,
     backgroundColor: IOSColors.label,
   },
   ctaDisabled: {
-    opacity: 0.4,
+    opacity: Opacity.faint,
   },
   ctaText: {
     ...IOSText.headline,
@@ -927,13 +927,13 @@ const styles = StyleSheet.create({
     paddingLeft: 6,
     paddingRight: 12,
     paddingVertical: 6,
-    borderRadius: 999,
+    borderRadius: Radius.pill,
     backgroundColor: IOSColors.tertiarySystemBackground,
   },
   scopeThumb: {
     width: 22,
     height: 22,
-    borderRadius: 11,
+    borderRadius: Radius.pill,
   },
   scopeLabel: {
     ...IOSText.footnote,
@@ -952,7 +952,7 @@ const styles = StyleSheet.create({
   critiqueChip: {
     paddingHorizontal: 16,
     paddingVertical: 8,
-    borderRadius: 999,
+    borderRadius: Radius.pill,
     overflow: 'hidden',
   },
   critiqueText: {
@@ -965,7 +965,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     height: 56,
-    borderRadius: 28,
+    borderRadius: Radius.xxl,
     paddingLeft: 8,
     paddingRight: 6,
     overflow: 'hidden',
@@ -986,13 +986,13 @@ const styles = StyleSheet.create({
   sendBtn: {
     width: 44,
     height: 44,
-    borderRadius: 22,
+    borderRadius: Radius.pill,
     backgroundColor: IOSColors.label,
     justifyContent: 'center',
     alignItems: 'center',
   },
   sendBtnDisabled: {
-    opacity: 0.35,
+    opacity: Opacity.faint,
   },
 
   // Similar products section (below CTA)
@@ -1054,9 +1054,9 @@ const styles = StyleSheet.create({
   similarCheck: {
     width: 22,
     height: 22,
-    borderRadius: 11,
+    borderRadius: Radius.pill,
     borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.95)',
+    borderColor: withAlpha('#FFFFFF', Opacity.nearFull),
     backgroundColor: 'rgba(0,0,0,0.22)',
     alignItems: 'center',
     justifyContent: 'center',

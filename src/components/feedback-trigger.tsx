@@ -2,7 +2,7 @@ import { router } from "expo-router";
 import { SymbolView } from "expo-symbols";
 import { Pressable, StyleSheet, View } from "react-native";
 
-import { Haptic, IOSColors } from "@/constants/ios";
+import { Haptic, IOSColors, Opacity } from "@/theme";
 import { useFeedback } from "@/state/feedback";
 
 type Props = {
@@ -85,6 +85,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   btnPressed: {
-    opacity: 0.5,
+    opacity: Opacity.muted,
   },
 });

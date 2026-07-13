@@ -80,6 +80,7 @@ export function identifyUser(
 /** 로그아웃 시 호출 — 세션 / 유저 식별자 초기화. */
 export function resetAnalytics(): void {
   cachedUserId = null;
+  impressionSeen.clear();
   if (!initialized) return;
   try {
     reset();
@@ -105,4 +106,35 @@ export function trackEvent(
   } catch {
     // silent
   }
+}
+
+// (search_id, product_id, source) 조합 dedupe. 페이지네이션 재렌더 / 리스트
+// 스크롤 왕복 / 컴포넌트 unmount+remount 로 같은 카드가 다시 mount 돼도 세션
+// 내 1회만 발사. resetAnalytics 시 초기화.
+const impressionSeen = new Set<string>();
+
+/** 검색 결과 카드가 렌더될 때 1개당 1회 발사. 같은 search_id + product_id +
+ * source 조합은 세션 내 dedupe. 스펙: product_impression = "노출됐지만 미선택"
+ * 신호 확보 (product_view 와 짝 맞춤). */
+export function trackProductImpression(params: {
+  productId: string;
+  brand: string | null | undefined;
+  searchId: string | null | undefined;
+  position?: number | null;
+  source?: string;
+}): void {
+  if (!initialized) return;
+  const source = params.source ?? "search";
+  // search_id 는 짝 맞추기의 핵심이라 없으면 발사 자체를 skip (오염 방지).
+  if (!params.searchId) return;
+  const key = `${params.searchId}|${params.productId}|${source}`;
+  if (impressionSeen.has(key)) return;
+  impressionSeen.add(key);
+  trackEvent("product_impression", {
+    product_id: params.productId,
+    brand: params.brand ?? null,
+    search_id: params.searchId,
+    position: params.position ?? null,
+    source,
+  });
 }

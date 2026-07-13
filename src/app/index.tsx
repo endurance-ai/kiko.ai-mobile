@@ -9,7 +9,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
-import { Haptic, IOSFont } from '@/constants/ios';
+import { Haptic, IOSFont } from '@/theme';
 import { useAuth } from '@/state/auth';
 
 // ─── Lottie module (optional native dep) ─────────────────────────────────
