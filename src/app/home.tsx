@@ -25,7 +25,7 @@ import { GlassSurface } from "@/components/glass-surface";
 import { PixelSpinner, ShimmerText } from "@/components/pixel-spinner";
 import { PRODUCT_CARD_WIDTH, ProductCard } from "@/components/product-card";
 import { TopBar } from "@/components/top-bar";
-import { Haptic, IOSColors, IOSFont, IOSText } from "@/theme";
+import { Haptic, IOSColors, IOSFont, IOSText, Opacity } from "@/theme";
 import { useKeyboardHeight } from "@/hooks/use-keyboard-height";
 import {
   createSessionStream,
@@ -2117,7 +2117,7 @@ const styles = StyleSheet.create({
   },
   cursor: {
     color: IOSColors.label,
-    opacity: 0.65,
+    opacity: Opacity.softened,
   },
   // 게스트 상태 hero 아래 노출되는 Liquid Glass 로그인 pill.
   // 배경은 유리, 텍스트는 Apple system blue + 얇은 웨이트.
@@ -2180,7 +2180,7 @@ const styles = StyleSheet.create({
     width: 76,
     height: 76,
     borderRadius: 14,
-    opacity: 0.65,
+    opacity: Opacity.softened,
   },
   pickerBlock: {
     paddingHorizontal: 4,
@@ -2456,7 +2456,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   composerBusy: {
-    opacity: 0.55,
+    opacity: Opacity.muted,
   },
   chipRow: {
     flexDirection: "row",
@@ -2604,6 +2604,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   sendBtnDisabled: {
-    opacity: 0.35,
+    opacity: Opacity.faint,
   },
 });
