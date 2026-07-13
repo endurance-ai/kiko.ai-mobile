@@ -56,9 +56,13 @@ import {
   Motion,
   Radius,
   RadiusRole,
-  Spacing,
 } from '@/theme';
 import { MOCK_PRODUCTS, type Product } from '@/state/products';
+
+// 구 Spacing 토큰 값 (main Phase 2 dead-code 제거로 theme에서 삭제됨) —
+// 프로토타입 로컬로 유지. 스페이싱 토큰 재도입 여부는
+// docs/design-system-migration.md §3.2 논의 대상.
+const Spacing = { half: 2, one: 4, two: 8, three: 16, four: 24, five: 32, six: 64 } as const;
 
 // ── Mock 데이터 확장 ─────────────────────────────────────────────────────
 // products.ts 의 MOCK_PRODUCTS 는 12개뿐 — 3섹션(4~6개씩) 채우기 위해
