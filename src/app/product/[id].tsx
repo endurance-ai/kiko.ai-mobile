@@ -27,7 +27,10 @@ import { useWishlist } from '@/state/wishlist';
 import type { ProductDetail, SimilarProduct } from '@/types/api';
 
 const SCREEN_W = Dimensions.get('window').width;
-const HERO_HEIGHT = Math.round(SCREEN_W * 0.95);
+// Hero 이미지 컨테이너 폭 — 화면 전폭이 아닌 80% 로 줄이고 좌우 여백 확보.
+// contentFit='contain' 이라 이미지 전체는 그대로 보임, 크기만 축소.
+const HERO_W = Math.round(SCREEN_W * 0.8);
+const HERO_HEIGHT = Math.round(HERO_W * 0.95);
 
 const CRITIQUE = [
   { id: 'sim', label: '더 비슷하게' },
@@ -90,7 +93,7 @@ export default function ProductDetailScreen() {
   // Hero image natural aspect ratio (width / height). Falls back to the
   // historical 1:0.95 frame until the image reports its intrinsic size, so
   // the layout doesn't jump as drastically when the image finally loads.
-  const [heroAspect, setHeroAspect] = useState<number>(SCREEN_W / HERO_HEIGHT);
+  const [heroAspect, setHeroAspect] = useState<number>(HERO_W / HERO_HEIGHT);
 
   const { isSaved, toggle: toggleSaved } = useWishlist();
   const { locked: capLocked } = useCap();
@@ -304,7 +307,7 @@ export default function ProductDetailScreen() {
         >
           {/* Hero — width matches the screen, height follows the image's
               own aspect ratio so nothing is cropped. */}
-          <View style={[styles.hero, { height: SCREEN_W / heroAspect }]}>
+          <View style={[styles.hero, { height: HERO_W / heroAspect }]}>
             {heroImages[0] ? (
               <Image
                 source={heroImages[0]}
@@ -769,7 +772,8 @@ const styles = StyleSheet.create({
 
   // Hero
   hero: {
-    width: SCREEN_W,
+    width: HERO_W,
+    alignSelf: 'center',
     backgroundColor: IOSColors.systemBackground,
   },
   heroImage: {
