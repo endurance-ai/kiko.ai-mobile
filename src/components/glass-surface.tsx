@@ -7,7 +7,7 @@ import {
 import { type ReactNode } from 'react';
 import { StyleSheet, View, type ViewProps, type ViewStyle } from 'react-native';
 
-import { IOSColors } from '@/theme';
+import { Elevation, IOSColors } from '@/theme';
 
 type Variant = 'pill' | 'composer';
 
@@ -100,11 +100,7 @@ const fallbackStyles = StyleSheet.create({
   pillEdge: {
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: IOSColors.separator,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 3,
-    elevation: 2,
+    ...Elevation.raised,
   },
   composer: {
     backgroundColor: IOSColors.systemBackground,
@@ -112,11 +108,7 @@ const fallbackStyles = StyleSheet.create({
   composerEdge: {
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: IOSColors.separator,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.10,
-    shadowRadius: 6,
-    elevation: 3,
+    ...Elevation.lifted,
   },
   // No border + no shadow + no background — for surfaces that float over a
   // colored background (e.g. login marquee) where the base pill/composer
@@ -125,8 +117,7 @@ const fallbackStyles = StyleSheet.create({
   // one is desired (e.g. a subtle rgba white).
   bareEdge: {
     borderWidth: 0,
-    shadowOpacity: 0,
-    elevation: 0,
+    ...Elevation.flat,
     backgroundColor: 'transparent',
   },
 });
