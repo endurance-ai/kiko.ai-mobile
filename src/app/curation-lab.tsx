@@ -102,7 +102,17 @@ const SUGGESTION_CHIPS = [
   { id: 'chip-p5', pattern: 'P5', label: '베트남 핫걸 스타일 탑' }, // 레퍼런스
 ] as const;
 
-const GREETING = '머릿속 그 옷,\n마법처럼 찾아드릴게요';
+// [시안 확인용 — 커밋 금지] home.tsx 최장 문구(이름 변형)로 줄바꿈·들여쓰기 확인 중.
+// 원본: '머릿속 그 옷,\n마법처럼 찾아드릴게요'
+// 히어로 카피 풀 — 핵심가치를 하나씩 말하는 표제 3종을 마운트마다 랜덤 로테이션.
+// ① 발견: 인디 브랜드 풀·신선함(매일 갱신 = 사실) ② 취향: 발견·취향 매칭
+// ③ 목적: v1.0 시그니처 재사용 — '마법'이 구체적 능력(머릿속 옷 찾기)에 붙은 원형.
+// 로그인 시 ②는 이름 치환("OO님이 몰랐던") — home.tsx 통합 때 반영.
+const HERO_GREETINGS = [
+  '몰랐던 브랜드가\n매일 새로 도착해요',
+  '당신이 몰랐던\n취향저격 브랜드',
+  '머릿속 그 옷,\n마법처럼 찾아드릴게요',
+];
 
 // 컴포저 전송 버튼 탭 시 사용하는 mock 캔드 쿼리 & 에이전트 응답 문구.
 // 실제 전송/추론은 없음 — UI 상호작용만 시연.
@@ -419,6 +429,11 @@ function Hero3({
   windowHeight: number;
   scrollY: SharedValue<number>;
 }) {
+  // 마운트당 1회 랜덤 선택 — home.tsx 의 기존 로테이션 관례와 동일.
+  const greeting = useMemo(
+    () => HERO_GREETINGS[Math.floor(Math.random() * HERO_GREETINGS.length)],
+    [],
+  );
   const heroStyle = useAnimatedStyle(() => {
     const opacity = interpolate(
       scrollY.value,
@@ -447,7 +462,7 @@ function Hero3({
       ]}
     >
       <Text style={styles.heroTitleManifesto} numberOfLines={2}>
-        {GREETING}
+        {greeting}
       </Text>
     </Animated.View>
   );
@@ -652,11 +667,24 @@ function SuggestionChips({ onSend }: { onSend: (query: string) => void }) {
 }
 
 // ── ComposerMock ─────────────────────────────────────────────────────────
+// placeholder 로테이션 (2026-07-14 확정) — 컴포저에 말·이미지·링크가 다
+// 들어간다는 걸 알리는 3종. ①은 피드 종착점("찾는 게 없네" 순간)을 검색으로
+// 전환하는 트리거 겸함. 로그인 시 ①은 "OO님," 프리픽스 — home.tsx 통합 때 반영.
+const COMPOSER_PLACEHOLDERS = [
+  '찾는 옷이 안 보이면, 말만 하세요',
+  '이미지/링크로 시작해보세요',
+  '사진 한 장이면 충분해요',
+];
+
 function ComposerMock({ onSend }: { onSend: () => void }) {
+  const placeholder = useMemo(
+    () => COMPOSER_PLACEHOLDERS[Math.floor(Math.random() * COMPOSER_PLACEHOLDERS.length)],
+    [],
+  );
   return (
     <GlassSurface {...Glass.composer} style={styles.composer}>
       <Text style={styles.composerPlaceholder} numberOfLines={1}>
-        이미지/링크를 추가하거나 요청...
+        {placeholder}
       </Text>
       <Pressable hitSlop={6} onPress={onSend} style={styles.sendBtn}>
         {/* 버튼 배경이 IOSColors.label(라이트=검정/다크=흰색)이라 아이콘은
