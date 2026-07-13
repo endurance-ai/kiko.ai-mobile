@@ -100,8 +100,8 @@ const SECTION_DEFS = [
 const SUGGESTION_CHIPS = [
   { id: 'chip-1', pattern: 'mood', label: '유니크한 미니백', query: 'unique mini bag', category: 'bag' }, // S 확정
   { id: 'chip-2', pattern: 'aesthetic', label: 'Y2K 스타일 탑', query: 'y2k top', category: 'top' }, // 화이트리스트 S
-  { id: 'chip-3', pattern: 'fit', label: '카프리 팬츠', query: 'capri pants', category: 'pants' }, // 검증 대기
-  { id: 'chip-4', pattern: 'fit', label: '로우라이즈 진', query: 'low rise jeans', category: 'jeans' }, // 판정 확인 대기
+  { id: 'chip-3', pattern: 'fit', label: '카프리 팬츠', query: 'capri pants', category: 'pants' }, // S (7/14 현규 판정)
+  { id: 'chip-4', pattern: 'fit', label: '로우라이즈 진', query: 'low rise jeans', category: 'jeans' }, // S (7/14 현규 판정)
   { id: 'chip-5', pattern: 'mood', label: '로맨틱한 원피스', query: 'romantic dress', category: 'dress' }, // S 확정
 ] as const;
 
