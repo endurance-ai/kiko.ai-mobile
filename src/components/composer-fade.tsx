@@ -1,6 +1,6 @@
 import { StyleSheet, View } from 'react-native';
 
-import { IOSColors } from '@/constants/ios';
+import { IOSColors } from '@/theme';
 
 // 12-band stacked gradient that fakes an alpha fade above the composer.
 // Sit it as the first child inside `composerWrap` (which has the solid

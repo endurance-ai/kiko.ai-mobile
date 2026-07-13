@@ -19,7 +19,7 @@ import {
   FLOATING_HEADER_OFFSET,
   FloatingHeader,
 } from "@/components/floating-header";
-import { Haptic, IOSColors, IOSFont, IOSText } from "@/constants/ios";
+import { Haptic, IOSColors, IOSFont, IOSText } from "@/theme";
 import { ApiError } from "@/lib/api";
 import { deleteMe, getMe, updateMe } from "@/lib/me";
 import { useAuth } from "@/state/auth";

@@ -22,7 +22,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { Haptic } from '@/constants/ios';
+import { Haptic } from '@/theme';
 import { ApiError } from '@/lib/api';
 import { useAuth } from '@/state/auth';
 

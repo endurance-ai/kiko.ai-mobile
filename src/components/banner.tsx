@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 
 import { GlassSurface } from '@/components/glass-surface';
-import { Haptic, IOSColors, IOSFont, IOSText } from '@/constants/ios';
+import { Haptic, IOSColors, IOSFont, IOSText } from '@/theme';
 import { useBanner } from '@/state/banner';
 
 const FADE_MS = 220;

@@ -13,7 +13,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { Haptic, IOSColors, IOSFont, IOSText } from "@/constants/ios";
+import { Haptic, IOSColors, IOSFont, IOSText } from "@/theme";
 import { trackEvent } from "@/lib/analytics";
 import { ApiError } from "@/lib/api";
 import { submitFeedback } from "@/lib/feedback";
