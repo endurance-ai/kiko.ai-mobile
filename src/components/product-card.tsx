@@ -3,7 +3,7 @@ import { SymbolView } from 'expo-symbols';
 import { useEffect } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { Haptic, IOSColors, IOSFont, IOSText } from '@/constants/ios';
+import { Haptic, IOSColors, IOSFont, IOSText } from '@/theme';
 import { trackProductImpression } from '@/lib/analytics';
 import { formatPrice, type Product } from '@/state/products';
 

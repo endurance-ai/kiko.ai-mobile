@@ -15,7 +15,7 @@ import {
   FLOATING_HEADER_OFFSET,
   FloatingHeader,
 } from "@/components/floating-header";
-import { Haptic, IOSColors, IOSFont, IOSText } from "@/constants/ios";
+import { Haptic, IOSColors, IOSFont, IOSText } from "@/theme";
 
 const FOOTER_NOTE =
   "동의는 언제든 끌 수 있어요. 피드백 리포트를 제출할 때 대화 전체가 전송되는 항목과 동일하게 관리돼요.";

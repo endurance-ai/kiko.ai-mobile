@@ -16,7 +16,7 @@ import {
   FLOATING_HEADER_OFFSET,
   FloatingHeader,
 } from "@/components/floating-header";
-import { IOSColors, IOSFont, IOSText } from "@/constants/ios";
+import { IOSColors, IOSFont, IOSText } from "@/theme";
 import { trackEvent } from "@/lib/analytics";
 import { getNotifications, updateNotifications } from "@/lib/devices";
 import type { NotificationCategories } from "@/types/api";

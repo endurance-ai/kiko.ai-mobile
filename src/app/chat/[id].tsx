@@ -21,7 +21,7 @@ import {
   FLOATING_HEADER_OFFSET,
   FloatingHeader,
 } from "@/components/floating-header";
-import { Haptic, IOSColors, IOSFont, IOSText } from "@/constants/ios";
+import { Haptic, IOSColors, IOSFont, IOSText } from "@/theme";
 import { useKeyboardHeight } from "@/hooks/use-keyboard-height";
 import { getMessages, sendMessageStream } from "@/lib/chat";
 import {

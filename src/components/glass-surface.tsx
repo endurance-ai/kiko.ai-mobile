@@ -7,7 +7,7 @@ import {
 import { type ReactNode } from 'react';
 import { StyleSheet, View, type ViewProps, type ViewStyle } from 'react-native';
 
-import { IOSColors } from '@/constants/ios';
+import { IOSColors } from '@/theme';
 
 type Variant = 'pill' | 'composer';
 

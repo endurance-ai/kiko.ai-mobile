@@ -5,7 +5,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { GlassSurface } from '@/components/glass-surface';
-import { Haptic, IOSColors, IOSFont, IOSText } from '@/constants/ios';
+import { Haptic, IOSColors, IOSFont, IOSText } from '@/theme';
 
 type Props = {
   title?: string;

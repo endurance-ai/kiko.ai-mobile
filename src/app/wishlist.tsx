@@ -17,7 +17,7 @@ import {
   FLOATING_HEADER_OFFSET,
   FloatingHeader,
 } from "@/components/floating-header";
-import { Haptic, IOSColors, IOSFont, IOSText } from "@/constants/ios";
+import { Haptic, IOSColors, IOSFont, IOSText } from "@/theme";
 import { useAuth } from "@/state/auth";
 import { useWishlist } from "@/state/wishlist";
 import type { SaveListItem } from "@/types/api";
