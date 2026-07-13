@@ -7,7 +7,7 @@ import {
   setUserId,
   track,
 } from '@amplitude/analytics-react-native';
-import { SessionReplayPlugin } from '@amplitude/plugin-session-replay-react-native';
+import { Platform } from 'react-native';
 
 // EXPO_PUBLIC_ prefix 는 클라이언트 번들에 인라인됨 — 앰플리튜드 client
 // SDK key 는 원래 노출 대상이라 안전. 서버 API key 는 별개.
@@ -31,13 +31,19 @@ export async function initAnalytics(): Promise<void> {
       logLevel: 3,
       trackingSessionEvents: true,
     }).promise;
-    // Session Replay 는 native 모듈이라 EAS 빌드가 있어야 실제 리플레이가
-    // 뜬다. dev client 에 native 링크가 없으면 조용히 실패해도 이벤트
+    // Session Replay 는 native 전용 모듈 — 웹 번들에서 모듈 평가 시점에
+    // requireNativeComponent 를 호출해 크래시하므로 native 에서만 lazy 로드.
+    // dev client 에 native 링크가 없으면 조용히 실패해도 이벤트
     // 트래킹 자체엔 영향 없음.
-    try {
-      await add(new SessionReplayPlugin()).promise;
-    } catch {
-      // native 모듈 미링크 — 무시
+    if (Platform.OS !== 'web') {
+      try {
+        const { SessionReplayPlugin } = await import(
+          '@amplitude/plugin-session-replay-react-native'
+        );
+        await add(new SessionReplayPlugin()).promise;
+      } catch {
+        // native 모듈 미링크 — 무시
+      }
     }
     initialized = true;
   } catch {
