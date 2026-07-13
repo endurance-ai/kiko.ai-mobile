@@ -91,15 +91,18 @@ const SECTION_DEFS = [
   { title: '지금 뜨는 베트남 핫걸 ST', subtitle: '사이공 트렌드세터의 여름 무드' },
 ];
 
-// 유도 칩 — GET /v1/curation 응답 chips[]와 동일 계약. 문형 슬롯 P1~P5 각 1개,
-// 값은 골든셋 검증 쿼리에서만 선별(윤영 전달 대기 — 아래는 mock).
-// 배열 순서 = 노출 순서: 안전·보편 문형(P1) 앞 → Kiko다운 문형(P5) 뒤.
+// 유도 칩 (2026-07-14 확정) — GET /v1/curation 응답 chips[]와 동일 계약.
+// 골든셋 1차 판정 기준 선별: 무드(95%)·소재(90%)·핏(85%)·컬러(75%) 채택,
+// TPO·가격은 칩 배제(가격은 v6 RPC 미지원 = 100% 실패). 노출은 한국어(label),
+// 실행은 검증된 영어 쿼리(query) + category gate + 온보딩 성별.
+// 칩 = 완전 통제된 입력 → 골든셋 통과 값만 태운다. 미검증 값은
+// scripts/goldenset/run_goldenset.py 배치 검증 후 반영.
 const SUGGESTION_CHIPS = [
-  { id: 'chip-p1', pattern: 'P1', label: '아이보리 린넨 셔츠' }, // 컬러 + 카테고리
-  { id: 'chip-p2', pattern: 'P2', label: '미니멀한 여름 원피스' }, // 무드 + 카테고리
-  { id: 'chip-p3', pattern: 'P3', label: '하객룩인데 무난하지 않게' }, // 상황 + 스타일
-  { id: 'chip-p4', pattern: 'P4', label: '10만원 아래 데일리 백' }, // 가격 + 카테고리
-  { id: 'chip-p5', pattern: 'P5', label: '베트남 핫걸 스타일 탑' }, // 레퍼런스
+  { id: 'chip-1', pattern: 'mood', label: '유니크한 미니백', query: 'unique mini bag', category: 'bag' }, // S 확정
+  { id: 'chip-2', pattern: 'aesthetic', label: 'Y2K 스타일 탑', query: 'y2k top', category: 'top' }, // 화이트리스트 S
+  { id: 'chip-3', pattern: 'fit', label: '카프리 팬츠', query: 'capri pants', category: 'pants' }, // 검증 대기
+  { id: 'chip-4', pattern: 'fit', label: '로우라이즈 진', query: 'low rise jeans', category: 'jeans' }, // 판정 확인 대기
+  { id: 'chip-5', pattern: 'mood', label: '로맨틱한 원피스', query: 'romantic dress', category: 'dress' }, // S 확정
 ] as const;
 
 // [시안 확인용 — 커밋 금지] home.tsx 최장 문구(이름 변형)로 줄바꿈·들여쓰기 확인 중.
