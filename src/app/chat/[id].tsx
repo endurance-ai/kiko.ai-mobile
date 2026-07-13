@@ -601,7 +601,7 @@ const styles = StyleSheet.create({
   sendBtn: {
     width: 40,
     height: 40,
-    borderRadius: Radius.xl,
+    borderRadius: Radius.pill,
     backgroundColor: IOSColors.label,
     justifyContent: "center",
     alignItems: "center",

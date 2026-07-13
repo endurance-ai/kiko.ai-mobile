@@ -2163,7 +2163,7 @@ const styles = StyleSheet.create({
   userImage: {
     width: 96,
     height: 96,
-    borderRadius: Radius.lg,
+    borderRadius: Radius.pill,
   },
   userTextRow: {
     flexDirection: "row",
@@ -2185,7 +2185,7 @@ const styles = StyleSheet.create({
   userImageSmall: {
     width: 76,
     height: 76,
-    borderRadius: Radius.lg,
+    borderRadius: Radius.pill,
     opacity: Opacity.softened,
   },
   pickerBlock: {
@@ -2304,7 +2304,7 @@ const styles = StyleSheet.create({
   streamCardCheck: {
     width: 22,
     height: 22,
-    borderRadius: Radius.md,
+    borderRadius: Radius.pill,
     borderWidth: 1.5,
     borderColor: "rgba(255,255,255,0.95)",
     backgroundColor: "rgba(0,0,0,0.22)",
@@ -2318,7 +2318,7 @@ const styles = StyleSheet.create({
   streamCardHeartBtn: {
     width: 22,
     height: 22,
-    borderRadius: Radius.md,
+    borderRadius: Radius.pill,
     borderWidth: 1.5,
     borderColor: "rgba(255,255,255,0.95)",
     backgroundColor: "rgba(0,0,0,0.22)",
@@ -2515,7 +2515,7 @@ const styles = StyleSheet.create({
   attachmentThumb: {
     width: 24,
     height: 24,
-    borderRadius: Radius.md,
+    borderRadius: Radius.pill,
   },
   attachmentBrand: {
     ...IOSText.footnote,
@@ -2559,7 +2559,7 @@ const styles = StyleSheet.create({
   previewWrap: {
     width: 64,
     height: 64,
-    borderRadius: Radius.lg,
+    borderRadius: Radius.pill,
     overflow: "hidden",
     position: "relative",
   },
@@ -2573,7 +2573,7 @@ const styles = StyleSheet.create({
     right: 4,
     width: 20,
     height: 20,
-    borderRadius: Radius.md,
+    borderRadius: Radius.pill,
     backgroundColor: "rgba(0,0,0,0.6)",
     justifyContent: "center",
     alignItems: "center",
@@ -2604,7 +2604,7 @@ const styles = StyleSheet.create({
   sendBtn: {
     width: 44,
     height: 44,
-    borderRadius: Radius.xl,
+    borderRadius: Radius.pill,
     backgroundColor: IOSColors.label,
     justifyContent: "center",
     alignItems: "center",

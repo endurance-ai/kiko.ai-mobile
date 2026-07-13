@@ -792,7 +792,7 @@ const styles = StyleSheet.create({
   heroBtn: {
     width: 40,
     height: 40,
-    borderRadius: Radius.xl,
+    borderRadius: Radius.pill,
     overflow: 'hidden',
     justifyContent: 'center',
     alignItems: 'center',
@@ -809,7 +809,7 @@ const styles = StyleSheet.create({
   heroInlineBtn: {
     width: 28,
     height: 28,
-    borderRadius: Radius.lg,
+    borderRadius: Radius.pill,
     borderWidth: 1.5,
     borderColor: 'rgba(255,255,255,0.95)',
     backgroundColor: 'rgba(0,0,0,0.35)',
@@ -832,7 +832,7 @@ const styles = StyleSheet.create({
   dot: {
     width: 6,
     height: 6,
-    borderRadius: Radius.xs,
+    borderRadius: Radius.pill,
     backgroundColor: 'rgba(255,255,255,0.55)',
   },
   dotActive: {
@@ -933,7 +933,7 @@ const styles = StyleSheet.create({
   scopeThumb: {
     width: 22,
     height: 22,
-    borderRadius: Radius.md,
+    borderRadius: Radius.pill,
   },
   scopeLabel: {
     ...IOSText.footnote,
@@ -986,7 +986,7 @@ const styles = StyleSheet.create({
   sendBtn: {
     width: 44,
     height: 44,
-    borderRadius: Radius.xl,
+    borderRadius: Radius.pill,
     backgroundColor: IOSColors.label,
     justifyContent: 'center',
     alignItems: 'center',
@@ -1054,7 +1054,7 @@ const styles = StyleSheet.create({
   similarCheck: {
     width: 22,
     height: 22,
-    borderRadius: Radius.md,
+    borderRadius: Radius.pill,
     borderWidth: 1.5,
     borderColor: 'rgba(255,255,255,0.95)',
     backgroundColor: 'rgba(0,0,0,0.22)',

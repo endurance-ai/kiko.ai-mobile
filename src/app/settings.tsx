@@ -218,7 +218,7 @@ const styles = StyleSheet.create({
   iconBox: {
     width: 40,
     height: 40,
-    borderRadius: Radius.xl,
+    borderRadius: Radius.pill,
     backgroundColor: IOSColors.tertiarySystemBackground,
     justifyContent: "center",
     alignItems: "center",

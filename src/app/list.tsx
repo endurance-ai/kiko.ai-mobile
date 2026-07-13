@@ -406,7 +406,7 @@ const styles = StyleSheet.create({
   dot: {
     width: 6,
     height: 6,
-    borderRadius: Radius.xs,
+    borderRadius: Radius.pill,
     backgroundColor: IOSColors.label,
     marginRight: 8,
   },
@@ -455,7 +455,7 @@ const styles = StyleSheet.create({
   checkBtn: {
     width: 22,
     height: 22,
-    borderRadius: Radius.md,
+    borderRadius: Radius.pill,
     borderWidth: 1.5,
     borderColor: 'rgba(255,255,255,0.95)',
     backgroundColor: 'rgba(0,0,0,0.22)',
@@ -469,7 +469,7 @@ const styles = StyleSheet.create({
   heartBtn: {
     width: 22,
     height: 22,
-    borderRadius: Radius.md,
+    borderRadius: Radius.pill,
     borderWidth: 1.5,
     borderColor: 'rgba(255,255,255,0.95)',
     backgroundColor: 'rgba(0,0,0,0.22)',
@@ -547,7 +547,7 @@ const styles = StyleSheet.create({
   pinThumb: {
     width: 22,
     height: 22,
-    borderRadius: Radius.md,
+    borderRadius: Radius.pill,
   },
   pinLabel: {
     ...IOSText.footnote,
@@ -574,7 +574,7 @@ const styles = StyleSheet.create({
   sendBtn: {
     width: 40,
     height: 40,
-    borderRadius: Radius.xl,
+    borderRadius: Radius.pill,
     backgroundColor: IOSColors.label,
     justifyContent: 'center',
     alignItems: 'center',

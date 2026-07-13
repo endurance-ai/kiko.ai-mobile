@@ -237,7 +237,7 @@ const styles = StyleSheet.create({
     right: 8,
     width: 26,
     height: 26,
-    borderRadius: Radius.md,
+    borderRadius: Radius.pill,
     borderWidth: 1.5,
     borderColor: "rgba(255,255,255,0.95)",
     backgroundColor: IOSColors.label,
