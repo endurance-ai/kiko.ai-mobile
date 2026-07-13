@@ -19,7 +19,7 @@ import {
   FLOATING_HEADER_OFFSET,
   FloatingHeader,
 } from "@/components/floating-header";
-import { Haptic, IOSColors, IOSFont, IOSText } from "@/theme";
+import { Haptic, IOSColors, IOSFont, IOSText, Opacity } from "@/theme";
 import { ApiError } from "@/lib/api";
 import { deleteMe, getMe, updateMe } from "@/lib/me";
 import { useAuth } from "@/state/auth";
@@ -183,7 +183,7 @@ export default function ProfileScreen() {
               <Pressable
                 onPress={confirmDelete}
                 disabled={deleting}
-                style={[styles.deleteCard, deleting && { opacity: 0.5 }]}
+                style={[styles.deleteCard, deleting && { opacity: Opacity.muted }]}
               >
                 <Text style={styles.deleteTitle}>계정 삭제</Text>
                 {deleting ? (

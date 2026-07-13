@@ -20,7 +20,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { GlassSurface } from "@/components/glass-surface";
-import { Haptic, IOSColors, IOSFont, IOSText } from "@/theme";
+import { Haptic, IOSColors, IOSFont, IOSText, Opacity } from "@/theme";
 import { ApiError } from "@/lib/api";
 import { deleteSession, listSessions, renameSession } from "@/lib/chat";
 import { getMe } from "@/lib/me";
@@ -611,7 +611,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   emptyGuestBtnPressed: {
-    opacity: 0.85,
+    opacity: Opacity.nearFull,
   },
   emptyGuestBtnText: {
     ...IOSText.body,

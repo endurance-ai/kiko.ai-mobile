@@ -18,7 +18,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { GlassSurface } from '@/components/glass-surface';
-import { Haptic, IOSColors, IOSFont, IOSText } from '@/theme';
+import { Haptic, IOSColors, IOSFont, IOSText, Opacity } from '@/theme';
 import { trackEvent } from '@/lib/analytics';
 import { ApiError } from '@/lib/api';
 import { checkProductLink, getProduct, recordProductView } from '@/lib/products';
@@ -504,7 +504,7 @@ export default function ProductDetailScreen() {
                   <GlassSurface
                     variant="pill"
                     isInteractive={!capLocked}
-                    style={[styles.critiqueChip, capLocked && { opacity: 0.4 }]}
+                    style={[styles.critiqueChip, capLocked && { opacity: Opacity.faint }]}
                   >
                     <Text style={styles.critiqueText}>{c.label}</Text>
                   </GlassSurface>
@@ -894,7 +894,7 @@ const styles = StyleSheet.create({
     backgroundColor: IOSColors.label,
   },
   ctaDisabled: {
-    opacity: 0.4,
+    opacity: Opacity.faint,
   },
   ctaText: {
     ...IOSText.headline,
@@ -992,7 +992,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   sendBtnDisabled: {
-    opacity: 0.35,
+    opacity: Opacity.faint,
   },
 
   // Similar products section (below CTA)

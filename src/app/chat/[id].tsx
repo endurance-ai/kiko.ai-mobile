@@ -21,7 +21,7 @@ import {
   FLOATING_HEADER_OFFSET,
   FloatingHeader,
 } from "@/components/floating-header";
-import { Haptic, IOSColors, IOSFont, IOSText } from "@/theme";
+import { Haptic, IOSColors, IOSFont, IOSText, Opacity } from "@/theme";
 import { useKeyboardHeight } from "@/hooks/use-keyboard-height";
 import { getMessages, sendMessageStream } from "@/lib/chat";
 import {
@@ -608,6 +608,6 @@ const styles = StyleSheet.create({
     marginLeft: 6,
   },
   sendBtnDisabled: {
-    opacity: 0.35,
+    opacity: Opacity.faint,
   },
 });

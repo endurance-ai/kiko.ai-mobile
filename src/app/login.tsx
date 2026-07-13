@@ -22,7 +22,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { Haptic } from '@/theme';
+import { Haptic, Opacity } from '@/theme';
 import { ApiError } from '@/lib/api';
 import { useAuth } from '@/state/auth';
 
@@ -506,7 +506,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
   },
-  appleBtnPressed: { opacity: 0.86 },
+  appleBtnPressed: { opacity: Opacity.nearFull },
   appleBtnText: {
     fontSize: 15,
     fontWeight: '600',
@@ -536,8 +536,8 @@ const styles = StyleSheet.create({
     color: INK,
     letterSpacing: -0.15,
   },
-  btnPressed: { opacity: 0.9 },
-  btnBusy: { opacity: 0.5 },
+  btnPressed: { opacity: Opacity.nearFull },
+  btnBusy: { opacity: Opacity.muted },
 
   // Terms
   terms: {
