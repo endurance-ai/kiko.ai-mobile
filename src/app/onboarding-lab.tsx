@@ -16,6 +16,7 @@
  * Spacing 토큰은 main 에서 제거되어 curation-lab.tsx 와 동일하게 컴포넌트
  * 로컬 상수로 재도입한다.
  */
+import { router } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { memo, useEffect, useMemo, useState } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -183,6 +184,16 @@ export default function OnboardingLabScreen() {
     setSearchQuery('');
   };
 
+  // 완료(시작하기/건너뛰기) → 새 큐레이션 메인으로 즉시 진입.
+  // 실서비스: 여기서 gender·selectedBrands 를 로컬 저장(secure-storage)하고
+  // 메인이 GET /v1/curation?gender= 로 읽는다. 로그인 시 POST /v1/onboarding.
+  // 프로토타입은 mock 요약(done) 대신 /curation-lab 으로 흐름을 잇는다 —
+  // done 요약이 필요하면 아래 setStep('done') 으로 임시 전환.
+  const handleFinish = () => {
+    Haptic.medium();
+    router.replace('/curation-lab');
+  };
+
   return (
     <View style={styles.root}>
       {/* 뒤로가기 + 진행 인디케이터 — done 스텝(요약 화면)에서는 숨긴다 */}
@@ -263,13 +274,13 @@ export default function OnboardingLabScreen() {
                   : `${MIN_TASTE_PICKS - selectedBrands.size}개 더 골라주세요`
             }
             disabled={selectedBrands.size < MIN_TASTE_PICKS}
-            onPress={() => setStep('done')}
+            onPress={handleFinish}
           />
           <Pressable
             hitSlop={8}
             onPress={() => {
               Haptic.light();
-              setStep('done');
+              handleFinish();
             }}
             style={styles.skipUnderCta}
           >
