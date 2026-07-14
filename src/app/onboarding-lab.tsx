@@ -821,7 +821,11 @@ const styles = StyleSheet.create({
   },
   stepBody: {
     flex: 1,
-    paddingHorizontal: Spacing.three,
+    // 왼쪽만 한 단계 더 (16→24) — 백버튼 chevron 은 아이콘 특성상 실제
+    // 획이 슬롯 안쪽 ~8px 에서 그려져서, 타이틀을 24 에서 시작해야 획과
+    // 옵티컬 정렬이 맞는다 (7/14 피드백).
+    paddingLeft: Spacing.four,
+    paddingRight: Spacing.three,
     paddingTop: Spacing.five,
   },
   stepTitle: {
@@ -862,13 +866,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.five,
     paddingBottom: Spacing.five,
   },
-  // 손+텍스트 그룹이 상단 ~30% 지점에서 시작하도록 하는 비율 (0.45:1.05).
+  // 손+텍스트 그룹 수직 중앙 정렬 (7/14 피드백 — 상단 30% 배치가 살짝
+  // 떠 보임). 위아래 동일 flex 로 광학 중앙에 앉힌다.
   // 손-텍스트 간격은 flex 가 아니라 타이틀 marginTop 으로 고정(밀착).
   welcomeTopSpacer: {
-    flex: 0.38,
+    flex: 1,
   },
   welcomeMidSpacer: {
-    flex: 1.2,
+    flex: 1,
   },
   // 손 인사 마크 — 이모지를 심볼로 크게.
   welcomeHand: {
@@ -996,6 +1001,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   tasteScrollContent: {
+    // 상단 여백은 frame(marginTop)이 아니라 스크롤 컨텐츠 패딩으로 —
+    // 칩이 쉬는 위치는 내려가되, 스크롤하면 상단 화이트 페이드 아래로
+    // 자연스럽게 흘러 들어간다 (7/14 피드백: 그라데이션 유지).
+    paddingTop: Spacing.four,
     paddingBottom: Spacing.six,
   },
   // 태그 클라우드 — 좌측 정렬 (히어로·타이틀과 같은 좌측 레일에 맞춘다).

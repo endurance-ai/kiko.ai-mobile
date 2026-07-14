@@ -35,8 +35,6 @@ import {
 } from "@/lib/chat";
 import { FREE_LIMIT_VERSION, trackEvent } from "@/lib/analytics";
 import { ApiError } from "@/lib/api";
-import { getMe } from "@/lib/me";
-import { stripFamilyName } from "@/lib/name";
 import {
   isCapExhausted,
   type CapMeta,
@@ -145,22 +143,8 @@ const PICK_PROMPT = (n: number) =>
 // One is picked at random per mount. Named variants substitute the user's
 // display_name (skipped when name isn't loaded yet — generic ones still
 // keep the surface from looking blank).
-// 히어로 카피 3종 (2026-07-14 확정, curation-lab 3안에서 이식) —
-// ① 발견: 인디 브랜드 풀·신선함 ② 취향: 발견·취향 매칭 ③ 목적: v1.0 시그니처.
-const EMPTY_GREETINGS_GENERIC = [
-  "몰랐던 브랜드가\n매일 새로 도착해요",
-  "당신이 몰랐던\n취향저격 브랜드",
-  "머릿속 그 옷,\n마법처럼 찾아드릴게요",
-];
-const buildNamedGreetings = (name: string) => {
-  const given = stripFamilyName(name);
-  return [
-    // ② 의 이름 치환 변형 — 3안 통합 시 반영하기로 한 형태.
-    `${given}님이 몰랐던\n취향저격 브랜드`,
-    `${given}님,\n사진 한 장이면 취향 맞는 브랜드만 보여드려요`,
-    `${given}님,\n채팅 한 줄로 옷 구경 시작해요`,
-  ];
-};
+// (빈 상태 그리팅 카피 풀 제거 — 7/14. 빈 상태는 큐레이션 시트가 첫인상.
+//  카피 자산은 curation-lab.tsx HERO_GREETINGS 에 보존.)
 
 const AGENT_INTRO_DEFAULT = "이런 거 어때? · 콕집기로 골라봐";
 const AGENT_INTRO_NARROWING = "이런 거 찾았어 · 근데 좀 갈리네";
@@ -328,7 +312,6 @@ export default function ChatEntryScreen() {
     clear: clearBanner,
   } = useBanner();
   const [text, setText] = useState("");
-  const [displayName, setDisplayName] = useState<string | null>(null);
   const [pickedImage, setPickedImage] = useState<string | null>(null);
   // Metadata needed for POST /v1/uploads — set whenever pickedImage is set,
   // cleared in lockstep. Lives in a ref because rendering doesn't use it.
@@ -379,58 +362,9 @@ export default function ChatEntryScreen() {
     [],
   );
 
-  // Fetch display_name for the personalized empty-state greeting.
-  // 로그인/로그아웃 전환 시 즉시 반응하도록 authStatus 를 deps 에 포함 —
-  // 이전엔 mount 시 1회만 실행돼서 로그아웃 후에도 이전 사용자 이름이
-  // "○○님, 사진 한 장이면…" 그리팅으로 남았음.
-  useEffect(() => {
-    if (authStatus !== 'authenticated') {
-      setDisplayName(null);
-      return;
-    }
-    let cancelled = false;
-    (async () => {
-      try {
-        const me = await getMe();
-        if (!cancelled) setDisplayName(me.display_name?.trim() || null);
-      } catch {
-        // ignore
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [authStatus]);
-
-  // Random empty-state greeting. Re-picks once when display_name loads
-  // (so the named variants become eligible) and then stays stable.
-  const emptyGreeting = useMemo(() => {
-    const pool = [
-      ...EMPTY_GREETINGS_GENERIC,
-      ...(displayName ? buildNamedGreetings(displayName) : []),
-    ];
-    return pool[Math.floor(Math.random() * pool.length)];
-  }, [displayName]);
-
-  // Typewriter reveal — one character every ~45ms. Resets when the source
-  // greeting changes (i.e. once when display_name resolves).
-  const [revealedChars, setRevealedChars] = useState(0);
-  useEffect(() => {
-    setRevealedChars(0);
-    if (!emptyGreeting) return;
-    const TICK_MS = 45;
-    const id = setInterval(() => {
-      setRevealedChars((n) => {
-        if (n >= emptyGreeting.length) {
-          clearInterval(id);
-          return n;
-        }
-        return n + 1;
-      });
-    }, TICK_MS);
-    return () => clearInterval(id);
-  }, [emptyGreeting]);
-  const typingDone = revealedChars >= emptyGreeting.length;
+  // 그리팅/타이핑 머신 제거 (7/14) — 빈 상태가 큐레이션 시트로 바뀌면서
+  // display_name fetch·typewriter reveal 로직도 함께 정리. 히어로 카피
+  // 자산은 curation-lab.tsx(HERO_GREETINGS)에 보존.
 
   // Sticky flag — set when the current send originated from a critique chip
   // so the busy hints can swap to the critique-specific pool. Cleared on
@@ -1904,35 +1838,17 @@ export default function ChatEntryScreen() {
         // 빠지는 진입이 기본값. 드래그 시작 시 키보드 내림.
         <ScrollView
           style={styles.emptyScroll}
-          contentContainerStyle={styles.emptyScrollContent}
+          // topPad = insets.top + 플로팅 탑바 높이 — 결과 리스트와 동일한
+          // 클리어런스. +16 은 첫 구좌 헤더가 탑바에 붙어 보인다는 7/14
+          // 피드백 반영 숨통.
+          contentContainerStyle={[styles.emptyScrollContent, { paddingTop: topPad + 16 }]}
           keyboardDismissMode="on-drag"
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <View style={styles.emptyHeroTop}>
-            <Text style={styles.emptyHeadline}>
-              {emptyGreeting.slice(0, revealedChars)}
-              {!typingDone && <Text style={styles.cursor}>▍</Text>}
-            </Text>
-            {authStatus !== "authenticated" && typingDone && (
-              <Pressable
-                onPress={() => {
-                  Haptic.light();
-                  router.push("/login");
-                }}
-                hitSlop={12}
-                style={styles.emptyLoginBtnWrap}
-              >
-                <GlassSurface
-                  variant="composer"
-                  isInteractive
-                  style={styles.emptyLoginBtn}
-                >
-                  <Text style={styles.emptyLoginBtnText}>Log in</Text>
-                </GlassSurface>
-              </Pressable>
-            )}
-          </View>
+          {/* 그리팅·로그인 버튼 제거 (7/14) — 빈 상태는 큐레이션이 곧
+              첫인상. 로그인 진입은 검색 시도 시 게이트(runStreamingTurn)와
+              사이드바에 남아 있다. */}
           <CurationSheet />
         </ScrollView>
       )}
@@ -2163,14 +2079,8 @@ const styles = StyleSheet.create({
   },
   // Empty state
   // Empty hero — Claude-browser style: single centered headline, no cards.
-  emptyHero: {
-    flex: 1,
-    paddingHorizontal: 28,
-    paddingBottom: 120, // lift above the floating composer
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  // 빈 상태 스크롤 시트 (3안 이식) — 히어로 + 큐레이션 구좌.
+  // 빈 상태 스크롤 시트 (3안 이식) — 큐레이션 구좌.
+  // (그리팅 히어로·로그인 pill 스타일 제거 — 7/14)
   emptyScroll: {
     flex: 1,
   },
@@ -2178,46 +2088,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, // CurationSheet rowScroll 의 -16 인셋과 짝
     paddingBottom: 200, // 플로팅 컴포저(칩 행 포함) 아래로 안 깔리게
   },
-  emptyHeroTop: {
-    alignItems: "center",
-    paddingTop: 48,
-    paddingBottom: 40,
-    paddingHorizontal: 12,
-  },
-  emptyHeadline: {
-    fontSize: 26,
-    lineHeight: 34,
-    fontWeight: "400",
-    letterSpacing: -0.5,
-    textAlign: "center",
-    color: IOSColors.label,
-    fontFamily: IOSFont.sans,
-  },
-  cursor: {
-    color: IOSColors.label,
-    opacity: Opacity.softened,
-  },
-  // 게스트 상태 hero 아래 노출되는 Liquid Glass 로그인 pill.
-  // 배경은 유리, 텍스트는 Apple system blue + 얇은 웨이트.
-  emptyLoginBtnWrap: {
-    marginTop: 24,
-  },
-  emptyLoginBtn: {
-    paddingHorizontal: 14,
-    height: 34,
-    borderRadius: Radius.lg,
-    justifyContent: "center",
-    alignItems: "center",
-    overflow: "hidden",
-  },
-  emptyLoginBtnText: {
-    fontSize: 17,
-    fontWeight: "300",
-    color: "#007AFF",
-    fontFamily: IOSFont.sans,
-    letterSpacing: -0.2,
-  },
-
   // Conversation
   chatContent: {
     paddingHorizontal: 20,
