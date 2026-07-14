@@ -95,19 +95,36 @@ const SECTION_DEFS = [
   { title: '지금 뜨는 베트남 핫걸 ST', subtitle: '사이공 트렌드세터의 여름 무드' },
 ];
 
-// 유도 칩 (2026-07-14 확정) — GET /v1/curation 응답 chips[]와 동일 계약.
-// 골든셋 1차 판정 기준 선별: 무드(95%)·소재(90%)·핏(85%)·컬러(75%) 채택,
-// TPO·가격은 칩 배제(가격은 v6 RPC 미지원 = 100% 실패). 노출은 한국어(label),
-// 실행은 검증된 영어 쿼리(query) + category gate + 온보딩 성별.
-// 칩 = 완전 통제된 입력 → 골든셋 통과 값만 태운다. 미검증 값은
-// scripts/goldenset/run_goldenset.py 배치 검증 후 반영.
-const SUGGESTION_CHIPS = [
-  { id: 'chip-1', pattern: 'mood', label: '유니크한 미니백', query: 'unique mini bag', category: 'bag' }, // S 확정
-  { id: 'chip-2', pattern: 'aesthetic', label: 'Y2K 스타일 탑', query: 'y2k top', category: 'top' }, // 화이트리스트 S
-  { id: 'chip-3', pattern: 'fit', label: '카프리 팬츠', query: 'capri pants', category: 'pants' }, // S (7/14 현규 판정)
-  { id: 'chip-4', pattern: 'fit', label: '로우라이즈 진', query: 'low rise jeans', category: 'jeans' }, // S (7/14 현규 판정)
-  { id: 'chip-5', pattern: 'mood', label: '로맨틱한 원피스', query: 'romantic dress', category: 'dress' }, // S 확정
+// 유도 칩 (2026-07-14 확정, 성별 이원화) — GET /v1/curation 응답 chips[]와
+// 동일 계약. 노출은 한국어(label), 실행은 검증된 영어 쿼리(query) + category
+// gate + 온보딩 성별. 칩 = 완전 통제된 입력 → 골든셋 통과 값만 태운다.
+// 골든셋 최종(여 7/13 · 남 7/14) 결론이 성별로 갈린다:
+//   여성 = 문형 채택 방식 (무드 95%·소재 90%·핏 85%·컬러 75% — 문형 안에서
+//          값 교체 가능). TPO·가격 배제.
+//   남성 = 값 화이트리스트 방식 (모든 문형 75% 미달, 최고 60% — S 판정 72개
+//          값만 개별 등록. 축은 핏·에스테틱, TPO도 S값은 허용).
+// 미검증 값은 scripts/goldenset/run_goldenset.py 배치 검증 후 반영.
+const SUGGESTION_CHIPS_WOMEN = [
+  { id: 'chip-w1', pattern: 'mood', label: '유니크한 미니백', query: 'unique mini bag', category: 'bag' }, // S 확정
+  { id: 'chip-w2', pattern: 'aesthetic', label: 'Y2K 스타일 탑', query: 'y2k top', category: 'top' }, // 화이트리스트 S
+  { id: 'chip-w3', pattern: 'fit', label: '카프리 팬츠', query: 'capri pants', category: 'pants' }, // S (7/14 현규 판정)
+  { id: 'chip-w4', pattern: 'fit', label: '로우라이즈 진', query: 'low rise jeans', category: 'jeans' }, // S (7/14 현규 판정)
+  { id: 'chip-w5', pattern: 'mood', label: '로맨틱한 원피스', query: 'romantic dress', category: 'dress' }, // S 확정
 ] as const;
+
+// 남성 5종 (2026-07-14 확정) — 전부 남성 골든셋 에스테틱 S 화이트리스트 값.
+// 온보딩 gender 연동 전까지 화면 기본은 여성 셋 (아래 SUGGESTION_CHIPS 참조).
+const SUGGESTION_CHIPS_MEN = [
+  { id: 'chip-m1', pattern: 'aesthetic', label: 'Y2K 배기 진', query: 'y2k baggy jeans', category: 'jeans' },
+  { id: 'chip-m2', pattern: 'aesthetic', label: '아메카지 셔츠', query: 'amekaji shirt', category: 'shirt' },
+  { id: 'chip-m3', pattern: 'aesthetic', label: '놈코어 티셔츠', query: 'normcore tee', category: 'tee' },
+  { id: 'chip-m4', pattern: 'aesthetic', label: '시티보이 팬츠', query: 'city boy pants', category: 'pants' },
+  { id: 'chip-m5', pattern: 'aesthetic', label: '고프코어 자켓', query: 'gorpcore jacket', category: 'jacket' },
+] as const;
+
+// 현재 프로토타입 노출 셋 — 온보딩(OB_01) gender 값이 배선되면
+// gender === 'men' ? SUGGESTION_CHIPS_MEN : SUGGESTION_CHIPS_WOMEN 으로 전환.
+const SUGGESTION_CHIPS = SUGGESTION_CHIPS_WOMEN;
 
 // 히어로 카피 풀 — 핵심가치를 하나씩 말하는 표제 3종을 마운트마다 랜덤 로테이션.
 // ① 발견: 인디 브랜드 풀·신선함(매일 갱신 = 사실) ② 취향: 발견·취향 매칭
