@@ -708,16 +708,34 @@ function ComposerMock({ onSend }: { onSend: () => void }) {
     () => COMPOSER_PLACEHOLDERS[Math.floor(Math.random() * COMPOSER_PLACEHOLDERS.length)],
     [],
   );
+  // 전송 버튼 press-in 즉시 반응 — AnimatedProductCard 와 동일 문법.
+  // 솔리드 CTA 인데 유일하게 프레스 피드백이 없던 지점.
+  const sendScale = useSharedValue(1);
+  const sendScaleStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: sendScale.value }],
+  }));
   return (
     <GlassSurface {...Glass.composer} style={styles.composer}>
       <Text style={styles.composerPlaceholder} numberOfLines={1}>
         {placeholder}
       </Text>
-      <Pressable hitSlop={6} onPress={onSend} style={styles.sendBtn}>
-        {/* 버튼 배경이 IOSColors.label(라이트=검정/다크=흰색)이라 아이콘은
-            반대로 적응하는 systemBackground 를 써서 라이트/다크 모두 대비를
-            보장한다 — 리터럴 흰색 하드코딩을 피한다. */}
-        <SymbolView name="arrow.up" size={16} tintColor={IOSColors.systemBackground} weight="bold" />
+      <Pressable
+        hitSlop={6}
+        unstable_pressDelay={0}
+        onPressIn={() => {
+          sendScale.value = withSpring(0.9, Motion.snappy);
+        }}
+        onPressOut={() => {
+          sendScale.value = withSpring(1, Motion.snappy);
+        }}
+        onPress={onSend}
+      >
+        <Animated.View style={[styles.sendBtn, sendScaleStyle]}>
+          {/* 버튼 배경이 IOSColors.label(라이트=검정/다크=흰색)이라 아이콘은
+              반대로 적응하는 systemBackground 를 써서 라이트/다크 모두 대비를
+              보장한다 — 리터럴 흰색 하드코딩을 피한다. */}
+          <SymbolView name="arrow.up" size={16} tintColor={IOSColors.systemBackground} weight="bold" />
+        </Animated.View>
       </Pressable>
     </GlassSurface>
   );

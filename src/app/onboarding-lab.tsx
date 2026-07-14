@@ -35,6 +35,7 @@ import Animated, {
   useAnimatedStyle,
   useReducedMotion,
   useSharedValue,
+  withSpring,
   withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets, type EdgeInsets } from 'react-native-safe-area-context';
@@ -51,6 +52,7 @@ import {
   IOSColors,
   IOSFont,
   IOSText,
+  Motion,
   Opacity,
   Radius,
   RadiusRole,
@@ -317,6 +319,13 @@ function PrimaryButton({
   onPress: () => void;
   disabled?: boolean;
 }) {
+  // press-in 즉시 반응 (curation-lab AnimatedProductCard 와 동일 문법) —
+  // Apple "Designing Fluid Interfaces" §1: 터치 다운 순간 피드백이 없으면
+  // 인터페이스가 죽어있는 느낌. 화면에서 제일 큰 버튼이 유일하게 무반응이었다.
+  const scale = useSharedValue(1);
+  const scaleStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
   const handlePress = () => {
     if (disabled) return;
     Haptic.medium();
@@ -324,11 +333,19 @@ function PrimaryButton({
   };
   return (
     <Pressable
+      unstable_pressDelay={0}
+      onPressIn={() => {
+        if (!disabled) scale.value = withSpring(0.97, Motion.snappy);
+      }}
+      onPressOut={() => {
+        scale.value = withSpring(1, Motion.snappy);
+      }}
       onPress={handlePress}
       disabled={disabled}
-      style={[styles.ctaButton, disabled && styles.ctaButtonDisabled]}
     >
-      <Text style={styles.ctaButtonText}>{label}</Text>
+      <Animated.View style={[styles.ctaButton, disabled && styles.ctaButtonDisabled, scaleStyle]}>
+        <Text style={styles.ctaButtonText}>{label}</Text>
+      </Animated.View>
     </Pressable>
   );
 }
@@ -860,7 +877,7 @@ const styles = StyleSheet.create({
   // 스퀘클 썸네일이 가운데 정렬 허니콤으로.
   collageCard: {
     alignSelf: 'stretch',
-    borderRadius: 32,
+    borderRadius: Radius.xxl,
     backgroundColor: IOSColors.systemGroupedBackground,
     paddingVertical: Spacing.four,
     paddingHorizontal: Spacing.three,
