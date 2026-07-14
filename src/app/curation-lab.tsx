@@ -898,10 +898,11 @@ const styles = StyleSheet.create({
     color: IOSColors.label,
     fontFamily: IOSFont.sans,
   },
+  // home.tsx 컴포저와 동일 수치 (56/44 — 2026-07-14 크기 정렬)
   composer: {
     flexDirection: 'row',
     alignItems: 'center',
-    minHeight: 52,
+    minHeight: 56,
     borderRadius: RadiusRole.chip,
     paddingLeft: Spacing.four,
     paddingRight: Spacing.two,
@@ -914,8 +915,8 @@ const styles = StyleSheet.create({
     fontFamily: IOSFont.sans,
   },
   sendBtn: {
-    width: 36,
-    height: 36,
+    width: 44,
+    height: 44,
     borderRadius: Radius.pill,
     backgroundColor: IOSColors.label,
     justifyContent: 'center',
