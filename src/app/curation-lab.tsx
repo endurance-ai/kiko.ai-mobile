@@ -102,7 +102,7 @@ const SECTION_DEFS = [
 // 칩 = 완전 통제된 입력 → 골든셋 통과 값만 태운다. 미검증 값은
 // scripts/goldenset/run_goldenset.py 배치 검증 후 반영.
 const SUGGESTION_CHIPS = [
-  { id: 'chip-1', pattern: 'mood', label: '유니크한 미니백', query: 'unique mini bag', category: 'bag' }, // S 확정
+  { id: 'chip-1', pattern: 'mood', label: '유니크한 미니백', query: 'quirky unique mini bag', category: 'bag' }, // S 확정 (검증 쿼리 원문 — 축약형은 럭셔리 편중)
   { id: 'chip-2', pattern: 'aesthetic', label: 'Y2K 스타일 탑', query: 'y2k top', category: 'top' }, // 화이트리스트 S
   { id: 'chip-3', pattern: 'fit', label: '카프리 팬츠', query: 'capri pants', category: 'pants' }, // S (7/14 현규 판정)
   { id: 'chip-4', pattern: 'fit', label: '로우라이즈 진', query: 'low rise jeans', category: 'jeans' }, // S (7/14 현규 판정)
@@ -123,6 +123,13 @@ const HERO_GREETINGS = [
 // 실제 전송/추론은 없음 — UI 상호작용만 시연.
 const CANNED_QUERY = '베이지 니트 조끼 찾아줘';
 const AGENT_REPLY_TEXT = '이런 거 어때? 골라봐';
+
+// 전송 payload — display(화면 노출, KO)와 query(API 전송, EN 검증 쿼리)를
+// 계약 수준에서 분리한다. 칩은 label≠query 라서 이 분리가 없으면 실연동 때
+// 한국어 label 이 임베딩으로 흘러 골든셋 검증이 무효가 된다. 컴포저 자유
+// 입력은 display === query (서버 측 rewrite 가 처리). 글로벌 전환 시엔
+// label 만 영어로 교체하면 되고 query 검증 자산은 그대로 유지된다.
+type SendPayload = { display: string; query: string; chipId?: string };
 
 export default function CurationLabScreen() {
   const [pinnedIds, setPinnedIds] = useState<Set<string>>(new Set());
@@ -146,7 +153,7 @@ export default function CurationLabScreen() {
   // ── discovery↔chat 공존: mock 대화 ──────────────────────────────────────
   // 실제 전송/추론 없이 UI 상호작용만 시연하는 로컬 상태. 칩 탭/전송 버튼
   // 탭이 대화 블록을 append 하고, 큐레이션 영역과 같은 스크롤 안에 공존한다.
-  const [conversation, setConversation] = useState<{ id: string; query: string }[]>([]);
+  const [conversation, setConversation] = useState<(SendPayload & { id: string })[]>([]);
   const [jumpButtonVisible, setJumpButtonVisible] = useState(false);
 
   // reanimated 4 의 scrollTo(animatedRef, x, y, animated) 로 큐레이션↔대화
@@ -270,13 +277,15 @@ export default function CurationLabScreen() {
   // mock 전송: 제안 칩 탭(칩 라벨을 쿼리로) 또는 컴포저 전송 버튼 탭(캔드
   // 쿼리)이 모두 이 경로를 탄다. 첫 전송은 대화 시작점으로, 이후 전송은
   // 최신 블록이 보이도록 맨 끝으로 스크롤 — 실행은 onLayout 쪽에서.
-  const handleSend = (query: string) => {
+  const handleSend = (payload: SendPayload) => {
     Haptic.medium();
     const isFirstMessage = conversation.length === 0;
     // 스크롤은 여기서 직접 하지 않는다 — 새 블록의 레이아웃이 커밋되면
     // handleConversationLayout 이 pendingScrollRef 를 읽어 수행한다.
     pendingScrollRef.current = isFirstMessage ? 'first' : 'end';
-    setConversation((prev) => [...prev, { id: `conv-${prev.length}-${Date.now()}`, query }]);
+    // mock 단계라 payload.query 는 저장만 하고 전송하지 않지만, 실연동 시
+    // 이 값이 그대로 검색 API body 가 된다 (chipId 는 칩 성과 로깅용).
+    setConversation((prev) => [...prev, { id: `conv-${prev.length}-${Date.now()}`, ...payload }]);
   };
 
   const handleJumpToTop = () => {
@@ -323,7 +332,7 @@ export default function CurationLabScreen() {
             {conversation.map((entry, index) => (
               <ConversationBlock
                 key={entry.id}
-                query={entry.query}
+                display={entry.display}
                 products={pickConversationProducts(catalog, index)}
                 pinnedIds={pinnedIds}
                 onPressProduct={handleProductPress}
@@ -411,7 +420,7 @@ export default function CurationLabScreen() {
       {/* 하단 플로팅 컴포저 */}
       <View style={[styles.composerArea, { paddingBottom: insets.bottom + Spacing.one }]}>
         <SuggestionChips onSend={handleSend} />
-        <ComposerMock onSend={() => handleSend(CANNED_QUERY)} />
+        <ComposerMock onSend={() => handleSend({ display: CANNED_QUERY, query: CANNED_QUERY })} />
       </View>
     </View>
   );
@@ -529,13 +538,13 @@ function CurationRow({
 // 가로 스크롤 상품 행. 실제 대화가 아니라 큐레이션 아래 append 되는 mock
 // 블록이라 섹션 헤더/더보기는 없다.
 function ConversationBlock({
-  query,
+  display,
   products,
   pinnedIds,
   onPressProduct,
   onTogglePin,
 }: {
-  query: string;
+  display: string;
   products: Product[];
   pinnedIds: Set<string>;
   onPressProduct: (product: Product) => void;
@@ -545,7 +554,7 @@ function ConversationBlock({
     <View>
       <View style={styles.userBubbleRow}>
         <View style={styles.userBubble}>
-          <Text style={styles.userBubbleText}>{query}</Text>
+          <Text style={styles.userBubbleText}>{display}</Text>
         </View>
       </View>
       <Text style={styles.agentReplyText}>{AGENT_REPLY_TEXT}</Text>
@@ -640,33 +649,31 @@ function AnimatedProductCard({
 
 // ── SuggestionChips ──────────────────────────────────────────────────────
 // 0번 칩("공용 · 가격무관")은 필터 토글이라 mock 전송을 트리거하지 않고
-// 기존처럼 selection 햅틱만 준다. 그 외 칩은 라벨을 쿼리로 mock 전송한다.
-function SuggestionChips({ onSend }: { onSend: (query: string) => void }) {
-  const chips = ['공용 · 가격무관', ...SUGGESTION_CHIPS.map((c) => c.label)];
+// 기존처럼 selection 햅틱만 준다. 그 외 칩은 화면엔 label(KO)을 그리되
+// 전송 payload 에는 골든셋 검증 query(EN)를 태운다 — SendPayload 참조.
+function SuggestionChips({ onSend }: { onSend: (payload: SendPayload) => void }) {
   return (
     <ScrollView
       horizontal
       showsHorizontalScrollIndicator={false}
       contentContainerStyle={styles.chipsRow}
     >
-      {chips.map((label, i) => {
-        const isFilterChip = i === 0;
-        return (
-          <Pressable
-            key={label}
-            hitSlop={4}
-            onPress={() => (isFilterChip ? Haptic.selection() : onSend(label))}
-          >
-            <GlassSurface
-              {...Glass.chip}
-              isInteractive
-              style={[styles.suggestionChip, isFilterChip && styles.filterChip]}
-            >
-              <Text style={styles.suggestionChipText}>{label}</Text>
-            </GlassSurface>
-          </Pressable>
-        );
-      })}
+      <Pressable key="filter-chip" hitSlop={4} onPress={() => Haptic.selection()}>
+        <GlassSurface {...Glass.chip} isInteractive style={[styles.suggestionChip, styles.filterChip]}>
+          <Text style={styles.suggestionChipText}>공용 · 가격무관</Text>
+        </GlassSurface>
+      </Pressable>
+      {SUGGESTION_CHIPS.map((chip) => (
+        <Pressable
+          key={chip.id}
+          hitSlop={4}
+          onPress={() => onSend({ display: chip.label, query: chip.query, chipId: chip.id })}
+        >
+          <GlassSurface {...Glass.chip} isInteractive style={styles.suggestionChip}>
+            <Text style={styles.suggestionChipText}>{chip.label}</Text>
+          </GlassSurface>
+        </Pressable>
+      ))}
     </ScrollView>
   );
 }
