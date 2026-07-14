@@ -16,19 +16,23 @@
  * Spacing 토큰은 main 에서 제거되어 curation-lab.tsx 와 동일하게 컴포넌트
  * 로컬 상수로 재도입한다.
  */
-import { LinearGradient } from 'expo-linear-gradient';
 import { SymbolView } from 'expo-symbols';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useState } from 'react';
+import { LinearGradient } from 'expo-linear-gradient';
 import {
+  Image,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
+  useColorScheme,
   View,
 } from 'react-native';
 import Animated, {
   useAnimatedStyle,
+  useReducedMotion,
   useSharedValue,
   withTiming,
 } from 'react-native-reanimated';
@@ -38,9 +42,9 @@ import { GlassSurface } from '@/components/glass-surface';
 import { STYLE_NODES } from '@/state/style-nodes';
 import {
   BrandColors,
-  BrandGradient,
   BrandRole,
   Duration,
+  Elevation,
   Glass,
   Haptic,
   IOSColors,
@@ -56,19 +60,21 @@ import {
 // curation-lab.tsx 와 동일하게 프로토타입 로컬로 재도입.
 const Spacing = { half: 2, one: 4, two: 8, three: 16, four: 24, five: 32, six: 64 } as const;
 
-type Step = 'welcome' | 'gender' | 'taste' | 'done';
+type Step = 'welcome' | 'value' | 'gender' | 'taste' | 'done';
 type Gender = 'women' | 'men' | null;
 
 // ── 레이아웃 상수 (구조적 수치 — 하드코딩 예외 대상) ───────────────────────
-const HEADER_SIDE_SLOT = 32;
-const KIKO_BLOB_SIZE = 180;
-const GENDER_CARD_HEIGHT = 64;
-const BRAND_CHIP_HEIGHT = 40;
-const SEARCH_CHIP_HEIGHT = 32;
+// 컴포넌트 높이 — 애플 UIKit 표준 수치에 정렬 (2026-07-14):
+// 내비 바 터치 타깃 44 / 대형 선택 버튼 56(Sign in with Apple 급) /
+// 콘텐츠 칩 48(≥44 최소 타깃) / 보조 칩 44(최소 타깃 하한).
+const HEADER_SIDE_SLOT = 44;
+const GENDER_CARD_HEIGHT = 56;
+const BRAND_CHIP_HEIGHT = 48;
+const SEARCH_CHIP_HEIGHT = 44;
 const MAX_SEARCH_RESULTS = 8;
 // 성별 카드 선택 → 다음 스텝 자동 진입까지의 유예(스펙 300ms) — 선택 표시가
 // 눈에 보일 최소한의 시간만 주고 바로 넘어간다.
-const GENDER_AUTO_ADVANCE_DELAY = 300;
+const MIN_TASTE_PICKS = 3;
 
 // ── STYLE_NODES 파생 헬퍼 ────────────────────────────────────────────────
 // 브랜드 그리드/검색/노드 매핑 모두 STYLE_NODES 21종에서 성별 필드만
@@ -122,27 +128,25 @@ export default function OnboardingLabScreen() {
   const [selectedBrands, setSelectedBrands] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
 
-  // 성별 선택 후 자동 진입 타이머 — 스텝을 벗어나거나 언마운트되면 정리.
-  const genderAdvanceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(
-    () => () => {
-      if (genderAdvanceRef.current) clearTimeout(genderAdvanceRef.current);
-    },
-    [],
-  );
-
   // 스텝 전환 애니메이션 — 새 스텝 콘텐츠가 opacity 0→1 + translateY 8→0 로
   // 은은하게 나타난다. 트리거성 withTiming (진입/이탈이지 제스처가 아니므로
   // Motion 스프링이 아니라 Duration 계열이 맞다 — docs/design-system.md 규칙4).
+  // 시스템 '동작 줄이기' 켜짐 시 전환을 즉시 표시로 폴백 (apple-design §14).
+  const reduceMotion = useReducedMotion();
   const contentOpacity = useSharedValue(0);
   const contentTranslateY = useSharedValue(8);
   useEffect(() => {
+    if (reduceMotion) {
+      contentOpacity.value = 1;
+      contentTranslateY.value = 0;
+      return;
+    }
     contentOpacity.value = 0;
     contentTranslateY.value = 8;
     contentOpacity.value = withTiming(1, { duration: Duration.base });
     contentTranslateY.value = withTiming(0, { duration: Duration.base });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step]);
+  }, [step, reduceMotion]);
   const contentStyle = useAnimatedStyle(() => ({
     opacity: contentOpacity.value,
     transform: [{ translateY: contentTranslateY.value }],
@@ -150,16 +154,15 @@ export default function OnboardingLabScreen() {
 
   const handleBack = () => {
     Haptic.light();
-    if (step === 'gender') setStep('welcome');
+    if (step === 'value') setStep('welcome');
+    else if (step === 'gender') setStep('value');
     else if (step === 'taste') setStep('gender');
   };
 
+  // 자동 진행 대신 선택만 반영 — 진행은 하단 [다음] 버튼으로 (명시적 확인).
   const handleSelectGender = (next: 'women' | 'men') => {
     Haptic.selection();
     setGender(next);
-    genderAdvanceRef.current = setTimeout(() => {
-      setStep('taste');
-    }, GENDER_AUTO_ADVANCE_DELAY);
   };
 
   const toggleBrand = (brand: string) => {
@@ -174,7 +177,6 @@ export default function OnboardingLabScreen() {
 
   const handleReset = () => {
     Haptic.light();
-    if (genderAdvanceRef.current) clearTimeout(genderAdvanceRef.current);
     setStep('welcome');
     setGender(null);
     setSelectedBrands(new Set());
@@ -187,8 +189,20 @@ export default function OnboardingLabScreen() {
       {step !== 'done' && (
         <View style={[styles.header, { paddingTop: insets.top + Spacing.two }]}>
           {step !== 'welcome' ? (
-            <Pressable hitSlop={8} onPress={handleBack} style={styles.headerSideSlot}>
-              <SymbolView name="chevron.left" size={20} tintColor={IOSColors.label} weight="medium" />
+            <Pressable
+              hitSlop={8}
+              onPress={handleBack}
+              style={styles.headerSideSlot}
+              accessibilityRole="button"
+              accessibilityLabel="뒤로가기"
+            >
+              {/* SF Symbol 은 웹(react-native-web)에서 렌더되지 않으므로
+                  웹에서는 글리프 폴백 — 네이티브는 진짜 chevron.left. */}
+              {Platform.OS === 'web' ? (
+                <Text style={styles.backGlyph}>‹</Text>
+              ) : (
+                <SymbolView name="chevron.left" size={20} tintColor={IOSColors.label} weight="medium" />
+              )}
             </Pressable>
           ) : (
             <View style={styles.headerSideSlot} />
@@ -200,6 +214,7 @@ export default function OnboardingLabScreen() {
 
       <Animated.View style={[styles.content, contentStyle]}>
         {step === 'welcome' && <WelcomeStep />}
+        {step === 'value' && <ValueStep />}
         {step === 'gender' && <GenderStep gender={gender} onSelect={handleSelectGender} />}
         {step === 'taste' && (
           <TasteStep
@@ -208,10 +223,6 @@ export default function OnboardingLabScreen() {
             onToggleBrand={toggleBrand}
             searchQuery={searchQuery}
             onChangeSearch={setSearchQuery}
-            onSkip={() => {
-              Haptic.light();
-              setStep('done');
-            }}
           />
         )}
         {step === 'done' && (
@@ -226,19 +237,44 @@ export default function OnboardingLabScreen() {
 
       {step === 'welcome' && (
         <View style={[styles.ctaArea, { paddingBottom: insets.bottom + Spacing.three }]}>
+          <PrimaryButton label="다음" onPress={() => setStep('value')} />
+        </View>
+      )}
+      {step === 'value' && (
+        <View style={[styles.ctaArea, { paddingBottom: insets.bottom + Spacing.three }]}>
           <PrimaryButton label="다음" onPress={() => setStep('gender')} />
         </View>
       )}
-      {step === 'taste' && (
+      {step === 'gender' && (
         <View style={[styles.ctaArea, { paddingBottom: insets.bottom + Spacing.three }]}>
+          <PrimaryButton label="다음" disabled={!gender} onPress={() => setStep('taste')} />
+        </View>
+      )}
+      {/* 취향 CTA — HIG 셋업 플로우 정석: primary 필 버튼 + 아래 텍스트형
+          보조 버튼(건너뛰기). 비활성 라벨은 남은 개수를 말하는 동적 지시문. */}
+      {step === 'taste' && (
+        <View style={[styles.ctaArea, { paddingBottom: insets.bottom + Spacing.two }]}>
           <PrimaryButton
             label={
-              selectedBrands.size > 0
-                ? `${selectedBrands.size}개 선택 · 시작하기`
-                : '건너뛰고 시작하기'
+              selectedBrands.size >= MIN_TASTE_PICKS
+                ? '다음'
+                : selectedBrands.size === 0
+                  ? '3개만 골라주세요'
+                  : `${MIN_TASTE_PICKS - selectedBrands.size}개 더 골라주세요`
             }
+            disabled={selectedBrands.size < MIN_TASTE_PICKS}
             onPress={() => setStep('done')}
           />
+          <Pressable
+            hitSlop={8}
+            onPress={() => {
+              Haptic.light();
+              setStep('done');
+            }}
+            style={styles.skipUnderCta}
+          >
+            <Text style={styles.skipText}>건너뛰기</Text>
+          </Pressable>
         </View>
       )}
     </View>
@@ -246,7 +282,7 @@ export default function OnboardingLabScreen() {
 }
 
 // ── ProgressDots — 상단 점 3개 ───────────────────────────────────────────
-const STEP_ORDER: Exclude<Step, 'done'>[] = ['welcome', 'gender', 'taste'];
+const STEP_ORDER: Exclude<Step, 'done'>[] = ['welcome', 'value', 'gender', 'taste'];
 
 function ProgressDots({ step }: { step: Exclude<Step, 'done'> }) {
   return (
@@ -261,54 +297,180 @@ function ProgressDots({ step }: { step: Exclude<Step, 'done'> }) {
 // ── PrimaryButton — 풀폭 필 CTA ──────────────────────────────────────────
 // curation-lab 의 sendBtn 과 동일한 대비 원칙: 배경 IOSColors.label(라이트=
 // 검정/다크=흰색) 위 텍스트는 반대로 적응하는 systemBackground.
-function PrimaryButton({ label, onPress }: { label: string; onPress: () => void }) {
+function PrimaryButton({
+  label,
+  onPress,
+  disabled,
+}: {
+  label: string;
+  onPress: () => void;
+  disabled?: boolean;
+}) {
   const handlePress = () => {
+    if (disabled) return;
     Haptic.medium();
     onPress();
   };
   return (
-    <Pressable onPress={handlePress} style={styles.ctaButton}>
+    <Pressable
+      onPress={handlePress}
+      disabled={disabled}
+      style={[styles.ctaButton, disabled && styles.ctaButtonDisabled]}
+    >
       <Text style={styles.ctaButtonText}>{label}</Text>
     </Pressable>
   );
 }
 
-// ── KikoBlob — 웰컴 스텝 중앙 오브젝트 ────────────────────────────────────
-// 표정/디테일 없이, 피치 그라데이션 원형 3겹을 옅은 opacity 로 겹쳐 소프트한
-// 오라만 표현한다 (Lóvi 레퍼런스 무드 — 미니멀). BrandGradient.loginMarquee
-// 와 BrandColors.peach 스케일만 사용, 리터럴 색상 없음.
-function KikoBlob() {
+// ── WelcomeStep ──────────────────────────────────────────────────────────
+// 시안 2종 토글 비교: 'hand' = 손 인사 + 타이핑 / 'collage' = Apple Music
+// 온보딩 레퍼런스와 동일 구성(상단 라운드 카드 안 스퀘클 썸네일 4·4·3·2단
+// + 중앙 텍스트). 콜라주 이미지는 DB 스냅샷(results.json)의 실상품 13종 —
+// 실서비스는 서버가 공급.
+// 해외 대형·인지 브랜드 위주 (Lemaire · Our Legacy · KHAITE(데님) · Stone Island ·
+// Jacquemus · Balenciaga · Vivienne Westwood · A.P.C. · Stüssy · Sandy Liang(착용샷) ·
+// Acne · Carhartt WIP · Simone Rocha) — DB 스냅샷 실상품 이미지. 착용샷 선호, 신발 제외.
+const WELCOME_COLLAGE_IMAGES = [
+  'https://cdn.shopify.com/s/files/1/0653/6981/files/279852_IMG_0121.jpg?v=1775769882',
+  'https://cdn.shopify.com/s/files/1/0576/7705/4136/files/OurLegacy-Clothing-LongsleeveShirt-WmnsSlipShirtBeige-W2262SEF001-20260319172611_1.jpg?v=1774001402',
+  'https://cdn.shopify.com/s/files/1/0883/3702/3240/files/32285329_68985699_2048.webp?v=1781173037',
+  'https://cdn.shopify.com/s/files/1/0043/5673/5045/files/L1S156100032-S0060-V018F_01.jpg?v=1771263269',
+  'https://cdn.shopify.com/s/files/1/0883/3702/3240/files/36050742_67813064_2048.webp?v=1778749382',
+  'https://cdn.shopify.com/s/files/1/0883/3702/3240/files/32248226_68040279_2048_798bdb21-5898-4475-8371-cb2da124896d.webp?v=1779355359',
+  'https://cdn.shopify.com/s/files/1/0883/3702/3240/files/32121235_65240784_2048.webp?v=1779967016',
+  'https://cdn.shopify.com/s/files/1/0007/0051/4360/files/COGUR-F09085EAF_00.jpg?v=1691686781',
+  'https://cdn.shopify.com/s/files/1/0043/5673/5045/files/1140410-FABL_0.jpg?v=1781789115',
+  'https://shopamomento.com/web/product/medium/202601/924977b658ca1c2957ab6c03e74ffc6f.jpg',
+  'https://cdn.shopify.com/s/files/1/0883/3702/3240/files/23791115_54156581_2048_c657448a-9a12-4eaf-b97e-ac575d9e3710.webp?v=1760085111',
+  'https://cdn.shopify.com/s/files/1/0576/7705/4136/files/CarharttWIP-Accessories-ToteBags-CanvasBeachToteMulticolor-I0369261K6XX-20260528143252_1.jpg?v=1779979071',
+  'https://shopamomento.com/web/product/medium/202507/2f2887e7c7cc290fef8ee65b27541cbc.jpg',
+] as const;
+// 레퍼런스와 동일한 단 구성: 4 · 4 · 3 · 2 (가운데 정렬 허니콤).
+const COLLAGE_ROWS = [4, 4, 3, 2] as const;
+const COLLAGE_THUMB = 64;
+
+// 콜라주 썸네일 — 행 단위로 차분하게 페이드 (개별 팝 13번은 산만해서
+// 행 4번의 순차 등장으로 정리). 움직임은 미세한 상승만, 스케일 없음.
+function CollageThumb({ uri, row }: { uri: string; row: number }) {
+  const reduceMotion = useReducedMotion();
+  const progress = useSharedValue(0);
+  useEffect(() => {
+    if (reduceMotion) {
+      progress.value = 1;
+      return;
+    }
+    const id = setTimeout(() => {
+      progress.value = withTiming(1, { duration: Duration.base });
+    }, row * 90);
+    return () => clearTimeout(id);
+  }, [row, progress, reduceMotion]);
+  const style = useAnimatedStyle(() => ({
+    opacity: progress.value,
+    transform: [{ translateY: (1 - progress.value) * 4 }],
+  }));
   return (
-    <View style={styles.blobContainer}>
-      <LinearGradient
-        colors={[BrandColors.peach[100], BrandColors.peach[400]]}
-        style={[styles.blobLayer, styles.blobLayerOuter]}
-      />
-      <LinearGradient colors={BrandGradient.loginMarquee} style={[styles.blobLayer, styles.blobLayerMid]} />
-      <LinearGradient
-        colors={[BrandColors.peach[200], BrandColors.peach[500]]}
-        style={[styles.blobLayer, styles.blobLayerInner]}
-      />
+    <Animated.View style={style}>
+      <Image source={{ uri }} style={styles.collageThumb} />
+    </Animated.View>
+  );
+}
+
+// 콜라주 카드 — memo 로 고정: 타이핑 등 부모 리렌더에 13장 썸네일이 다시
+// 그려지며 생기는 젱크를 차단한다 (렉 피드백 대응).
+const COLLAGE_ROW_DATA = (() => {
+  let cursor = 0;
+  return COLLAGE_ROWS.map((count) => {
+    const row = WELCOME_COLLAGE_IMAGES.slice(cursor, cursor + count);
+    cursor += count;
+    return row;
+  });
+})();
+
+const CollageCard = memo(function CollageCard() {
+  return (
+    <View style={styles.collageCard}>
+      {COLLAGE_ROW_DATA.map((row, ri) => (
+        <View key={ri} style={styles.collageRow}>
+          {row.map((uri) => (
+            <CollageThumb key={uri} uri={uri} row={ri} />
+          ))}
+        </View>
+      ))}
+    </View>
+  );
+});
+
+const WELCOME_TITLE = '안녕하세요, 키코예요';
+const WELCOME_SUB = '무한 스크롤은 잊어요\n그냥 저한테 말 걸어주세요';
+const TYPE_TICK_MS = 45;
+
+// 스텝 1 — 인사 ("누구인지"): Lóvi 구성, 손 마크 + 에이전트 자기소개 타이핑.
+function WelcomeStep() {
+  const reduceMotion = useReducedMotion();
+  const total = WELCOME_TITLE.length + WELCOME_SUB.length;
+  const [revealed, setRevealed] = useState(0);
+  useEffect(() => {
+    if (reduceMotion) {
+      setRevealed(total);
+      return;
+    }
+    setRevealed(0);
+    const id = setInterval(() => {
+      setRevealed((n) => {
+        if (n >= total) {
+          clearInterval(id);
+          return n;
+        }
+        return n + 1;
+      });
+    }, TYPE_TICK_MS);
+    return () => clearInterval(id);
+  }, [total, reduceMotion]);
+
+  const titleChars = Math.min(revealed, WELCOME_TITLE.length);
+  const subChars = Math.max(0, revealed - WELCOME_TITLE.length);
+  const typingTitle = revealed < WELCOME_TITLE.length;
+  const typingSub = !typingTitle && revealed < total;
+
+  return (
+    <View style={styles.welcomeWrap}>
+      <View style={styles.welcomeTopSpacer} />
+      <Text style={styles.welcomeHand}>👋</Text>
+      <Text style={styles.welcomeTitle}>
+        {WELCOME_TITLE.slice(0, titleChars)}
+        {typingTitle && <Text style={styles.typeCursor}>▍</Text>}
+      </Text>
+      <Text style={styles.welcomeSubtitle}>
+        {WELCOME_SUB.slice(0, subChars)}
+        {typingSub && <Text style={styles.typeCursor}>▍</Text>}
+      </Text>
+      <View style={styles.welcomeMidSpacer} />
     </View>
   );
 }
 
-// ── WelcomeStep ──────────────────────────────────────────────────────────
-function WelcomeStep() {
+// 스텝 2 — 가치 제안 ("뭘 해주는지"): Apple Music 구성, 콜라주(증거) 위에
+// 확정 카피. 카드 ≈ 상단 40%, 텍스트 블록 ≈ 중앙 아래, CTA 하단.
+function ValueStep() {
   return (
     <View style={styles.welcomeWrap}>
-      <KikoBlob />
-      <Text style={styles.welcomeTitle}>안녕하세요, 키코예요 👋</Text>
-      <Text style={styles.welcomeSubtitle}>
-        무신사에 없는 5,000개 브랜드에서{'\n'}머릿속 그 옷을 찾아드려요
+      <CollageCard />
+      <View style={styles.collageTextSpacer} />
+      {/* 확정 카피 (2026-07-14) — 타이틀 = v1.0 시그니처(머릿속→마법),
+          서브 = 발견형(취향) + 재고 증거(5,000+). */}
+      <Text style={styles.welcomeTitle}>
+        머릿속 그 옷,{'\n'}마법처럼 찾아드려요
       </Text>
+      <Text style={styles.welcomeSubtitle}>
+        당신 취향대로,{'\n'}국내외 5,000+ 디자이너 브랜드에서
+      </Text>
+      <View style={styles.welcomeMidSpacer} />
     </View>
   );
 }
 
 // ── GenderStep ───────────────────────────────────────────────────────────
-// 카드 탭 → selection 햅틱 + 선택 표시 → 300ms 뒤 자동으로 taste 스텝 진입
-// (별도 CTA 없음, 부모의 handleSelectGender 가 타이머를 관리).
+// 칩 탭 → selection 햅틱 + 선택 표시. 진행은 하단 [다음] CTA (미선택 시 비활성).
 function GenderStep({
   gender,
   onSelect,
@@ -318,8 +480,10 @@ function GenderStep({
 }) {
   return (
     <View style={styles.stepBody}>
+      {/* '추천'류 결과 약속 금지 — 이 화면은 질문 하나 받는 자리. 서브는
+          질문 보조로만. */}
       <Text style={styles.stepTitle}>어떤 옷을 보여드릴까요?</Text>
-      <Text style={styles.stepSubtitle}>언제든 설정에서 바꿀 수 있어요</Text>
+      <Text style={styles.stepSubtitle}>먼저 이것부터 알려주세요</Text>
 
       <View style={styles.genderCards}>
         <GenderCard label="여성복" selected={gender === 'women'} onPress={() => onSelect('women')} />
@@ -342,22 +506,13 @@ function GenderCard({
     <Pressable onPress={onPress}>
       <GlassSurface {...Glass.chip} isInteractive style={styles.genderCard}>
         {/* GlassSurface 는 내부적으로 style 뒤에 자체 base/edge 스타일을 다시
-            머지해 backgroundColor/border 를 우리 style prop 으로 덮어쓰기
-            어렵다 — 선택 강조는 children 으로 얹는 반투명 틴트 오버레이로
-            그린다 (children 은 항상 배경 위에 그려지므로 안전). */}
+            머지해 backgroundColor 를 style prop 으로 덮어쓰기 어렵다 —
+            선택 강조는 children 으로 얹는 불투명 오버레이(블랙/label)로
+            그린다. 텍스트는 반전(systemBackground). */}
         {selected && <View pointerEvents="none" style={styles.genderCardTint} />}
         <Text style={[styles.genderCardText, selected && styles.genderCardTextSelected]}>
           {label}
         </Text>
-        {selected && (
-          <SymbolView
-            name="checkmark"
-            size={14}
-            tintColor={BrandRole.deep}
-            weight="bold"
-            style={styles.genderCardCheck}
-          />
-        )}
       </GlassSurface>
     </Pressable>
   );
@@ -370,14 +525,12 @@ function TasteStep({
   onToggleBrand,
   searchQuery,
   onChangeSearch,
-  onSkip,
 }: {
   gender: Gender;
   selectedBrands: Set<string>;
   onToggleBrand: (brand: string) => void;
   searchQuery: string;
   onChangeSearch: (q: string) => void;
-  onSkip: () => void;
 }) {
   const gridBrands = useMemo(() => (gender ? getRepBrands(gender) : []), [gender]);
   const searchPool = useMemo(() => (gender ? getSearchPool(gender) : []), [gender]);
@@ -387,26 +540,40 @@ function TasteStep({
     return searchPool.filter((brand) => brand.toLowerCase().includes(q)).slice(0, MAX_SEARCH_RESULTS);
   }, [searchPool, searchQuery]);
 
+  // 스크롤 하단 경계 페이드 — 칩이 하드 클립되지 않고 배경으로 녹아들게.
+  // 주의: 웹 프리뷰는 IOSColors 폴백이 고정 라이트라서 OS 스킴과 무관하게
+  // 항상 라이트 페이드를 쓴다. 네이티브에서만 스킴을 따른다.
+  const scheme = useColorScheme();
+  const isDarkBg = Platform.OS !== 'web' && scheme === 'dark';
+  const fadeEdge = isDarkBg ? '#000000' : '#FFFFFF';
+  const fadeClear = isDarkBg ? 'rgba(0,0,0,0)' : 'rgba(255,255,255,0)';
+
   return (
     <View style={styles.stepBody}>
-      <View style={styles.tasteHeaderRow}>
-        <Text style={[styles.stepTitle, styles.tasteTitle]}>평소 좋아하는 브랜드가 있나요?</Text>
-        <Pressable hitSlop={8} onPress={onSkip}>
-          <Text style={styles.skipText}>건너뛰기</Text>
-        </Pressable>
-      </View>
-      <Text style={styles.stepSubtitle}>취향에 맞는, 당신이 몰랐던 브랜드를 찾아드려요</Text>
-      <Text style={styles.tasteHint}>나중에 메인에서도 설정할 수 있어요</Text>
+      {/* HIG 정합 — 카운터·상단 Skip 없음. 진행 상태는 칩 선택 표시와
+          CTA 라벨 전환("N개 더 골라주세요" → "다음")로만 전달. */}
+      <Text style={styles.stepTitle}>어떤 브랜드를 좋아하세요?</Text>
+      <Text style={styles.stepSubtitle}>여기서부터 취향을 맞춰갈게요</Text>
 
-      <ScrollView
-        style={styles.tasteScroll}
-        contentContainerStyle={styles.tasteScrollContent}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-      >
-        <View style={styles.brandGrid}>
-          {gridBrands.map((brand) => (
-            <BrandChip
+      {/* 검색창은 스크롤 밖 고정 — 그리드를 아무리 내려도 항상 그 자리.
+          실서비스는 GET /v1/brands/search, 프로토타입은 로컬 스냅샷 매치. */}
+      <GlassSurface {...Glass.composer} style={styles.searchField}>
+        {Platform.OS !== 'web' && (
+          <SymbolView name="magnifyingglass" size={16} tintColor={IOSColors.secondaryLabel} weight="regular" />
+        )}
+        <TextInput
+          value={searchQuery}
+          onChangeText={onChangeSearch}
+          placeholder="좋아하는 브랜드를 검색해보세요"
+          placeholderTextColor={IOSColors.placeholderText}
+          style={styles.searchInput}
+        />
+      </GlassSurface>
+
+      {searchResults.length > 0 && (
+        <View style={styles.searchResultsRow}>
+          {searchResults.map((brand) => (
+            <SearchResultChip
               key={brand}
               label={brand}
               selected={selectedBrands.has(brand)}
@@ -414,63 +581,92 @@ function TasteStep({
             />
           ))}
         </View>
+      )}
 
-        <Text style={styles.searchSectionHint}>
-          여기 없는 브랜드도 괜찮아요 — 5,000개 중에서 찾아보세요
-        </Text>
-        {/* 실서비스는 GET /v1/brands/search — 프로토타입은 STYLE_NODES 로컬
-            스냅샷(repBrand + sampleBrands)에서만 대소문자 무시 substring 매치. */}
-        <GlassSurface {...Glass.composer} style={styles.searchField}>
-          <SymbolView name="magnifyingglass" size={16} tintColor={IOSColors.secondaryLabel} weight="regular" />
-          <TextInput
-            value={searchQuery}
-            onChangeText={onChangeSearch}
-            placeholder="브랜드 검색"
-            placeholderTextColor={IOSColors.placeholderText}
-            style={styles.searchInput}
-          />
-        </GlassSurface>
-
-        {searchResults.length > 0 && (
-          <View style={styles.searchResultsRow}>
-            {searchResults.map((brand) => (
-              <SearchResultChip
-                key={brand}
-                label={brand}
-                selected={selectedBrands.has(brand)}
-                onPress={() => onToggleBrand(brand)}
-              />
-            ))}
-          </View>
-        )}
+      <View style={styles.tasteScrollFrame}>
+      <ScrollView
+        style={styles.tasteScroll}
+        contentContainerStyle={styles.tasteScrollContent}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={styles.brandGrid}>
+          {gridBrands.map((brand, i) => (
+            <BrandChip
+              key={brand}
+              label={brand}
+              tint={NODE_CHIP_TINTS[i % NODE_CHIP_TINTS.length]}
+              selected={selectedBrands.has(brand)}
+              onPress={() => onToggleBrand(brand)}
+            />
+          ))}
+        </View>
       </ScrollView>
+      {/* 상(검색창 아래)·하(CTA 위) 경계 페이드 오버레이 — 터치는 통과 */}
+      <LinearGradient
+        pointerEvents="none"
+        colors={[fadeEdge, fadeClear]}
+        style={[styles.scrollFade, styles.scrollFadeTop]}
+      />
+      <LinearGradient
+        pointerEvents="none"
+        colors={[fadeClear, fadeEdge]}
+        style={[styles.scrollFade, styles.scrollFadeBottom]}
+      />
+      </View>
     </View>
   );
 }
 
+// [시안용 로컬 팔레트 — 확정 시 theme/brand.ts 토큰으로 승격할 것]
+// 선택 필 컬러를 노드(그리드 순서)별로 로테이션 — 여러 개 고르면 파스텔
+// 스티커들이 구름 사이에 박히는 그림. 피치(브랜드)를 1번으로 두고 나머지는
+// 피치와 톤이 맞는 파스텔 계열만.
+const NODE_CHIP_TINTS = [
+  BrandColors.peach[300], // 피치 (브랜드)
+  '#F5D98F', // 버터 옐로
+  '#BFDCB6', // 세이지 그린
+  '#AFCBEA', // 페일 블루
+  '#DBC5EC', // 라일락
+  '#F4C2D2', // 로즈 핑크
+  '#B9E0D4', // 민트
+] as const;
+
 function BrandChip({
   label,
+  tint,
   selected,
   onPress,
 }: {
   label: string;
+  tint?: string;
   selected: boolean;
   onPress: () => void;
 }) {
+  // 태그 클라우드 필 — 글래스가 아니라 플랫 스티커 무드(레퍼런스: 아웃라인 필,
+  // 선택 시 컬러 필). 선택 칩에만 얕은 그림자를 줘 "붙인 스티커" 질감을 낸다.
+  // 상태 표현이 필 자체라 체크마크는 두지 않는다.
+  // 기본 상태부터 연한 파스텔 필이 깔리고, 선택하면 같은 색이 진해지며
+  // 그림자가 붙는다 — 색 = 정체성, 진하기 = 선택 상태.
+  const chipTint = tint ?? BrandRole.primary;
   return (
-    <View style={[styles.brandChipRing, selected && styles.brandChipRingSelected]}>
-      <Pressable onPress={onPress}>
-        <GlassSurface {...Glass.chip} isInteractive style={styles.brandChip}>
-          {selected && <View pointerEvents="none" style={styles.brandChipTint} />}
+    <Pressable onPress={onPress}>
+      {({ pressed }) => (
+        <View
+          style={[
+            styles.brandChip,
+            { backgroundColor: withAlpha(chipTint, Opacity.faint) },
+            selected && styles.brandChipSelected,
+            selected && { backgroundColor: chipTint },
+            pressed && styles.brandChipPressed,
+          ]}
+        >
           <Text style={[styles.brandChipText, selected && styles.brandChipTextSelected]} numberOfLines={1}>
             {label}
           </Text>
-          {selected && (
-            <SymbolView name="checkmark" size={12} tintColor={BrandRole.deep} weight="bold" />
-          )}
-        </GlassSurface>
-      </Pressable>
-    </View>
+        </View>
+      )}
+    </Pressable>
   );
 }
 
@@ -487,15 +683,22 @@ function SearchResultChip({
 }) {
   return (
     <Pressable onPress={onPress}>
-      <GlassSurface {...Glass.chip} isInteractive style={styles.searchResultChip}>
-        {selected && <View pointerEvents="none" style={styles.brandChipTint} />}
-        <Text
-          style={[styles.searchResultChipText, selected && styles.brandChipTextSelected]}
-          numberOfLines={1}
+      {({ pressed }) => (
+        <View
+          style={[
+            styles.searchResultChip,
+            selected && styles.brandChipSelected,
+            pressed && styles.brandChipPressed,
+          ]}
         >
-          {label}
-        </Text>
-      </GlassSurface>
+          <Text
+            style={[styles.searchResultChipText, selected && styles.brandChipTextSelected]}
+            numberOfLines={1}
+          >
+            {label}
+          </Text>
+        </View>
+      )}
     </Pressable>
   );
 }
@@ -607,9 +810,10 @@ const styles = StyleSheet.create({
   ctaArea: {
     paddingHorizontal: Spacing.three,
   },
+  // UIButton large 구성과 동일한 50pt — 텍스트는 headline(17 semibold).
   ctaButton: {
     width: '100%',
-    minHeight: 52,
+    minHeight: 50,
     borderRadius: RadiusRole.chip,
     backgroundColor: IOSColors.label,
     justifyContent: 'center',
@@ -625,40 +829,58 @@ const styles = StyleSheet.create({
   welcomeWrap: {
     flex: 1,
     alignItems: 'center',
-    justifyContent: 'center',
     paddingHorizontal: Spacing.five,
+    paddingBottom: Spacing.five,
   },
-  blobContainer: {
-    width: KIKO_BLOB_SIZE,
-    height: KIKO_BLOB_SIZE,
-    alignItems: 'center',
+  // 손+텍스트 그룹이 상단 ~30% 지점에서 시작하도록 하는 비율 (0.45:1.05).
+  // 손-텍스트 간격은 flex 가 아니라 타이틀 marginTop 으로 고정(밀착).
+  welcomeTopSpacer: {
+    flex: 0.38,
+  },
+  welcomeMidSpacer: {
+    flex: 1.2,
+  },
+  // 손 인사 마크 — 이모지를 심볼로 크게.
+  welcomeHand: {
+    fontSize: 56,
+    lineHeight: 68,
+  },
+  // 콜라주 카드 — 레퍼런스와 동일: 큰 라운드의 옅은 회색 카드 안에
+  // 스퀘클 썸네일이 가운데 정렬 허니콤으로.
+  collageCard: {
+    alignSelf: 'stretch',
+    borderRadius: 32,
+    backgroundColor: IOSColors.systemGroupedBackground,
+    paddingVertical: Spacing.four,
+    paddingHorizontal: Spacing.three,
+    marginTop: Spacing.two,
+    gap: Spacing.two,
+  },
+  collageRow: {
+    flexDirection: 'row',
     justifyContent: 'center',
-    marginBottom: Spacing.five,
+    gap: Spacing.two,
   },
-  blobLayer: {
-    position: 'absolute',
-    borderRadius: Radius.pill,
+  collageThumb: {
+    width: COLLAGE_THUMB,
+    height: COLLAGE_THUMB,
+    borderRadius: COLLAGE_THUMB * 0.34,
+    backgroundColor: IOSColors.systemGray5,
   },
-  blobLayerOuter: {
-    width: KIKO_BLOB_SIZE,
-    height: KIKO_BLOB_SIZE,
-    opacity: Opacity.muted,
+  // 레퍼런스 비율 — 카드 아래 여백 : 텍스트 아래 여백 ≈ 0.8 : 1.2 로
+  // 텍스트 블록이 화면 중앙 살짝 아래(~57%)에 앉는다.
+  collageTextSpacer: {
+    flex: 0.8,
   },
-  blobLayerMid: {
-    width: KIKO_BLOB_SIZE * 0.78,
-    height: KIKO_BLOB_SIZE * 0.78,
-    opacity: Opacity.softened,
-  },
-  blobLayerInner: {
-    width: KIKO_BLOB_SIZE * 0.52,
-    height: KIKO_BLOB_SIZE * 0.52,
-    opacity: Opacity.nearFull,
+  typeCursor: {
+    color: IOSColors.tertiaryLabel,
   },
   welcomeTitle: {
     ...IOSText.title1,
     color: IOSColors.label,
     fontFamily: IOSFont.sans,
     textAlign: 'center',
+    marginTop: Spacing.four + Spacing.two,
   },
   welcomeSubtitle: {
     ...IOSText.body,
@@ -674,16 +896,19 @@ const styles = StyleSheet.create({
     marginTop: Spacing.five,
     gap: Spacing.three,
   },
+  // 글래스 캡슐 칩 — 위아래 1개씩. 취향 칩과 같은 캡슐 문법, 소재만 글래스.
   genderCard: {
-    height: GENDER_CARD_HEIGHT,
-    borderRadius: RadiusRole.card,
+    // 다이나믹 타입 확대 시 라벨이 잘리지 않게 min 만 고정.
+    minHeight: GENDER_CARD_HEIGHT,
+    borderRadius: GENDER_CARD_HEIGHT,
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'hidden',
   },
+  // 선택 = 블랙 필 (label 토큰 — 라이트=검정/다크=흰색, CTA 버튼과 동일 문법).
   genderCardTint: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: withAlpha(BrandColors.peach[300], 0.22),
+    backgroundColor: IOSColors.label,
   },
   genderCardText: {
     ...IOSText.headline,
@@ -691,85 +916,93 @@ const styles = StyleSheet.create({
     fontFamily: IOSFont.sans,
   },
   genderCardTextSelected: {
-    color: BrandRole.deep,
-  },
-  genderCardCheck: {
-    position: 'absolute',
-    right: Spacing.four,
+    color: IOSColors.systemBackground,
   },
 
   // ── 취향 스텝 ──
-  tasteHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    gap: Spacing.two,
-  },
-  tasteTitle: {
-    flex: 1,
-  },
   skipText: {
     ...IOSText.subhead,
     color: IOSColors.secondaryLabel,
     fontFamily: IOSFont.sans,
     marginTop: 2,
   },
-  tasteHint: {
-    ...IOSText.footnote,
-    color: IOSColors.tertiaryLabel,
-    fontFamily: IOSFont.sans,
+  // CTA 아래 텍스트형 보조 버튼 — 터치 타깃 확보용 패딩.
+  skipUnderCta: {
+    alignSelf: 'center',
+    paddingVertical: Spacing.two,
+    paddingHorizontal: Spacing.three,
     marginTop: Spacing.one,
+  },
+  // 웹 폴백 글리프 (SF Symbol 미렌더 대응) — 크기·두께를 chevron.left 에 근사.
+  backGlyph: {
+    fontSize: 28,
+    lineHeight: 28,
+    fontWeight: '500',
+    color: IOSColors.label,
+    fontFamily: IOSFont.sans,
+  },
+  ctaButtonDisabled: {
+    opacity: Opacity.muted,
+  },
+  // 스크롤 프레임 — 페이드 오버레이의 absolute 기준.
+  tasteScrollFrame: {
+    flex: 1,
+    marginTop: Spacing.four,
+  },
+  scrollFade: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    height: 40,
+    zIndex: 1,
+  },
+  scrollFadeTop: {
+    top: 0,
+  },
+  scrollFadeBottom: {
+    bottom: 0,
   },
   tasteScroll: {
     flex: 1,
-    marginTop: Spacing.four,
   },
   tasteScrollContent: {
     paddingBottom: Spacing.six,
   },
+  // 태그 클라우드 — 좌측 정렬 (히어로·타이틀과 같은 좌측 레일에 맞춘다).
   brandGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: Spacing.two,
+    justifyContent: 'flex-start',
+    gap: Spacing.two + Spacing.half,
   },
-  brandChipRing: {
-    borderRadius: RadiusRole.chip + 2,
-    borderWidth: 0,
-    borderColor: 'transparent',
-  },
-  brandChipRingSelected: {
-    borderWidth: 1.5,
-    borderColor: BrandRole.primary,
-  },
+  // 기본 = 아웃라인 필(투명 배경 + 헤어라인), 선택 = 피치 필 + 얕은 그림자.
+  // 완전 캡슐이 되도록 radius 는 높이 절반보다 크게.
+  // 필 컬러는 렌더에서 노드별 tint 로 주입 — 여기는 형태만.
   brandChip: {
-    height: BRAND_CHIP_HEIGHT,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.one,
-    paddingHorizontal: Spacing.three,
-    borderRadius: RadiusRole.chip,
-    overflow: 'hidden',
+    minHeight: BRAND_CHIP_HEIGHT,
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.four - Spacing.half,
+    borderRadius: BRAND_CHIP_HEIGHT,
   },
-  brandChipTint: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: withAlpha(BrandColors.peach[300], 0.2),
+  brandChipSelected: {
+    borderColor: 'transparent',
+    backgroundColor: BrandRole.primary,
+    ...Elevation.raised,
+  },
+  brandChipPressed: {
+    opacity: Opacity.softened,
   },
   brandChipText: {
-    ...IOSText.subhead,
+    ...IOSText.headline,
     color: IOSColors.label,
     fontFamily: IOSFont.sans,
   },
   brandChipTextSelected: {
-    color: BrandRole.deep,
-    fontWeight: '600',
+    // 파스텔 필 위에서 항상 대비가 서는 딥 브라운 (피치 스케일 최심부).
+    color: BrandColors.peach[900],
+    fontWeight: '700',
   },
 
-  searchSectionHint: {
-    ...IOSText.footnote,
-    color: IOSColors.secondaryLabel,
-    fontFamily: IOSFont.sans,
-    marginTop: Spacing.five,
-  },
   searchField: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -777,7 +1010,7 @@ const styles = StyleSheet.create({
     minHeight: 44,
     borderRadius: RadiusRole.field,
     paddingHorizontal: Spacing.three,
-    marginTop: Spacing.two,
+    marginTop: Spacing.four,
     overflow: 'hidden',
   },
   searchInput: {
@@ -793,15 +1026,17 @@ const styles = StyleSheet.create({
     marginTop: Spacing.three,
   },
   searchResultChip: {
-    height: SEARCH_CHIP_HEIGHT,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: Spacing.two,
-    borderRadius: RadiusRole.chip,
-    overflow: 'hidden',
+    minHeight: SEARCH_CHIP_HEIGHT,
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.three,
+    borderRadius: SEARCH_CHIP_HEIGHT,
+    borderWidth: 1.5,
+    borderColor: IOSColors.opaqueSeparator,
+    backgroundColor: 'transparent',
   },
+  // 그리드 칩(headline)의 한 단계 아래 — 보조 칩은 subhead 로 통일.
   searchResultChipText: {
-    ...IOSText.footnote,
+    ...IOSText.subhead,
     color: IOSColors.label,
     fontFamily: IOSFont.sans,
   },
