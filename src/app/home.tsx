@@ -44,8 +44,11 @@ import {
   type ChatStreamController,
 } from "@/lib/sse";
 import { uploadImage } from "@/lib/uploads";
+import { CurationSheet } from "@/components/curation-sheet";
 import { useAuth } from "@/state/auth";
 import { useBanner } from "@/state/banner";
+import { readOnboardingGender, type OnboardingGender } from "@/state/onboarding";
+import { chipsForGender, type SuggestionChip } from "@/state/suggestion-chips";
 import { useCap } from "@/state/cap";
 import { buildFilterLabel, PRICE_MAX, useFilter } from "@/state/filter";
 import { MOCK_PRODUCTS, type Product } from "@/state/products";
@@ -142,13 +145,18 @@ const PICK_PROMPT = (n: number) =>
 // One is picked at random per mount. Named variants substitute the user's
 // display_name (skipped when name isn't loaded yet — generic ones still
 // keep the surface from looking blank).
+// 히어로 카피 3종 (2026-07-14 확정, curation-lab 3안에서 이식) —
+// ① 발견: 인디 브랜드 풀·신선함 ② 취향: 발견·취향 매칭 ③ 목적: v1.0 시그니처.
 const EMPTY_GREETINGS_GENERIC = [
+  "몰랐던 브랜드가\n매일 새로 도착해요",
+  "당신이 몰랐던\n취향저격 브랜드",
   "머릿속 그 옷,\n마법처럼 찾아드릴게요",
-  "마법같은 쇼핑,\n채팅으로 시작해요",
 ];
 const buildNamedGreetings = (name: string) => {
   const given = stripFamilyName(name);
   return [
+    // ② 의 이름 치환 변형 — 3안 통합 시 반영하기로 한 형태.
+    `${given}님이 몰랐던\n취향저격 브랜드`,
     `${given}님,\n사진 한 장이면 취향 맞는 브랜드만 보여드려요`,
     `${given}님,\n채팅 한 줄로 옷 구경 시작해요`,
   ];
@@ -558,6 +566,16 @@ export default function ChatEntryScreen() {
     : null;
   const critiqueChips = CRITIQUE_CHIPS;
 
+  // 골든셋 유도 칩 (빈 상태 전용) — 온보딩에서 받은 성별로 분기.
+  // 여성 = 문형 채택 셋 / 남성 = 화이트리스트 셋 (src/state/suggestion-chips.ts).
+  const [onboardGender, setOnboardGender] = useState<OnboardingGender | null>(
+    null,
+  );
+  useEffect(() => {
+    void readOnboardingGender().then(setOnboardGender);
+  }, []);
+  const suggestionChips = chipsForGender(onboardGender);
+
   // Composer placeholder — one random pick per state context. Recomputes
   // only when the relevant state combo changes (busy ↔ idle, results ↔ empty),
   // so the user doesn't see it jitter mid-typing.
@@ -811,6 +829,12 @@ export default function ChatEntryScreen() {
       /** Final CloudFront URL from /v1/uploads — sent to chat as attached_image_url. */
       serverImageUrl?: string;
     },
+    /**
+     * 골든셋 유도 칩 경로 — 버블에는 `trimmed`(한국어 label)를 그대로 보여
+     * 주되, 서버 전송 텍스트만 검증된 영어 쿼리로 바꿔치기한다. 임베딩에
+     * 한국어 label 이 흘러가면 골든셋 검증이 무효가 되기 때문 (칩 계약).
+     */
+    serverQueryOverride?: string,
   ) => {
     // 비로그인 상태에선 어떤 경로로 들어오든 (composer send / seedParam /
     // critique / retry) 로그인 화면으로 유도. Apple 5.1.1(v) 대응 —
@@ -888,8 +912,10 @@ export default function ChatEntryScreen() {
       trimmed.length === 0 && hasAttachedImage
         ? '이 사진이랑 비슷한 거 찾아줘'
         : trimmed;
-    let serverText = baseText;
-    if (attachment) {
+    // 칩 경로는 override 가 전부 — attachment prefix 도 타지 않는다 (칩은
+    // 항상 상품 핀 없이 발사되는 통제된 입력).
+    let serverText = serverQueryOverride ?? baseText;
+    if (!serverQueryOverride && attachment) {
       const parts: string[] = [];
       const pid = (attachment as { productId?: string }).productId;
       const pname = (attachment as { productName?: string }).productName;
@@ -1873,36 +1899,42 @@ export default function ChatEntryScreen() {
           })}
         </ScrollView>
       ) : (
-        // 배경 탭 → 키보드 내리기. emptyHero 자체엔 인터랙션이 없어 안전.
-        // 키보드가 올라오면 마진을 그만큼 더해서 hero 컨텐츠가 시각적 중앙에
-        // 유지되도록 함 (컴포저는 위에서 이미 lift 됨).
-        <Pressable
-          style={[styles.emptyHero, { marginBottom: kbHeight }]}
-          onPress={Keyboard.dismiss}
+        // 빈 상태 = 발견형 본진 (3안 이식) — 히어로 카피 아래로 큐레이션
+        // 구좌가 스크롤로 이어진다. 목적을 강요하지 않고 구경하다 디깅으로
+        // 빠지는 진입이 기본값. 드래그 시작 시 키보드 내림.
+        <ScrollView
+          style={styles.emptyScroll}
+          contentContainerStyle={styles.emptyScrollContent}
+          keyboardDismissMode="on-drag"
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         >
-          <Text style={styles.emptyHeadline}>
-            {emptyGreeting.slice(0, revealedChars)}
-            {!typingDone && <Text style={styles.cursor}>▍</Text>}
-          </Text>
-          {authStatus !== "authenticated" && typingDone && (
-            <Pressable
-              onPress={() => {
-                Haptic.light();
-                router.push("/login");
-              }}
-              hitSlop={12}
-              style={styles.emptyLoginBtnWrap}
-            >
-              <GlassSurface
-                variant="composer"
-                isInteractive
-                style={styles.emptyLoginBtn}
+          <View style={styles.emptyHeroTop}>
+            <Text style={styles.emptyHeadline}>
+              {emptyGreeting.slice(0, revealedChars)}
+              {!typingDone && <Text style={styles.cursor}>▍</Text>}
+            </Text>
+            {authStatus !== "authenticated" && typingDone && (
+              <Pressable
+                onPress={() => {
+                  Haptic.light();
+                  router.push("/login");
+                }}
+                hitSlop={12}
+                style={styles.emptyLoginBtnWrap}
               >
-                <Text style={styles.emptyLoginBtnText}>Log in</Text>
-              </GlassSurface>
-            </Pressable>
-          )}
-        </Pressable>
+                <GlassSurface
+                  variant="composer"
+                  isInteractive
+                  style={styles.emptyLoginBtn}
+                >
+                  <Text style={styles.emptyLoginBtnText}>Log in</Text>
+                </GlassSurface>
+              </Pressable>
+            )}
+          </View>
+          <CurationSheet />
+        </ScrollView>
       )}
 
       {/* Composer — floats over content so chips/input show real glass with
@@ -1993,6 +2025,32 @@ export default function ChatEntryScreen() {
                       style={styles.critiqueChip}
                     >
                       <Text style={styles.critiqueChipText}>{c.label}</Text>
+                    </GlassSurface>
+                  </Pressable>
+                ))}
+              {/* 골든셋 유도 칩 — 첫 턴 이전(빈 상태)에만. 버블엔 한국어
+                  label, 서버엔 검증된 영어 query (serverQueryOverride). */}
+              {!hasResults &&
+                suggestionChips.map((chip: SuggestionChip) => (
+                  <Pressable
+                    key={chip.id}
+                    disabled={isBusy}
+                    onPress={() => {
+                      Haptic.selection();
+                      runStreamingTurn(
+                        chip.label,
+                        undefined,
+                        undefined,
+                        chip.query,
+                      );
+                    }}
+                  >
+                    <GlassSurface
+                      variant="pill"
+                      isInteractive
+                      style={styles.critiqueChip}
+                    >
+                      <Text style={styles.critiqueChipText}>{chip.label}</Text>
                     </GlassSurface>
                   </Pressable>
                 ))}
@@ -2111,6 +2169,20 @@ const styles = StyleSheet.create({
     paddingBottom: 120, // lift above the floating composer
     justifyContent: "center",
     alignItems: "center",
+  },
+  // 빈 상태 스크롤 시트 (3안 이식) — 히어로 + 큐레이션 구좌.
+  emptyScroll: {
+    flex: 1,
+  },
+  emptyScrollContent: {
+    paddingHorizontal: 16, // CurationSheet rowScroll 의 -16 인셋과 짝
+    paddingBottom: 200, // 플로팅 컴포저(칩 행 포함) 아래로 안 깔리게
+  },
+  emptyHeroTop: {
+    alignItems: "center",
+    paddingTop: 48,
+    paddingBottom: 40,
+    paddingHorizontal: 12,
   },
   emptyHeadline: {
     fontSize: 26,

@@ -41,6 +41,7 @@ import Animated, {
 import { useSafeAreaInsets, type EdgeInsets } from 'react-native-safe-area-context';
 
 import { GlassSurface } from '@/components/glass-surface';
+import { saveOnboarding } from '@/state/onboarding';
 import { STYLE_NODES } from '@/state/style-nodes';
 import {
   BrandColors,
@@ -186,14 +187,15 @@ export default function OnboardingLabScreen() {
     setSearchQuery('');
   };
 
-  // 완료(시작하기/건너뛰기) → 새 큐레이션 메인으로 즉시 진입.
-  // 실서비스: 여기서 gender·selectedBrands 를 로컬 저장(secure-storage)하고
-  // 메인이 GET /v1/curation?gender= 로 읽는다. 로그인 시 POST /v1/onboarding.
-  // 프로토타입은 mock 요약(done) 대신 /curation-lab 으로 흐름을 잇는다 —
-  // done 요약이 필요하면 아래 setStep('done') 으로 임시 전환.
+  // 완료(시작하기/건너뛰기) → gender·selectedBrands 를 로컬 저장(AsyncStorage,
+  // src/state/onboarding.ts)하고 홈으로 진입. 홈이 이 값으로 유도 칩을 성별
+  // 분기한다. 로그인 성공 시 서버 프로필로 승격(POST /v1/onboarding — 추후
+  // 배선, 서버 기존 값 우선). 스플래시(index.tsx)가 미완료+비로그인일 때만
+  // 이 화면으로 게이트한다.
   const handleFinish = () => {
     Haptic.medium();
-    router.replace('/curation-lab');
+    void saveOnboarding({ gender, brands: [...selectedBrands] });
+    router.replace('/home');
   };
 
   return (

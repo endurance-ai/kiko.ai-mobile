@@ -11,6 +11,7 @@ import Animated, {
 
 import { Haptic, IOSFont } from '@/theme';
 import { useAuth } from '@/state/auth';
+import { readOnboardingDone } from '@/state/onboarding';
 
 // ─── Lottie module (optional native dep) ─────────────────────────────────
 // lottie-react-native is bundled into the next EAS build but isn't in the
@@ -128,7 +129,17 @@ export default function SplashScreen() {
   useEffect(() => {
     if (!animationDone || status === 'loading' || navigatedRef.current) return;
     navigatedRef.current = true;
-    router.replace('/home');
+    // 온보딩 게이트 — 미완료 유저만 1회, 로그인 전 배치 (2026-07-14 확정).
+    // 이미 계정이 있는(authenticated) 유저는 재설치 등으로 로컬 플래그가
+    // 없어도 온보딩을 건너뛴다 — 취향은 서버 프로필이 source of truth.
+    void (async () => {
+      const onboarded = await readOnboardingDone();
+      if (!onboarded && status !== 'authenticated') {
+        router.replace('/onboarding-lab');
+      } else {
+        router.replace('/home');
+      }
+    })();
   }, [animationDone, status]);
 
   if (useLottie && LottieView) {
