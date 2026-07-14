@@ -401,7 +401,7 @@ const CollageCard = memo(function CollageCard() {
 });
 
 const WELCOME_TITLE = '안녕하세요, 키코예요';
-const WELCOME_SUB = '무한 스크롤은 잊어요\n그냥 저한테 말 걸어주세요';
+const WELCOME_SUB = '밤새 스크롤해도 없던 그 옷\n그냥 저한테 말 걸어주세요';
 const TYPE_TICK_MS = 45;
 
 // 스텝 1 — 인사 ("누구인지"): Lóvi 구성, 손 마크 + 에이전트 자기소개 타이핑.
