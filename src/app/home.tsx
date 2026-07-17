@@ -1570,7 +1570,7 @@ export default function ChatEntryScreen() {
                 {/* Analyzing */}
                 {turn.status === "analyzing" && (
                   <View style={styles.botStatusRow}>
-                    <PixelSpinner />
+                    <PixelSpinner pixelSize={4} />
                     <ShimmerText style={styles.botStatusText}>
                       {ANALYZE_HINT}
                     </ShimmerText>
@@ -1637,7 +1637,7 @@ export default function ChatEntryScreen() {
                 {/* Searching (mock pipeline only) */}
                 {turn.status === "searching" && !turn.isStream && (
                   <View style={styles.botStatusRow}>
-                    <PixelSpinner />
+                    <PixelSpinner pixelSize={4} />
                     <ShimmerText style={styles.botStatusText}>
                       {SEARCH_HINT}
                     </ShimmerText>
@@ -1672,7 +1672,7 @@ export default function ChatEntryScreen() {
                       (!turn.streamProducts ||
                         turn.streamProducts.length === 0) && (
                         <View style={styles.botStatusRow}>
-                          <PixelSpinner />
+                          <PixelSpinner pixelSize={4} />
                           <ShimmerText style={styles.botStatusText}>
                             {turn.streamPlaceholder ?? '비슷한 거 찾는 중…'}
                           </ShimmerText>
