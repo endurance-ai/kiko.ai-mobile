@@ -131,8 +131,9 @@ export default function SidebarScreen() {
       router.back();
       // Reuse the home surface (top bar + composer) — just hydrate it with
       // the picked session's messages via the ?session= query param.
+      // from=history: 이전 채팅 열기 → 홈이 이 세션을 큐레이션 숨김으로 기억.
       setTimeout(
-        () => router.replace(`/home?session=${sessionId}` as never),
+        () => router.replace(`/home?session=${sessionId}&from=history` as never),
         30,
       );
     });

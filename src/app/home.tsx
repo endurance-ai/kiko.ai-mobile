@@ -183,6 +183,10 @@ function parseStreamCaption(caption: string): {
   return { brand, name, priceWon };
 }
 
+// 사이드바에서 '이전 채팅 열기'로 진입한 세션 id 들 — 이 세션은 큐레이션을
+// 숨긴다. 모듈 레벨이라 PDP·더보기 왕복으로 새 홈 인스턴스가 떠도 유지된다.
+const HISTORY_OPENED_SESSIONS = new Set<string>();
+
 const AGENT_INTRO_DEFAULT = "이런 거 어때? · 콕집기로 골라봐";
 const AGENT_INTRO_NARROWING = "이런 거 찾았어 · 근데 좀 갈리네";
 const EMPTY_FALLBACK = "이 무드는 아직 딱 맞는 걸 못 찾았어. 이렇게 해볼까?";
@@ -325,6 +329,7 @@ export default function ChatEntryScreen() {
   const insets = useSafeAreaInsets();
   const {
     session: sessionParam,
+    from: fromParam,
     seed: seedParam,
     pin_image: pinImageParam,
     pin_label: pinLabelParam,
@@ -333,6 +338,7 @@ export default function ChatEntryScreen() {
     pin_price: pinPriceParam,
   } = useLocalSearchParams<{
     session?: string;
+    from?: string;
     seed?: string;
     pin_image?: string;
     pin_label?: string;
@@ -433,8 +439,13 @@ export default function ChatEntryScreen() {
       setResumedFromHistory(false);
       return;
     }
+    // '이전 채팅 열기'(사이드바)만 큐레이션 숨김. from=history 로 온 세션 id 를
+    // 모듈 레벨 set 에 기억해 둔다. PDP·더보기로 새 홈 인스턴스가 떠도(그때는
+    // from 파라미터가 없다) set 조회로 같은 판정이 유지된다 — 홈에서 시작한
+    // 세션은 채팅방을 나가 다른 이전 채팅을 열기 전까지 계속 큐레이션 유지.
+    if (fromParam === "history") HISTORY_OPENED_SESSIONS.add(sessionParam);
+    setResumedFromHistory(HISTORY_OPENED_SESSIONS.has(sessionParam));
     if (sessionIdRef.current === sessionParam && messages.length > 0) return;
-    setResumedFromHistory(true);
     let cancelled = false;
     sessionIdRef.current = sessionParam;
     (async () => {
@@ -470,7 +481,7 @@ export default function ChatEntryScreen() {
     };
     // messages excluded intentionally — this effect only runs on session change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionParam]);
+  }, [sessionParam, fromParam]);
 
   // Pick up a seed message handed off from another screen (PDP critique chip
   // or composer). Fires once per seed value.
