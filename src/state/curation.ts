@@ -61,8 +61,15 @@ function toSuggestionChips(res: CurationResponse): SuggestionChip[] | null {
 export function useCuration(gender: OnboardingGender | null): {
   sections: CurationSection[] | null;
   chips: SuggestionChip[] | null;
+  /** 캐시·서버 어느 쪽도 아직 안 온 첫 로딩 — 이때 mock 대신 스켈레톤. */
+  loading: boolean;
 } {
   const [data, setData] = useState<CurationResponse | null>(null);
+
+  // gender 가 바뀌면 이전 gender 의 데이터를 남기지 않고 다시 로딩 상태로.
+  useEffect(() => {
+    setData(null);
+  }, [gender]);
 
   useEffect(() => {
     let cancelled = false;
@@ -100,5 +107,6 @@ export function useCuration(gender: OnboardingGender | null): {
   return {
     sections: data && data.sections.length > 0 ? data.sections : null,
     chips: data ? toSuggestionChips(data) : null,
+    loading: data === null,
   };
 }

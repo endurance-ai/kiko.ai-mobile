@@ -27,6 +27,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { CURATION_ROW_LIMIT } from '@/components/curation-sheet';
 import { FLOATING_HEADER_OFFSET, FloatingHeader } from '@/components/floating-header';
 import { GlassSurface } from '@/components/glass-surface';
 import { trackProductImpression } from '@/lib/analytics';
@@ -161,8 +162,12 @@ export default function CurationSectionScreen() {
   const [text, setText] = useState('');
   const [pinnedProductId, setPinnedProductId] = useState<string | null>(null);
 
+  // 홈 카드 행에서 이미 보여준 앞 CURATION_ROW_LIMIT 개는 제외하고 나머지만.
   const products = useMemo(
-    () => sections?.find((s) => s.id === sectionId)?.products ?? [],
+    () =>
+      (sections?.find((s) => s.id === sectionId)?.products ?? []).slice(
+        CURATION_ROW_LIMIT,
+      ),
     [sections, sectionId],
   );
   const pinnedProduct = pinnedProductId

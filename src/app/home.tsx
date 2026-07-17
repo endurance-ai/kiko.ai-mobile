@@ -343,6 +343,8 @@ export default function ChatEntryScreen() {
   // 로그인 시트로 보낸다 (handleSend).
   const [pinnedCurationProduct, setPinnedCurationProduct] =
     useState<Product | null>(null);
+  // true = 히스토리에서 연 과거 채팅(채팅 내용만, 큐레이션 숨김).
+  const [resumedFromHistory, setResumedFromHistory] = useState(false);
   const scrollRef = useRef<ScrollView | null>(null);
   const nextIdRef = useRef(1);
   const sessionIdRef = useRef<string | null>(null);
@@ -401,8 +403,17 @@ export default function ChatEntryScreen() {
   // the server doesn't yet surface (e.g. streamSearchId → "더보기" CTA):
   // navigating home → PDP → back would otherwise clear the CTA.
   useEffect(() => {
-    if (!sessionParam) return;
+    // 큐레이션은 '메인 홈'에만. 히스토리/사이드바에서 연 과거 채팅
+    // (?session=)이면 채팅 내용만 보이게 이 플래그로 큐레이션을 숨긴다.
+    // 메인 홈에서 검색해 세션이 생긴 뒤 PDP 크리틱으로 ?session 이 붙어
+    // 돌아오는 경우는(같은 세션 in-memory) 아래 early-return 이라 플래그를
+    // 건드리지 않아 큐레이션이 유지된다.
+    if (!sessionParam) {
+      setResumedFromHistory(false);
+      return;
+    }
     if (sessionIdRef.current === sessionParam && messages.length > 0) return;
+    setResumedFromHistory(true);
     let cancelled = false;
     sessionIdRef.current = sessionParam;
     (async () => {
@@ -542,8 +553,11 @@ export default function ChatEntryScreen() {
   useEffect(() => {
     void readOnboardingGender().then(setOnboardGender);
   }, []);
-  const { sections: curationSections, chips: curationChips } =
-    useCuration(onboardGender);
+  const {
+    sections: curationSections,
+    chips: curationChips,
+    loading: curationLoading,
+  } = useCuration(onboardGender);
   const suggestionChips = curationChips ?? chipsForGender(onboardGender);
 
   // 빈 상태 히어로 표제 — 마운트당 1회 랜덤 (curation-lab Hero3 관례 동일).
@@ -1421,28 +1435,39 @@ export default function ChatEntryScreen() {
         onScroll={handleHomeScroll}
         scrollEventThrottle={16}
       >
-        {/* 히어로 표제 + 큐레이션 구좌 — 항상 노출 (발견형 첫인상). */}
-        <View style={styles.curationBlock}>
-          <Text style={styles.emptyHeroTitle} numberOfLines={2}>
-            {heroGreeting}
-          </Text>
-          <CurationSheet
-            sections={curationSections}
-            pinnedProductId={pinnedCurationProduct?.id ?? null}
-            onPressProduct={handleCurationPress}
-            onPinProduct={handlePinCuration}
-            onSaveProduct={handleCurationSave}
-            onSeeMore={(section) => {
-              const q = [`title=${encodeURIComponent(section.title)}`];
-              if (onboardGender) q.push(`gender=${onboardGender}`);
-              router.push(`/curation/${section.key}?${q.join("&")}`);
-            }}
-            isSaved={(id) => isWishlisted(id)}
-          />
-        </View>
+        {/* 히어로 표제 + 큐레이션 구좌 — '메인 홈'에서만. 히스토리에서 연
+            과거 채팅(resumedFromHistory)에는 채팅 내용만 보인다. */}
+        {!resumedFromHistory && (
+          <View style={styles.curationBlock}>
+            <Text style={styles.emptyHeroTitle} numberOfLines={2}>
+              {heroGreeting}
+            </Text>
+            <CurationSheet
+              sections={curationSections}
+              loading={curationLoading}
+              pinnedProductId={pinnedCurationProduct?.id ?? null}
+              onPressProduct={handleCurationPress}
+              onPinProduct={handlePinCuration}
+              onSaveProduct={handleCurationSave}
+              onSeeMore={(section) => {
+                const q = [`title=${encodeURIComponent(section.title)}`];
+                if (onboardGender) q.push(`gender=${onboardGender}`);
+                router.push(`/curation/${section.key}?${q.join("&")}`);
+              }}
+              isSaved={(id) => isWishlisted(id)}
+            />
+          </View>
+        )}
 
         {hasConversation && (
-          <View style={styles.conversationBlock}>
+          <View
+            style={[
+              styles.conversationBlock,
+              // 큐레이션이 위에 있을 때만 구분선/여백. 과거 채팅(큐레이션
+              // 없음)은 화면 최상단이라 구분선 없이 바로 시작.
+              !resumedFromHistory && styles.conversationDivider,
+            ]}
+          >
           {messages.map((turn) => {
             const isLast = turn.id === lastTurn?.id;
             const agentText = turn.narrowing
@@ -2098,7 +2123,7 @@ export default function ChatEntryScreen() {
             const sid = sessionIdRef.current;
             router.push(sid ? `/sidebar?current=${sid}` : "/sidebar");
           }}
-          showCuration={showJumpTop}
+          showCuration={showJumpTop && !resumedFromHistory}
           onOpenCuration={scrollToCuration}
           onOpenList={() => {
             const sid = sessionIdRef.current;
@@ -2140,11 +2165,14 @@ const styles = StyleSheet.create({
   // chatContent 값). 큐레이션과 시각적으로 떨어지게 상단 여백 + 헤어라인.
   conversationBlock: {
     paddingHorizontal: 20,
+    gap: 22, // 기존 chatContent 의 턴 간격 — 병합 후에도 유지
+  },
+  // 큐레이션 아래로 이어붙을 때만 구분선/여백 (메인 홈). 과거 채팅엔 미적용.
+  conversationDivider: {
     marginTop: 8,
     paddingTop: 24,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: IOSColors.separator,
-    gap: 22, // 기존 chatContent 의 턴 간격 — 병합 후에도 유지
   },
   // 히어로 표제 — curation-lab heroTitleManifesto 확정 튜닝값 그대로
   // (title1 기반, 아이폰 14 과대·과볼드 피드백 반영 semibold + 넉넉한 행간).
