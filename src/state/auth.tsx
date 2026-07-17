@@ -13,6 +13,7 @@ import {
 
 import { identifyUser, resetAnalytics } from '@/lib/analytics';
 import { api, registerAuthHooks } from '@/lib/api';
+import { promoteOnboardingToServer } from '@/state/onboarding';
 import type {
   AccessTokenResponse,
   SocialLoginRequest,
@@ -58,6 +59,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await SecureStore.setItemAsync(USER_ID_KEY, tokens.user_id);
       identifyUser(tokens.user_id);
       setStatus('authenticated');
+      // 온보딩 로컬값(성별+브랜드 픽) → 서버 프로필 승격. fire-and-forget:
+      // 실패해도 로그인은 성공이고, promoted 플래그가 없으면 다음 세션
+      // 복원에서 재시도된다 (promoteOnboardingToServer 내부 멱등 처리).
+      void promoteOnboardingToServer();
     },
     [],
   );
@@ -132,6 +137,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUserId(storedUserId);
         if (storedUserId) identifyUser(storedUserId);
         setStatus('authenticated');
+        // 로그인 직후 승격이 실패했던 경우의 재시도 — 이미 승격됐으면
+        // promoted 플래그로 no-op.
+        void promoteOnboardingToServer();
       } catch {
         if (!cancelled) await clearSession();
       }

@@ -35,6 +35,8 @@ import {
 } from "@/lib/chat";
 import { FREE_LIMIT_VERSION, trackEvent } from "@/lib/analytics";
 import { ApiError } from "@/lib/api";
+import { parseAnchorPrefix } from "@/lib/anchor";
+import { getProduct } from "@/lib/products";
 import {
   isCapExhausted,
   type CapMeta,
@@ -45,8 +47,13 @@ import { uploadImage } from "@/lib/uploads";
 import { CurationSheet } from "@/components/curation-sheet";
 import { useAuth } from "@/state/auth";
 import { useBanner } from "@/state/banner";
+import { useCuration } from "@/state/curation";
 import { readOnboardingGender, type OnboardingGender } from "@/state/onboarding";
-import { chipsForGender, type SuggestionChip } from "@/state/suggestion-chips";
+import {
+  chipLabelForQuery,
+  chipsForGender,
+  type SuggestionChip,
+} from "@/state/suggestion-chips";
 import { useCap } from "@/state/cap";
 import { buildFilterLabel, PRICE_MAX, useFilter } from "@/state/filter";
 import { MOCK_PRODUCTS, type Product } from "@/state/products";
@@ -72,6 +79,8 @@ type UserMessage = {
   text?: string;
   imageUri?: string;
   colorHint?: string;
+  /** 재입장 시 서버 텍스트의 [#id …] 앵커에서 파싱한 상품 id — 이미지 복원용. */
+  anchorProductId?: string;
 };
 
 type Narrowing = {
@@ -139,12 +148,52 @@ const IDLE_AFTER_RESULTS_HINTS = [
 ];
 const PICK_PROMPT = (n: number) =>
   `이 사진에서 ${n}개 아이템 찾았어. 어떤 거 찾아줄까?`;
-// Empty-state greetings shown in the centered hero before the first turn.
-// One is picked at random per mount. Named variants substitute the user's
-// display_name (skipped when name isn't loaded yet — generic ones still
-// keep the surface from looking blank).
-// (빈 상태 그리팅 카피 풀 제거 — 7/14. 빈 상태는 큐레이션 시트가 첫인상.
-//  카피 자산은 curation-lab.tsx HERO_GREETINGS 에 보존.)
+// 빈 상태 히어로 카피 — 큐레이션 시트 위에 얹는 메인 표제. 핵심가치를
+// 하나씩 말하는 3종을 마운트마다 랜덤 로테이션 (7/16 재이식 — 7/14 정리 때
+// curation-lab.tsx HERO_GREETINGS 로 보존했던 자산 복원, 카피 원본 동일).
+// ① 발견: 인디 브랜드 풀·신선함 ② 취향: 발견·취향 매칭 ③ 목적: v1.0 시그니처.
+// 로그인 시 ②의 이름 치환("OO님이 몰랐던")은 display_name fetch 와 함께 추후.
+const HERO_GREETINGS = [
+  "몰랐던 브랜드가\n매일 새로 도착해요",
+  "당신이 몰랐던\n취향저격 브랜드",
+  "머릿속 그 옷,\n마법처럼 찾아드릴게요",
+];
+
+// SSE 결과 카드의 caption(HTML-ish)을 ProductCard 의 brand/name/price 로 분해.
+// 서버 caption 순서(send_results.py): 브랜드[ · 서브카테고리] / "💰 ₩가격" /
+// 상품명 / "🏬 플랫폼". 가격 줄에서 숫자만 뽑아 priceWon 으로(큐레이션 카드와
+// 동일하게 가격 태그 노출), 플랫폼 줄은 카드에 안 쓴다.
+function parseStreamCaption(caption: string): {
+  brand: string;
+  name: string;
+  priceWon: number;
+} {
+  const lines = caption
+    .replace(/<[^>]+>/g, "")
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+  let brand = "";
+  let name = "";
+  let priceWon = 0;
+  for (const line of lines) {
+    if (line.startsWith("💰")) {
+      const digits = line.replace(/[^0-9]/g, "");
+      if (digits) priceWon = parseInt(digits, 10);
+    } else if (line.startsWith("🏬")) {
+      // 플랫폼 — 카드엔 미표시
+    } else if (!brand) {
+      brand = line.split(" · ")[0].trim(); // 브랜드(서브카테고리 앞부분)
+    } else if (!name) {
+      name = line;
+    }
+  }
+  return { brand, name, priceWon };
+}
+
+// 사이드바에서 '이전 채팅 열기'로 진입한 세션 id 들 — 이 세션은 큐레이션을
+// 숨긴다. 모듈 레벨이라 PDP·더보기 왕복으로 새 홈 인스턴스가 떠도 유지된다.
+const HISTORY_OPENED_SESSIONS = new Set<string>();
 
 const AGENT_INTRO_DEFAULT = "이런 거 어때? · 콕집기로 골라봐";
 const AGENT_INTRO_NARROWING = "이런 거 찾았어 · 근데 좀 갈리네";
@@ -257,9 +306,15 @@ function messageItemsToTurns(
     }
     const assistantMsg =
       sorted[i + 1]?.role === "assistant" ? sorted[i + 1] : null;
+    const { text: parsedText, anchorProductId } = parseAnchorPrefix(
+      userMsg.content,
+    );
+    // 유도 칩은 서버에 검증된 영어 query 로 저장돼 재입장 시 영어로 뜬다.
+    // 알려진 칩 query 면 한국어 label 로 되돌려 사용자가 친 대로 보이게 한다.
+    const userText = chipLabelForQuery(parsedText) ?? parsedText;
     turns.push({
       id: nextIdRef.current++,
-      user: { text: userMsg.content },
+      user: { text: userText, anchorProductId },
       status: "results",
       isStream: true,
       streamText: assistantMsg?.content ?? "",
@@ -288,6 +343,7 @@ export default function ChatEntryScreen() {
   const insets = useSafeAreaInsets();
   const {
     session: sessionParam,
+    from: fromParam,
     seed: seedParam,
     pin_image: pinImageParam,
     pin_label: pinLabelParam,
@@ -296,6 +352,7 @@ export default function ChatEntryScreen() {
     pin_price: pinPriceParam,
   } = useLocalSearchParams<{
     session?: string;
+    from?: string;
     seed?: string;
     pin_image?: string;
     pin_label?: string;
@@ -321,6 +378,14 @@ export default function ChatEntryScreen() {
   const [uploading, setUploading] = useState(false);
   const [messages, setMessages] = useState<Turn[]>([]);
   const [pinnedId, setPinnedId] = useState<string | null>(null);
+  // 빈 상태(큐레이션 구좌)에서 + 핀한 상품 — 결과 리스트의 pinnedId 모델은
+  // lastTurn.results 를 조회하는데 큐레이션 상품은 거기 없으므로 별도 보관.
+  // 컴포저 첨부(pinnedAttachment)로 흘러 들어가고, 전송은 비로그인 게이트가
+  // 로그인 시트로 보낸다 (handleSend).
+  const [pinnedCurationProduct, setPinnedCurationProduct] =
+    useState<Product | null>(null);
+  // true = 히스토리에서 연 과거 채팅(채팅 내용만, 큐레이션 숨김).
+  const [resumedFromHistory, setResumedFromHistory] = useState(false);
   const scrollRef = useRef<ScrollView | null>(null);
   const nextIdRef = useRef(1);
   const sessionIdRef = useRef<string | null>(null);
@@ -379,7 +444,21 @@ export default function ChatEntryScreen() {
   // the server doesn't yet surface (e.g. streamSearchId → "더보기" CTA):
   // navigating home → PDP → back would otherwise clear the CTA.
   useEffect(() => {
-    if (!sessionParam) return;
+    // 큐레이션은 '메인 홈'에만. 히스토리/사이드바에서 연 과거 채팅
+    // (?session=)이면 채팅 내용만 보이게 이 플래그로 큐레이션을 숨긴다.
+    // 메인 홈에서 검색해 세션이 생긴 뒤 PDP 크리틱으로 ?session 이 붙어
+    // 돌아오는 경우는(같은 세션 in-memory) 아래 early-return 이라 플래그를
+    // 건드리지 않아 큐레이션이 유지된다.
+    if (!sessionParam) {
+      setResumedFromHistory(false);
+      return;
+    }
+    // '이전 채팅 열기'(사이드바)만 큐레이션 숨김. from=history 로 온 세션 id 를
+    // 모듈 레벨 set 에 기억해 둔다. PDP·더보기로 새 홈 인스턴스가 떠도(그때는
+    // from 파라미터가 없다) set 조회로 같은 판정이 유지된다 — 홈에서 시작한
+    // 세션은 채팅방을 나가 다른 이전 채팅을 열기 전까지 계속 큐레이션 유지.
+    if (fromParam === "history") HISTORY_OPENED_SESSIONS.add(sessionParam);
+    setResumedFromHistory(HISTORY_OPENED_SESSIONS.has(sessionParam));
     if (sessionIdRef.current === sessionParam && messages.length > 0) return;
     let cancelled = false;
     sessionIdRef.current = sessionParam;
@@ -388,7 +467,11 @@ export default function ChatEntryScreen() {
         const res = await getMessages(sessionParam, { limit: 50 });
         if (cancelled) return;
         const turns = messageItemsToTurns(res.messages, nextIdRef);
-        setMessages(turns);
+        // 덮어쓰기 대신 병합 — seed 핸드오프(/list·PDP→홈)로 방금 시작된
+        // 스트리밍 턴이 prev 에 있을 수 있는데, getMessages 는 그 턴을 아직
+        // 모르므로(전송 직전 상태) setMessages(turns) 로 덮으면 새 응답이
+        // 통째로 날아간다. 로드한 히스토리를 앞에, 진행 중 턴을 뒤에 둔다.
+        setMessages((prev) => [...turns, ...prev]);
         // 서버 히스토리엔 링크 미리보기 이미지가 저장돼 있지 않아, 재입장
         // 시 유저 버블에서 og:image 썸네일이 사라진다. 텍스트에 URL 이
         // 포함된 유저 턴은 여기서 다시 fetch 해서 imageUri 를 복원한다.
@@ -407,6 +490,26 @@ export default function ChatEntryScreen() {
             );
           });
         }
+        // 핀 상품 앵커(#id)가 있던 유저 턴은 상품 이미지를 다시 받아 버블에
+        // 썸네일로 복원 — "[#577005]" 텍스트 대신 "뭐였는지" 사진으로 보이게.
+        for (const t of turns) {
+          const pid = t.user.anchorProductId;
+          if (!pid || t.user.imageUri) continue;
+          void getProduct(pid)
+            .then((detail) => {
+              if (cancelled || !detail.image_url) return;
+              setMessages((prev) =>
+                prev.map((x) =>
+                  x.id === t.id
+                    ? { ...x, user: { ...x.user, imageUri: detail.image_url } }
+                    : x,
+                ),
+              );
+            })
+            .catch(() => {
+              // 상품이 사라졌거나 조회 실패 — 텍스트만 유지
+            });
+        }
       } catch {
         // ignore — empty state will show
       }
@@ -416,7 +519,7 @@ export default function ChatEntryScreen() {
     };
     // messages excluded intentionally — this effect only runs on session change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionParam]);
+  }, [sessionParam, fromParam]);
 
   // Pick up a seed message handed off from another screen (PDP critique chip
   // or composer). Fires once per seed value.
@@ -469,6 +572,16 @@ export default function ChatEntryScreen() {
     productName?: string;
     productPrice?: string;
   } | null = (() => {
+    // 큐레이션 핀 우선 — 빈 상태에서 온 상품은 messages 밖에 있다.
+    if (pinnedCurationProduct) {
+      return {
+        thumbColor: pinnedCurationProduct.colorHint,
+        imageUrl: pinnedCurationProduct.imageUri,
+        label: pinnedCurationProduct.brand,
+        productId: pinnedCurationProduct.id,
+        productName: pinnedCurationProduct.name,
+      };
+    }
     if (!pinnedId) return null;
     const mockHit = lastTurn?.results?.find((p) => p.id === pinnedId);
     if (mockHit) {
@@ -495,12 +608,14 @@ export default function ChatEntryScreen() {
     return null;
   })();
   // Legacy name kept for the few mock-only branches still using `.colorHint`.
-  const pinnedProduct = pinnedId
-    ? (lastTurn?.results?.find((p) => p.id === pinnedId) ?? null)
-    : null;
+  const pinnedProduct =
+    pinnedCurationProduct ??
+    (pinnedId ? (lastTurn?.results?.find((p) => p.id === pinnedId) ?? null) : null);
   const critiqueChips = CRITIQUE_CHIPS;
 
   // 골든셋 유도 칩 (빈 상태 전용) — 온보딩에서 받은 성별로 분기.
+  // GET /v1/curation 이 구좌(CurationSheet)와 칩을 함께 공급한다. 서버 칩이
+  // 없으면(오프라인, men 골든셋 등록 전 빈 배열) 로컬 상수 폴백 —
   // 여성 = 문형 채택 셋 / 남성 = 화이트리스트 셋 (src/state/suggestion-chips.ts).
   const [onboardGender, setOnboardGender] = useState<OnboardingGender | null>(
     null,
@@ -508,7 +623,18 @@ export default function ChatEntryScreen() {
   useEffect(() => {
     void readOnboardingGender().then(setOnboardGender);
   }, []);
-  const suggestionChips = chipsForGender(onboardGender);
+  const {
+    sections: curationSections,
+    chips: curationChips,
+    loading: curationLoading,
+  } = useCuration(onboardGender);
+  const suggestionChips = curationChips ?? chipsForGender(onboardGender);
+
+  // 빈 상태 히어로 표제 — 마운트당 1회 랜덤 (curation-lab Hero3 관례 동일).
+  const heroGreeting = useMemo(
+    () => HERO_GREETINGS[Math.floor(Math.random() * HERO_GREETINGS.length)],
+    [],
+  );
 
   // Composer placeholder — one random pick per state context. Recomputes
   // only when the relevant state combo changes (busy ↔ idle, results ↔ empty),
@@ -529,14 +655,47 @@ export default function ChatEntryScreen() {
   const kbHeight = useKeyboardHeight();
 
   // Auto-scroll to bottom whenever messages, status, or keyboard change.
+  // 대화가 있을 때만 — 대화 없는(큐레이션만) 상태에서 scrollToEnd 하면
+  // 큐레이션이 위로 밀려 올라가므로, 최초 진입은 최상단(큐레이션)을 유지한다.
   useEffect(() => {
-    if (!scrollRef.current) return;
+    if (!scrollRef.current || messages.length === 0) return;
     const t = setTimeout(
       () => scrollRef.current?.scrollToEnd({ animated: true }),
       60,
     );
     return () => clearTimeout(t);
   }, [messages, kbHeight]);
+
+  // 컴포저 위 플로팅 '큐레이션' 버튼 — 최상단 큐레이션으로 복귀.
+  const scrollToCuration = () => {
+    Haptic.light();
+    scrollRef.current?.scrollTo({ y: 0, animated: true });
+  };
+
+  // 큐레이션 블록이 화면에 5% 미만 남았을 때만 헤더 '큐레이션' 버튼 노출.
+  // 큐레이션 블록의 위치(y)·높이를 onLayout 으로 재고, 스크롤 시 뷰포트와
+  // 겹치는 양(overlap)을 화면 높이 대비로 판정한다. 최상단(다 보임)엔 안 뜨고,
+  // 스크롤을 내려 큐레이션이 거의 화면 밖으로 나가면 뜬다.
+  const curationLayoutRef = useRef({ y: 0, height: 0 });
+  const [showJumpTop, setShowJumpTop] = useState(false);
+  const handleHomeScroll = (e: {
+    nativeEvent: {
+      contentOffset: { y: number };
+      layoutMeasurement: { height: number };
+    };
+  }) => {
+    const { y: cTop, height: cH } = curationLayoutRef.current;
+    if (cH <= 0) return;
+    const scrollY = e.nativeEvent.contentOffset.y;
+    const vpH = e.nativeEvent.layoutMeasurement.height;
+    // 큐레이션 블록[cTop, cTop+cH] 과 뷰포트[scrollY, scrollY+vpH] 의 겹침.
+    const overlap = Math.max(
+      0,
+      Math.min(scrollY + vpH, cTop + cH) - Math.max(scrollY, cTop),
+    );
+    const next = overlap < vpH * 0.05;
+    setShowJumpTop((prev) => (prev === next ? prev : next));
+  };
 
   const updateTurn = (id: number, patch: Partial<Turn>) => {
     setMessages((prev) =>
@@ -579,7 +738,7 @@ export default function ChatEntryScreen() {
     setText("");
     setPickedImage(null);
     pickedAssetRef.current = null;
-    setPinnedId(null);
+    clearPin();
 
     if (hasImageInput) {
       setTimeout(() => {
@@ -828,7 +987,7 @@ export default function ChatEntryScreen() {
       })(),
     };
     setMessages((prev) => [...prev, turn]);
-    if (attachment) setPinnedId(null);
+    if (attachment) clearPin();
     // Server takes plain text; if a product is pinned, prefix the message so
     // the ReAct loop anchors to it.
     // Build a context-rich prefix the server's ReAct agent can anchor on.
@@ -1294,6 +1453,37 @@ export default function ChatEntryScreen() {
     setPinnedId((prev) => (prev === p.id ? null : p.id));
   };
 
+  // 컴포저 핀 해제 — 결과 핀(pinnedId)과 큐레이션 핀(pinnedCurationProduct)
+  // 어느 쪽이든 한 번에 비운다.
+  const clearPin = () => {
+    setPinnedId(null);
+    setPinnedCurationProduct(null);
+  };
+
+  // 큐레이션 카드 + 핀 토글 — 같은 상품을 다시 누르면 해제. 컴포저 위에
+  // 상품 칩이 뜨고, 전송 시 handleSend 의 비로그인 게이트가 로그인 시트로
+  // 보낸다 (로그인 상태면 정상 검색 앵커로 사용).
+  const handlePinCuration = (p: Product) => {
+    if (capLocked) return;
+    setPinnedId(null);
+    setPinnedCurationProduct((prev) => (prev?.id === p.id ? null : p));
+  };
+
+  // 큐레이션 상품 탭 — 비로그인도 PDP 진입 가능(서버 GET /v1/products/{id}
+  // optional-auth 배포 완료, 2026-07-17). 찜·전송 같은 액션만 로그인 게이트.
+  const handleCurationPress = (p: Product) => {
+    router.push(`/product/${p.id}`);
+  };
+
+  // 큐레이션 상품 찜 — 로그인 상태면 위시리스트 토글, 아니면 로그인 시트.
+  const handleCurationSave = (p: Product) => {
+    if (authStatus !== "authenticated") {
+      router.push("/login");
+      return;
+    }
+    void toggleWishlist(String(p.id));
+  };
+
   const handleRemovePreview = () => {
     Haptic.light();
     setPickedImage(null);
@@ -1304,21 +1494,61 @@ export default function ChatEntryScreen() {
 
   return (
     <View style={styles.root}>
-      {hasConversation ? (
-        <ScrollView
-          ref={scrollRef}
-          contentContainerStyle={[
-            styles.chatContent,
-            {
-              paddingTop: topPad,
-              paddingBottom: insets.bottom + 180 + kbHeight,
-            },
-          ]}
-          keyboardShouldPersistTaps="handled"
-          // 스크롤(드래그) 시작하는 순간 키보드 내려감. 흔한 iOS 메시징 앱 UX.
-          keyboardDismissMode="on-drag"
-          showsVerticalScrollIndicator={false}
-        >
+      {/* 홈 = 단일 스크롤. 큐레이션(발견 구좌)이 항상 최상단에 있고, 사용자가
+          요청을 보내면 그 아래로 대화가 이어붙는다. 최초 진입은 최상단
+          유지(auto-scroll 가드), 대화 후엔 헤더 '큐레이션' 버튼으로 복귀. */}
+      <ScrollView
+        ref={scrollRef}
+        contentContainerStyle={{
+          paddingTop: topPad + 16,
+          paddingBottom: insets.bottom + 180 + kbHeight,
+        }}
+        keyboardShouldPersistTaps="handled"
+        // 스크롤(드래그) 시작하는 순간 키보드 내려감. 흔한 iOS 메시징 앱 UX.
+        keyboardDismissMode="on-drag"
+        showsVerticalScrollIndicator={false}
+        onScroll={handleHomeScroll}
+        scrollEventThrottle={16}
+      >
+        {/* 히어로 표제 + 큐레이션 구좌 — '메인 홈'에서만. 히스토리에서 연
+            과거 채팅(resumedFromHistory)에는 채팅 내용만 보인다. */}
+        {!resumedFromHistory && (
+          <View
+            style={styles.curationBlock}
+            onLayout={(e) => {
+              const { y, height } = e.nativeEvent.layout;
+              curationLayoutRef.current = { y, height };
+            }}
+          >
+            <Text style={styles.emptyHeroTitle} numberOfLines={2}>
+              {heroGreeting}
+            </Text>
+            <CurationSheet
+              sections={curationSections}
+              loading={curationLoading}
+              pinnedProductId={pinnedCurationProduct?.id ?? null}
+              onPressProduct={handleCurationPress}
+              onPinProduct={handlePinCuration}
+              onSaveProduct={handleCurationSave}
+              onSeeMore={(section) => {
+                const q = [`title=${encodeURIComponent(section.title)}`];
+                if (onboardGender) q.push(`gender=${onboardGender}`);
+                router.push(`/curation/${section.key}?${q.join("&")}`);
+              }}
+              isSaved={(id) => isWishlisted(id)}
+            />
+          </View>
+        )}
+
+        {hasConversation && (
+          <View
+            style={[
+              styles.conversationBlock,
+              // 큐레이션이 위에 있을 때만 구분선/여백. 과거 채팅(큐레이션
+              // 없음)은 화면 최상단이라 구분선 없이 바로 시작.
+              !resumedFromHistory && styles.conversationDivider,
+            ]}
+          >
           {messages.map((turn) => {
             const isLast = turn.id === lastTurn?.id;
             const agentText = turn.narrowing
@@ -1400,7 +1630,7 @@ export default function ChatEntryScreen() {
                 {/* Analyzing */}
                 {turn.status === "analyzing" && (
                   <View style={styles.botStatusRow}>
-                    <PixelSpinner />
+                    <PixelSpinner pixelSize={4} />
                     <ShimmerText style={styles.botStatusText}>
                       {ANALYZE_HINT}
                     </ShimmerText>
@@ -1467,7 +1697,7 @@ export default function ChatEntryScreen() {
                 {/* Searching (mock pipeline only) */}
                 {turn.status === "searching" && !turn.isStream && (
                   <View style={styles.botStatusRow}>
-                    <PixelSpinner />
+                    <PixelSpinner pixelSize={4} />
                     <ShimmerText style={styles.botStatusText}>
                       {SEARCH_HINT}
                     </ShimmerText>
@@ -1502,7 +1732,7 @@ export default function ChatEntryScreen() {
                       (!turn.streamProducts ||
                         turn.streamProducts.length === 0) && (
                         <View style={styles.botStatusRow}>
-                          <PixelSpinner />
+                          <PixelSpinner pixelSize={4} />
                           <ShimmerText style={styles.botStatusText}>
                             {turn.streamPlaceholder ?? '비슷한 거 찾는 중…'}
                           </ShimmerText>
@@ -1536,95 +1766,41 @@ export default function ChatEntryScreen() {
                               : `/product/${productId}`;
                             router.push(url as never);
                           };
+                          const { brand, name, priceWon } =
+                            parseStreamCaption(p.caption);
                           return (
-                            <View key={key} style={styles.streamProductCard}>
-                              <Pressable
-                                style={styles.streamProductImageWrap}
-                                onPress={goPdp}
-                                disabled={productId == null}
-                              >
-                                <ExpoImage
-                                  source={p.image_url}
-                                  style={styles.streamProductImage}
-                                  contentFit="cover"
-                                />
-                                <View style={styles.streamCardActions}>
-                                  {/* 순서: [체크(anchor pin), 찜] — PDP 와 통일 */}
-                                  <Pressable
-                                    hitSlop={8}
-                                    disabled={capLocked}
-                                    style={[
-                                      styles.streamCardCheck,
-                                      pinned && styles.streamCardCheckOn,
-                                    ]}
-                                    onPress={() => {
-                                      // 캡 잠금 상태에선 선택도 무반응 —
-                                      // pinnedAttachment 가 배너 위에 뜨는 걸
-                                      // 원천 차단.
+                            <ProductCard
+                              key={key}
+                              product={{
+                                id: key,
+                                brand,
+                                name,
+                                priceWon,
+                                colorHint: IOSColors.systemGray5,
+                                imageUri: p.image_url,
+                              }}
+                              pinned={pinned}
+                              saved={
+                                productId != null &&
+                                isWishlisted(String(productId))
+                              }
+                              onPress={goPdp}
+                              onPin={
+                                productId == null
+                                  ? undefined
+                                  : () => {
                                       if (capLocked) return;
-                                      Haptic.selection();
                                       setPinnedId((prev) =>
                                         prev === key ? null : key,
                                       );
-                                    }}
-                                  >
-                                    <SymbolView
-                                      name="checkmark"
-                                      size={11}
-                                      tintColor={
-                                        pinned
-                                          ? IOSColors.systemBackground
-                                          : withAlpha('#FFFFFF', Opacity.softened)
-                                      }
-                                      weight="bold"
-                                    />
-                                  </Pressable>
-                                  <Pressable
-                                    hitSlop={8}
-                                    style={[
-                                      styles.streamCardHeartBtn,
-                                      productId != null &&
-                                        isWishlisted(String(productId)) &&
-                                        styles.streamCardHeartBtnOn,
-                                    ]}
-                                    onPress={() => {
-                                      if (productId == null) return;
-                                      Haptic.selection();
-                                      void toggleWishlist(String(productId));
-                                    }}
-                                    disabled={productId == null}
-                                  >
-                                    <SymbolView
-                                      name={
-                                        productId != null &&
-                                        isWishlisted(String(productId))
-                                          ? "heart.fill"
-                                          : "heart"
-                                      }
-                                      size={12}
-                                      tintColor={
-                                        productId != null &&
-                                        isWishlisted(String(productId))
-                                          ? IOSColors.systemBackground
-                                          : withAlpha('#FFFFFF', Opacity.nearFull)
-                                      }
-                                      weight="bold"
-                                    />
-                                  </Pressable>
-                                </View>
-                              </Pressable>
-                              <Pressable
-                                onPress={goPdp}
-                                disabled={productId == null}
-                              >
-                                <Text
-                                  style={styles.streamProductCaption}
-                                  numberOfLines={3}
-                                >
-                                  {p.caption.replace(/<[^>]+>/g, "")}
-                                </Text>
-                              </Pressable>
-                            </View>
+                                    }
+                              }
+                              onSave={
+                                productId == null
+                                  ? undefined
+                                  : () => void toggleWishlist(String(productId))
+                              }
+                            />
                           );
                         })}
                       </ScrollView>
@@ -1831,27 +2007,9 @@ export default function ChatEntryScreen() {
               </View>
             );
           })}
-        </ScrollView>
-      ) : (
-        // 빈 상태 = 발견형 본진 (3안 이식) — 히어로 카피 아래로 큐레이션
-        // 구좌가 스크롤로 이어진다. 목적을 강요하지 않고 구경하다 디깅으로
-        // 빠지는 진입이 기본값. 드래그 시작 시 키보드 내림.
-        <ScrollView
-          style={styles.emptyScroll}
-          // topPad = insets.top + 플로팅 탑바 높이 — 결과 리스트와 동일한
-          // 클리어런스. +16 은 첫 구좌 헤더가 탑바에 붙어 보인다는 7/14
-          // 피드백 반영 숨통.
-          contentContainerStyle={[styles.emptyScrollContent, { paddingTop: topPad + 16 }]}
-          keyboardDismissMode="on-drag"
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-          {/* 그리팅·로그인 버튼 제거 (7/14) — 빈 상태는 큐레이션이 곧
-              첫인상. 로그인 진입은 검색 시도 시 게이트(runStreamingTurn)와
-              사이드바에 남아 있다. */}
-          <CurationSheet />
-        </ScrollView>
-      )}
+          </View>
+        )}
+      </ScrollView>
 
       {/* Composer — floats over content so chips/input show real glass with
           the result cards scrolling underneath. */}
@@ -1892,7 +2050,7 @@ export default function ChatEntryScreen() {
                 <Text style={styles.attachmentBrand} numberOfLines={1}>
                   {pinnedAttachment.label}
                 </Text>
-                <Pressable hitSlop={6} onPress={() => setPinnedId(null)}>
+                <Pressable hitSlop={6} onPress={clearPin}>
                   <SymbolView
                     name="xmark.circle.fill"
                     size={18}
@@ -2047,6 +2205,8 @@ export default function ChatEntryScreen() {
             const sid = sessionIdRef.current;
             router.push(sid ? `/sidebar?current=${sid}` : "/sidebar");
           }}
+          showCuration={showJumpTop && !resumedFromHistory}
+          onOpenCuration={scrollToCuration}
           onOpenList={() => {
             const sid = sessionIdRef.current;
             router.push(sid ? `/history?session=${sid}` : "/history");
@@ -2077,24 +2237,41 @@ const styles = StyleSheet.create({
     bottom: 0,
     zIndex: 40,
   },
-  // Empty state
-  // Empty hero — Claude-browser style: single centered headline, no cards.
-  // 빈 상태 스크롤 시트 (3안 이식) — 큐레이션 구좌.
-  // (그리팅 히어로·로그인 pill 스타일 제거 — 7/14)
-  emptyScroll: {
-    flex: 1,
+  // 큐레이션(발견) 블록 — 항상 최상단. CurationSheet rowScroll 의 -16
+  // 인셋과 짝을 맞춰 좌우 16. (구 emptyScroll/emptyScrollContent 는 단일
+  // 스크롤 병합으로 제거 — 대화·큐레이션이 한 ScrollView 를 공유한다.)
+  curationBlock: {
+    paddingHorizontal: 16,
   },
-  emptyScrollContent: {
-    paddingHorizontal: 16, // CurationSheet rowScroll 의 -16 인셋과 짝
-    paddingBottom: 200, // 플로팅 컴포저(칩 행 포함) 아래로 안 깔리게
+  // 대화 블록 — 큐레이션 아래로 이어붙는다. 대화 버블은 좌우 20(기존
+  // chatContent 값). 큐레이션과 시각적으로 떨어지게 상단 여백 + 헤어라인.
+  conversationBlock: {
+    paddingHorizontal: 20,
+    gap: 22, // 기존 chatContent 의 턴 간격 — 병합 후에도 유지
+  },
+  // 큐레이션 아래로 이어붙을 때만 구분선/여백 (메인 홈). 과거 채팅엔 미적용.
+  conversationDivider: {
+    marginTop: 8,
+    paddingTop: 24,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: IOSColors.separator,
+  },
+  // 히어로 표제 — curation-lab heroTitleManifesto 확정 튜닝값 그대로
+  // (title1 기반, 아이폰 14 과대·과볼드 피드백 반영 semibold + 넉넉한 행간).
+  // 좌측 paddingHorizontal 은 emptyScrollContent 의 16 을 물려받아 구좌
+  // 섹션 타이틀과 같은 기준선 공유. 아래 여백은 hero3 의 paddingBottom(32).
+  emptyHeroTitle: {
+    ...IOSText.title1,
+    fontSize: 27,
+    lineHeight: 38,
+    fontWeight: "600",
+    letterSpacing: -0.2,
+    color: IOSColors.label,
+    fontFamily: IOSFont.sans,
+    textAlign: "left",
+    paddingBottom: 32,
   },
   // Conversation
-  chatContent: {
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 24,
-    gap: 22,
-  },
   turn: {
     gap: 14,
   },
@@ -2212,65 +2389,8 @@ const styles = StyleSheet.create({
     fontFamily: IOSFont.sans,
     lineHeight: 22,
   },
-  streamProductCard: {
-    width: 140,
-    backgroundColor: IOSColors.systemBackground,
-    borderRadius: Radius.lg,
-    overflow: "hidden",
-  },
-  streamProductImageWrap: {
-    width: 140,
-    height: 180,
-    position: "relative",
-  },
-  streamProductImage: {
-    width: "100%",
-    height: "100%",
-  },
-  streamProductCaption: {
-    ...IOSText.caption1,
-    color: IOSColors.label,
-    fontFamily: IOSFont.sans,
-    padding: 8,
-  },
-  // 카드 우상단 액션 스택. 순서: [체크(anchor), 찜]. PDP 비슷한 카드와
-  // 동일한 체크 UI (다크 서클 + 흰 체크마크).
-  streamCardActions: {
-    position: "absolute",
-    top: 6,
-    right: 6,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  streamCardCheck: {
-    width: 22,
-    height: 22,
-    borderRadius: Radius.pill,
-    borderWidth: 1.5,
-    borderColor: withAlpha('#FFFFFF', Opacity.nearFull),
-    backgroundColor: "rgba(0,0,0,0.22)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  streamCardCheckOn: {
-    backgroundColor: IOSColors.label,
-    borderColor: IOSColors.label,
-  },
-  streamCardHeartBtn: {
-    width: 22,
-    height: 22,
-    borderRadius: Radius.pill,
-    borderWidth: 1.5,
-    borderColor: withAlpha('#FFFFFF', Opacity.nearFull),
-    backgroundColor: "rgba(0,0,0,0.22)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  streamCardHeartBtnOn: {
-    backgroundColor: IOSColors.label,
-    borderColor: IOSColors.label,
-  },
+  // (스트림 결과 카드는 ProductCard 로 통일 — 구 streamProductCard/actions
+  //  스타일 제거. 큐레이션 카드와 동일 디자인.)
   agentRow: {
     flexDirection: "row",
     alignItems: "center",

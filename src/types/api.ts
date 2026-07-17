@@ -358,6 +358,68 @@ export interface ResultSetPageResponse {
   next_cursor: string | null;
 }
 
+// ── Onboarding & main curation (ai-server dev f94459b, 2026-07-15) ──────────
+
+export type CurationGender = 'women' | 'men';
+
+/** GET /v1/brands/search?q= — 온보딩 취향 스텝 고정 검색창 (no auth). */
+export interface BrandSearchItem {
+  id: number;
+  name: string;
+  node_id: number | null;
+}
+
+export interface BrandSearchResponse {
+  brands: BrandSearchItem[];
+}
+
+/** POST /v1/onboarding — 로그인 완료 시 로컬 온보딩값 계정 승격 (auth).
+ * picks 는 전체 교체(replace) — 서버가 brand_id 로 스타일 노드를 유도한다. */
+export interface OnboardingRequest {
+  gender: CurationGender;
+  selected_brand_ids: number[];
+}
+
+export interface OnboardingResponse {
+  user_id: string;
+  gender: CurationGender;
+  saved_brand_ids: number[];
+}
+
+/** GET /v1/curation 의 chips[] — 골든셋 유도 칩 (노출 label_ko, 실행 query_en). */
+export interface CurationChip {
+  id: string;
+  pattern: string;
+  label_ko: string;
+  query_en: string;
+  category: string;
+}
+
+export interface CurationProduct {
+  product_id: number;
+  brand: string;
+  name: string;
+  price: number | null;
+  image_url: string;
+  product_url: string;
+}
+
+export interface CurationSection {
+  id: string;
+  slot_type: 'auto' | 'editorial';
+  title: string;
+  subtitle: string | null;
+  products: CurationProduct[];
+}
+
+/** GET /v1/curation?gender= — server-driven 메인 구좌. 구좌 개수·순서·타이틀
+ * 전부 서버 결정. 로그인 유저는 프로필 gender 우선, 비로그인은 param 필수. */
+export interface CurationResponse {
+  gender: CurationGender;
+  sections: CurationSection[];
+  chips: CurationChip[];
+}
+
 export interface StyleNodeItem {
   id: number;
   code: string;

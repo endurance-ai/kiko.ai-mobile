@@ -22,6 +22,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { GlassSurface } from "@/components/glass-surface";
 import { Haptic, IOSColors, IOSFont, IOSText, Opacity , Radius , withAlpha , Scrim } from "@/theme";
 import { ApiError } from "@/lib/api";
+import { chatDisplayText } from "@/lib/anchor";
 import { deleteSession, listSessions, renameSession } from "@/lib/chat";
 import { getMe } from "@/lib/me";
 import { stripFamilyName } from "@/lib/name";
@@ -131,8 +132,9 @@ export default function SidebarScreen() {
       router.back();
       // Reuse the home surface (top bar + composer) — just hydrate it with
       // the picked session's messages via the ?session= query param.
+      // from=history: 이전 채팅 열기 → 홈이 이 세션을 큐레이션 숨김으로 기억.
       setTimeout(
-        () => router.replace(`/home?session=${sessionId}` as never),
+        () => router.replace(`/home?session=${sessionId}&from=history` as never),
         30,
       );
     });
@@ -156,7 +158,7 @@ export default function SidebarScreen() {
 
   const promptRename = useCallback(
     (session: SessionSummary) => {
-      const current = session.title || "";
+      const current = chatDisplayText(session.title);
       Alert.prompt(
         "제목 변경",
         undefined,
@@ -252,7 +254,7 @@ export default function SidebarScreen() {
   const openSessionActions = useCallback(
     (session: SessionSummary) => {
       Haptic.medium();
-      const title = session.title || "제목 없음";
+      const title = chatDisplayText(session.title) || "제목 없음";
       if (Platform.OS === "ios") {
         ActionSheetIOS.showActionSheetWithOptions(
           {
@@ -392,7 +394,7 @@ export default function SidebarScreen() {
                         ]}
                         numberOfLines={1}
                       >
-                        {s.title || "제목 없음"}
+                        {chatDisplayText(s.title) || "제목 없음"}
                       </Text>
                     </Pressable>
                   );
