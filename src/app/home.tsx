@@ -460,7 +460,11 @@ export default function ChatEntryScreen() {
         const res = await getMessages(sessionParam, { limit: 50 });
         if (cancelled) return;
         const turns = messageItemsToTurns(res.messages, nextIdRef);
-        setMessages(turns);
+        // 덮어쓰기 대신 병합 — seed 핸드오프(/list·PDP→홈)로 방금 시작된
+        // 스트리밍 턴이 prev 에 있을 수 있는데, getMessages 는 그 턴을 아직
+        // 모르므로(전송 직전 상태) setMessages(turns) 로 덮으면 새 응답이
+        // 통째로 날아간다. 로드한 히스토리를 앞에, 진행 중 턴을 뒤에 둔다.
+        setMessages((prev) => [...turns, ...prev]);
         // 서버 히스토리엔 링크 미리보기 이미지가 저장돼 있지 않아, 재입장
         // 시 유저 버블에서 og:image 썸네일이 사라진다. 텍스트에 URL 이
         // 포함된 유저 턴은 여기서 다시 fetch 해서 imageUri 를 복원한다.
