@@ -58,6 +58,7 @@ import {
   RadiusRole,
 } from '@/theme';
 import { MOCK_PRODUCTS, type Product } from '@/state/products';
+import { SUGGESTION_CHIPS_WOMEN } from '@/state/suggestion-chips';
 
 // 구 Spacing 토큰 값 (main Phase 2 dead-code 제거로 theme에서 삭제됨) —
 // 프로토타입 로컬로 유지. 스페이싱 토큰 재도입 여부는
@@ -95,33 +96,8 @@ const SECTION_DEFS = [
   { title: '지금 뜨는 베트남 핫걸 ST', subtitle: '사이공 트렌드세터의 여름 무드' },
 ];
 
-// 유도 칩 (2026-07-14 확정, 성별 이원화) — GET /v1/curation 응답 chips[]와
-// 동일 계약. 노출은 한국어(label), 실행은 검증된 영어 쿼리(query) + category
-// gate + 온보딩 성별. 칩 = 완전 통제된 입력 → 검증 통과 값만 태운다.
-// 골든셋 최종(여 7/13 · 남 7/14) 결론이 성별로 갈린다:
-//   여성 = 문형 채택 방식 (무드 95%·소재 90%·핏 85%·컬러 75% — 문형 안에서
-//          값 교체 가능). TPO·가격 배제.
-//   남성 = 값 화이트리스트 방식 (모든 문형 75% 미달, 최고 60% — 검증 통과
-//          값만 개별 등록). 개수도 성별 자유 (여 5 / 남 4).
-// 미검증 값은 실제 검색 경로 실행 + top-10 육안 판정 후에만 반영.
-const SUGGESTION_CHIPS_WOMEN = [
-  { id: 'chip-w1', pattern: 'mood', label: '유니크한 미니백', query: 'quirky unique mini bag', category: 'bag' }, // S 확정 (검증 쿼리 원문 — 축약형은 럭셔리 편중)
-  { id: 'chip-w2', pattern: 'aesthetic', label: 'Y2K 스타일 탑', query: 'y2k top', category: 'top' }, // 화이트리스트 S
-  { id: 'chip-w3', pattern: 'fit', label: '카프리 팬츠', query: 'capri pants', category: 'pants' }, // S (7/14 현규 판정)
-  { id: 'chip-w4', pattern: 'fit', label: '로우라이즈 진', query: 'low rise jeans', category: 'jeans' }, // S (7/14 현규 판정)
-  { id: 'chip-w5', pattern: 'mood', label: '로맨틱한 원피스', query: 'romantic dress', category: 'dress' }, // S 확정
-] as const;
-
-// 남성 4종 — 전부 7/14 현규가 실검색 top-10 육안 판정으로 확정한 값.
-const SUGGESTION_CHIPS_MEN = [
-  { id: 'chip-m1', pattern: 'fit', label: '크롭 반팔티', query: 'cropped tee', category: 'tee' },
-  { id: 'chip-m2', pattern: 'pattern', label: '카모 패턴 카고 팬츠', query: 'camo cargo pants', category: 'pants' },
-  { id: 'chip-m3', pattern: 'fit', label: '루즈핏 데님 팬츠', query: 'loose fit denim pants', category: 'jeans' },
-  { id: 'chip-m4', pattern: 'aesthetic', label: '여름 인디 밴드 티셔츠', query: 'summer indie band tee', category: 'tee' },
-] as const;
-
-// 현재 프로토타입 노출 셋 — 온보딩(OB_01) gender 값이 배선되면
-// gender === 'men' ? SUGGESTION_CHIPS_MEN : SUGGESTION_CHIPS_WOMEN 으로 전환.
+// 유도 칩 — 단일 소스는 src/state/suggestion-chips.ts (home.tsx 와 공유,
+// 골든셋 판정 근거 주석도 그쪽에). 시안 화면 기본은 여성 셋.
 const SUGGESTION_CHIPS = SUGGESTION_CHIPS_WOMEN;
 
 // 히어로 카피 풀 — 핵심가치를 하나씩 말하는 표제 3종을 마운트마다 랜덤 로테이션.
@@ -708,16 +684,34 @@ function ComposerMock({ onSend }: { onSend: () => void }) {
     () => COMPOSER_PLACEHOLDERS[Math.floor(Math.random() * COMPOSER_PLACEHOLDERS.length)],
     [],
   );
+  // 전송 버튼 press-in 즉시 반응 — AnimatedProductCard 와 동일 문법.
+  // 솔리드 CTA 인데 유일하게 프레스 피드백이 없던 지점.
+  const sendScale = useSharedValue(1);
+  const sendScaleStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: sendScale.value }],
+  }));
   return (
     <GlassSurface {...Glass.composer} style={styles.composer}>
       <Text style={styles.composerPlaceholder} numberOfLines={1}>
         {placeholder}
       </Text>
-      <Pressable hitSlop={6} onPress={onSend} style={styles.sendBtn}>
-        {/* 버튼 배경이 IOSColors.label(라이트=검정/다크=흰색)이라 아이콘은
-            반대로 적응하는 systemBackground 를 써서 라이트/다크 모두 대비를
-            보장한다 — 리터럴 흰색 하드코딩을 피한다. */}
-        <SymbolView name="arrow.up" size={16} tintColor={IOSColors.systemBackground} weight="bold" />
+      <Pressable
+        hitSlop={6}
+        unstable_pressDelay={0}
+        onPressIn={() => {
+          sendScale.value = withSpring(0.9, Motion.snappy);
+        }}
+        onPressOut={() => {
+          sendScale.value = withSpring(1, Motion.snappy);
+        }}
+        onPress={onSend}
+      >
+        <Animated.View style={[styles.sendBtn, sendScaleStyle]}>
+          {/* 버튼 배경이 IOSColors.label(라이트=검정/다크=흰색)이라 아이콘은
+              반대로 적응하는 systemBackground 를 써서 라이트/다크 모두 대비를
+              보장한다 — 리터럴 흰색 하드코딩을 피한다. */}
+          <SymbolView name="arrow.up" size={16} tintColor={IOSColors.systemBackground} weight="bold" />
+        </Animated.View>
       </Pressable>
     </GlassSurface>
   );
