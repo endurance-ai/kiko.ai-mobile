@@ -88,41 +88,47 @@ export function ProductCard({
             흰 알약 위에 얹혀서 아이콘은 시스템 스킴과 무관하게 항상 딥그레이.
             찜 on 상태만 알약을 label(다크) 로 채우고 하트를 반전한다 —
             결과 카드(streamCardHeartBtnOn)와 동일한 on-state 문법. */}
-        <View style={styles.actionRow}>
-          {onSave && (
-            <Pressable
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 3 }}
-              style={[styles.pinBtn, saved && styles.saveBtnOn]}
-              onPress={handleSave}
-            >
-              <SymbolView
-                name={saved ? 'heart.fill' : 'heart'}
-                size={13}
-                tintColor={saved ? IOSColors.systemBackground : '#1C1C1E'}
-                weight="bold"
-              />
-            </Pressable>
-          )}
-          {/* hitSlop 은 간격(6px) 쪽만 3 으로 좁혀 두 버튼 히트영역이 겹쳐
-              오탭 나는 걸 막고, 바깥쪽은 넉넉히 8 을 준다. */}
-          <Pressable
-            hitSlop={onSave ? { top: 8, bottom: 8, left: 3, right: 8 } : 8}
-            style={styles.pinBtn}
-            onPress={handlePin}
-          >
-            <SymbolView
-              name={pinned ? 'checkmark' : 'plus'}
-              size={14}
-              tintColor="#1C1C1E"
-              weight="bold"
-            />
-          </Pressable>
-        </View>
+        {(onSave || onPin) && (
+          <View style={styles.actionRow}>
+            {onSave && (
+              <Pressable
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: onPin ? 3 : 8 }}
+                style={[styles.pinBtn, saved && styles.saveBtnOn]}
+                onPress={handleSave}
+              >
+                <SymbolView
+                  name={saved ? 'heart.fill' : 'heart'}
+                  size={13}
+                  tintColor={saved ? IOSColors.systemBackground : '#1C1C1E'}
+                  weight="bold"
+                />
+              </Pressable>
+            )}
+            {/* 핀(+) — 컴포저 앵커. onPin 이 있을 때만(컴포저 없는 화면엔 미노출).
+                hitSlop 은 간격 쪽만 3 으로 좁혀 하트와 히트영역 겹침 방지. */}
+            {onPin && (
+              <Pressable
+                hitSlop={onSave ? { top: 8, bottom: 8, left: 3, right: 8 } : 8}
+                style={styles.pinBtn}
+                onPress={handlePin}
+              >
+                <SymbolView
+                  name={pinned ? 'checkmark' : 'plus'}
+                  size={14}
+                  tintColor="#1C1C1E"
+                  weight="bold"
+                />
+              </Pressable>
+            )}
+          </View>
+        )}
 
-        {/* Price tag — bottom left */}
-        <View style={styles.priceTag}>
-          <Text style={styles.priceText}>{formatPrice(product.priceWon)}</Text>
-        </View>
+        {/* Price tag — bottom left. 가격 있을 때만(스트림 결과 등 가격 없는 소스는 생략). */}
+        {product.priceWon > 0 && (
+          <View style={styles.priceTag}>
+            <Text style={styles.priceText}>{formatPrice(product.priceWon)}</Text>
+          </View>
+        )}
       </Pressable>
 
       <Text style={styles.brand} numberOfLines={1}>

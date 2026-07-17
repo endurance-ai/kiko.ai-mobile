@@ -151,6 +151,17 @@ const HERO_GREETINGS = [
   "머릿속 그 옷,\n마법처럼 찾아드릴게요",
 ];
 
+// SSE 결과 카드의 caption(HTML-ish, "브랜드\n상품명" 형태)을 ProductCard 의
+// brand/name 으로 분해. 첫 줄=브랜드, 나머지=상품명(한 줄이면 브랜드만).
+function parseStreamCaption(caption: string): { brand: string; name: string } {
+  const stripped = caption.replace(/<[^>]+>/g, "").trim();
+  const lines = stripped
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+  return { brand: lines[0] ?? "", name: lines.slice(1).join(" ") };
+}
+
 const AGENT_INTRO_DEFAULT = "이런 거 어때? · 콕집기로 골라봐";
 const AGENT_INTRO_NARROWING = "이런 거 찾았어 · 근데 좀 갈리네";
 const EMPTY_FALLBACK = "이 무드는 아직 딱 맞는 걸 못 찾았어. 이렇게 해볼까?";
@@ -1421,6 +1432,11 @@ export default function ChatEntryScreen() {
             onPressProduct={handleCurationPress}
             onPinProduct={handlePinCuration}
             onSaveProduct={handleCurationSave}
+            onSeeMore={(section) => {
+              const q = [`title=${encodeURIComponent(section.title)}`];
+              if (onboardGender) q.push(`gender=${onboardGender}`);
+              router.push(`/curation/${section.key}?${q.join("&")}`);
+            }}
             isSaved={(id) => isWishlisted(id)}
           />
         </View>
@@ -1644,95 +1660,40 @@ export default function ChatEntryScreen() {
                               : `/product/${productId}`;
                             router.push(url as never);
                           };
+                          const { brand, name } = parseStreamCaption(p.caption);
                           return (
-                            <View key={key} style={styles.streamProductCard}>
-                              <Pressable
-                                style={styles.streamProductImageWrap}
-                                onPress={goPdp}
-                                disabled={productId == null}
-                              >
-                                <ExpoImage
-                                  source={p.image_url}
-                                  style={styles.streamProductImage}
-                                  contentFit="cover"
-                                />
-                                <View style={styles.streamCardActions}>
-                                  {/* 순서: [체크(anchor pin), 찜] — PDP 와 통일 */}
-                                  <Pressable
-                                    hitSlop={8}
-                                    disabled={capLocked}
-                                    style={[
-                                      styles.streamCardCheck,
-                                      pinned && styles.streamCardCheckOn,
-                                    ]}
-                                    onPress={() => {
-                                      // 캡 잠금 상태에선 선택도 무반응 —
-                                      // pinnedAttachment 가 배너 위에 뜨는 걸
-                                      // 원천 차단.
+                            <ProductCard
+                              key={key}
+                              product={{
+                                id: key,
+                                brand,
+                                name,
+                                priceWon: 0,
+                                colorHint: IOSColors.systemGray5,
+                                imageUri: p.image_url,
+                              }}
+                              pinned={pinned}
+                              saved={
+                                productId != null &&
+                                isWishlisted(String(productId))
+                              }
+                              onPress={goPdp}
+                              onPin={
+                                productId == null
+                                  ? undefined
+                                  : () => {
                                       if (capLocked) return;
-                                      Haptic.selection();
                                       setPinnedId((prev) =>
                                         prev === key ? null : key,
                                       );
-                                    }}
-                                  >
-                                    <SymbolView
-                                      name="checkmark"
-                                      size={11}
-                                      tintColor={
-                                        pinned
-                                          ? IOSColors.systemBackground
-                                          : withAlpha('#FFFFFF', Opacity.softened)
-                                      }
-                                      weight="bold"
-                                    />
-                                  </Pressable>
-                                  <Pressable
-                                    hitSlop={8}
-                                    style={[
-                                      styles.streamCardHeartBtn,
-                                      productId != null &&
-                                        isWishlisted(String(productId)) &&
-                                        styles.streamCardHeartBtnOn,
-                                    ]}
-                                    onPress={() => {
-                                      if (productId == null) return;
-                                      Haptic.selection();
-                                      void toggleWishlist(String(productId));
-                                    }}
-                                    disabled={productId == null}
-                                  >
-                                    <SymbolView
-                                      name={
-                                        productId != null &&
-                                        isWishlisted(String(productId))
-                                          ? "heart.fill"
-                                          : "heart"
-                                      }
-                                      size={12}
-                                      tintColor={
-                                        productId != null &&
-                                        isWishlisted(String(productId))
-                                          ? IOSColors.systemBackground
-                                          : withAlpha('#FFFFFF', Opacity.nearFull)
-                                      }
-                                      weight="bold"
-                                    />
-                                  </Pressable>
-                                </View>
-                              </Pressable>
-                              <Pressable
-                                onPress={goPdp}
-                                disabled={productId == null}
-                              >
-                                <Text
-                                  style={styles.streamProductCaption}
-                                  numberOfLines={3}
-                                >
-                                  {p.caption.replace(/<[^>]+>/g, "")}
-                                </Text>
-                              </Pressable>
-                            </View>
+                                    }
+                              }
+                              onSave={
+                                productId == null
+                                  ? undefined
+                                  : () => void toggleWishlist(String(productId))
+                              }
+                            />
                           );
                         })}
                       </ScrollView>
@@ -2318,65 +2279,8 @@ const styles = StyleSheet.create({
     fontFamily: IOSFont.sans,
     lineHeight: 22,
   },
-  streamProductCard: {
-    width: 140,
-    backgroundColor: IOSColors.systemBackground,
-    borderRadius: Radius.lg,
-    overflow: "hidden",
-  },
-  streamProductImageWrap: {
-    width: 140,
-    height: 180,
-    position: "relative",
-  },
-  streamProductImage: {
-    width: "100%",
-    height: "100%",
-  },
-  streamProductCaption: {
-    ...IOSText.caption1,
-    color: IOSColors.label,
-    fontFamily: IOSFont.sans,
-    padding: 8,
-  },
-  // 카드 우상단 액션 스택. 순서: [체크(anchor), 찜]. PDP 비슷한 카드와
-  // 동일한 체크 UI (다크 서클 + 흰 체크마크).
-  streamCardActions: {
-    position: "absolute",
-    top: 6,
-    right: 6,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  streamCardCheck: {
-    width: 22,
-    height: 22,
-    borderRadius: Radius.pill,
-    borderWidth: 1.5,
-    borderColor: withAlpha('#FFFFFF', Opacity.nearFull),
-    backgroundColor: "rgba(0,0,0,0.22)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  streamCardCheckOn: {
-    backgroundColor: IOSColors.label,
-    borderColor: IOSColors.label,
-  },
-  streamCardHeartBtn: {
-    width: 22,
-    height: 22,
-    borderRadius: Radius.pill,
-    borderWidth: 1.5,
-    borderColor: withAlpha('#FFFFFF', Opacity.nearFull),
-    backgroundColor: "rgba(0,0,0,0.22)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  streamCardHeartBtnOn: {
-    backgroundColor: IOSColors.label,
-    borderColor: IOSColors.label,
-  },
+  // (스트림 결과 카드는 ProductCard 로 통일 — 구 streamProductCard/actions
+  //  스타일 제거. 큐레이션 카드와 동일 디자인.)
   agentRow: {
     flexDirection: "row",
     alignItems: "center",

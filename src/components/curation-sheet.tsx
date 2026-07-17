@@ -124,12 +124,16 @@ function PressScaleCard({
   );
 }
 
+// 구좌당 가로로 보여줄 카드 수 — 그 이상은 '더보기'로 전용 그리드 페이지에서.
+const ROW_LIMIT = 5;
+
 export function CurationSheet({
   sections: serverSections,
   pinnedProductId,
   onPressProduct,
   onPinProduct,
   onSaveProduct,
+  onSeeMore,
   isSaved,
 }: {
   /** GET /v1/curation 응답 구좌 (useCuration) — null 이면 mock 폴백. */
@@ -142,6 +146,8 @@ export function CurationSheet({
   onPinProduct: (product: Product) => void;
   /** 찜 토글 — 로그인 시 위시리스트, 비로그인 시 로그인 시트 (home 이 분기). */
   onSaveProduct: (product: Product) => void;
+  /** 더보기 — 구좌 전용 그리드 페이지로 이동 (home 이 gender/route 처리). */
+  onSeeMore?: (section: { key: string; title: string }) => void;
   /** 찜 여부 조회 (위시리스트). */
   isSaved: (productId: string) => boolean;
 }) {
@@ -168,13 +174,23 @@ export function CurationSheet({
 
   return (
     <View>
-      {sections.map((section) => (
+      {sections.map((section) => {
+        // 가로엔 5개만. 그 이상 있으면 '더보기'로 전용 그리드 페이지 유도.
+        const hasMore = section.products.length > ROW_LIMIT;
+        const visible = section.products.slice(0, ROW_LIMIT);
+        const goMore = () => {
+          Haptic.light();
+          onSeeMore?.({ key: section.key, title: section.title });
+        };
+        return (
         <View key={section.key} style={styles.rowSection}>
           <View style={styles.rowHeader}>
             <Text style={styles.sectionTitle}>{section.title}</Text>
-            <Pressable hitSlop={6} onPress={() => Haptic.light()}>
-              <Text style={styles.rowMoreText}>더보기</Text>
-            </Pressable>
+            {hasMore && (
+              <Pressable hitSlop={6} onPress={goMore}>
+                <Text style={styles.rowMoreText}>더보기</Text>
+              </Pressable>
+            )}
           </View>
           {section.subtitle != null && (
             <Text style={styles.sectionSubtitle}>{section.subtitle}</Text>
@@ -185,7 +201,7 @@ export function CurationSheet({
             style={styles.rowScroll}
             contentContainerStyle={styles.rowScrollContent}
           >
-            {section.products.map((product, i) => (
+            {visible.map((product, i) => (
               <PressScaleCard
                 key={product.id}
                 product={product}
@@ -199,7 +215,8 @@ export function CurationSheet({
             ))}
           </ScrollView>
         </View>
-      ))}
+        );
+      })}
     </View>
   );
 }
