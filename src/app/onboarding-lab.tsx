@@ -16,12 +16,12 @@
  * Spacing 토큰은 main 에서 제거되어 curation-lab.tsx 와 동일하게 컴포넌트
  * 로컬 상수로 재도입한다.
  */
+import { Image as ExpoImage } from 'expo-image';
 import { router } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { memo, useEffect, useMemo, useState } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
-  Image,
   Platform,
   Pressable,
   ScrollView,
@@ -137,6 +137,12 @@ export default function OnboardingLabScreen() {
   // 픽 = 브랜드명 → brand_nodes.id (그리드는 REP_BRAND_IDS, 검색은 API 응답).
   const [selectedBrands, setSelectedBrands] = useState<Map<string, number | null>>(new Map());
   const [searchQuery, setSearchQuery] = useState('');
+
+  // 콜라주(스텝2) 이미지 미리 데우기 — welcome(스텝1)에 머무는 동안 캐시에
+  // 올려, value 스텝 진입 시 네트워크 팝 없이 13장이 한 번에 뜨게 한다.
+  useEffect(() => {
+    void ExpoImage.prefetch([...WELCOME_COLLAGE_IMAGES], 'memory-disk');
+  }, []);
 
   // 스텝 전환 애니메이션 — 새 스텝 콘텐츠가 opacity 0→1 + translateY 8→0 로
   // 은은하게 나타난다. 트리거성 withTiming (진입/이탈이지 제스처가 아니므로
@@ -388,29 +394,18 @@ const WELCOME_COLLAGE_IMAGES = [
 const COLLAGE_ROWS = [4, 4, 3, 2] as const;
 const COLLAGE_THUMB = 64;
 
-// 콜라주 썸네일 — 행 단위로 차분하게 페이드 (개별 팝 13번은 산만해서
-// 행 4번의 순차 등장으로 정리). 움직임은 미세한 상승만, 스케일 없음.
-function CollageThumb({ uri, row }: { uri: string; row: number }) {
-  const reduceMotion = useReducedMotion();
-  const progress = useSharedValue(0);
-  useEffect(() => {
-    if (reduceMotion) {
-      progress.value = 1;
-      return;
-    }
-    const id = setTimeout(() => {
-      progress.value = withTiming(1, { duration: Duration.base });
-    }, row * 90);
-    return () => clearTimeout(id);
-  }, [row, progress, reduceMotion]);
-  const style = useAnimatedStyle(() => ({
-    opacity: progress.value,
-    transform: [{ translateY: (1 - progress.value) * 4 }],
-  }));
+// 콜라주 썸네일 — 개별/행 순차 등장을 없애고 한 번에 뜬다(스텝 콘텐츠
+// 페이드로 카드 전체가 함께 등장). 이미지는 expo-image memory-disk 캐시 +
+// 프리페치(스크린 마운트 시)로 미리 데워, 네트워크 팝 없이 즉시 표시.
+function CollageThumb({ uri }: { uri: string }) {
   return (
-    <Animated.View style={style}>
-      <Image source={{ uri }} style={styles.collageThumb} />
-    </Animated.View>
+    <ExpoImage
+      source={{ uri }}
+      style={styles.collageThumb}
+      contentFit="cover"
+      cachePolicy="memory-disk"
+      transition={120}
+    />
   );
 }
 
@@ -431,7 +426,7 @@ const CollageCard = memo(function CollageCard() {
       {COLLAGE_ROW_DATA.map((row, ri) => (
         <View key={ri} style={styles.collageRow}>
           {row.map((uri) => (
-            <CollageThumb key={uri} uri={uri} row={ri} />
+            <CollageThumb key={uri} uri={uri} />
           ))}
         </View>
       ))}
