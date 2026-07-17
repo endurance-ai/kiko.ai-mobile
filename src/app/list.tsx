@@ -19,6 +19,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FLOATING_HEADER_OFFSET, FloatingHeader } from '@/components/floating-header';
 import { GlassSurface } from '@/components/glass-surface';
 import { Haptic, IOSColors, IOSFont, IOSText , Radius , withAlpha , Scrim , Opacity } from '@/theme';
+import { stripAnchorPrefix } from '@/lib/anchor';
 import { trackProductImpression } from '@/lib/analytics';
 import { ApiError } from '@/lib/api';
 import { getResultSetPage } from '@/lib/results';
@@ -138,7 +139,7 @@ export default function ListScreen() {
     }
   }, [searchId, page, loadingMore]);
 
-  const title = page?.title ?? '검색 결과';
+  const title = stripAnchorPrefix(page?.title) || '검색 결과';
   const count = page?.result_count ?? items.length;
 
   return (

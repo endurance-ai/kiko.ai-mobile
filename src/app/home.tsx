@@ -35,6 +35,8 @@ import {
 } from "@/lib/chat";
 import { FREE_LIMIT_VERSION, trackEvent } from "@/lib/analytics";
 import { ApiError } from "@/lib/api";
+import { parseAnchorPrefix } from "@/lib/anchor";
+import { getProduct } from "@/lib/products";
 import {
   isCapExhausted,
   type CapMeta,
@@ -73,6 +75,8 @@ type UserMessage = {
   text?: string;
   imageUri?: string;
   colorHint?: string;
+  /** 재입장 시 서버 텍스트의 [#id …] 앵커에서 파싱한 상품 id — 이미지 복원용. */
+  anchorProductId?: string;
 };
 
 type Narrowing = {
@@ -298,9 +302,12 @@ function messageItemsToTurns(
     }
     const assistantMsg =
       sorted[i + 1]?.role === "assistant" ? sorted[i + 1] : null;
+    const { text: userText, anchorProductId } = parseAnchorPrefix(
+      userMsg.content,
+    );
     turns.push({
       id: nextIdRef.current++,
-      user: { text: userMsg.content },
+      user: { text: userText, anchorProductId },
       status: "results",
       isStream: true,
       streamText: assistantMsg?.content ?? "",
@@ -471,6 +478,26 @@ export default function ChatEntryScreen() {
               ),
             );
           });
+        }
+        // 핀 상품 앵커(#id)가 있던 유저 턴은 상품 이미지를 다시 받아 버블에
+        // 썸네일로 복원 — "[#577005]" 텍스트 대신 "뭐였는지" 사진으로 보이게.
+        for (const t of turns) {
+          const pid = t.user.anchorProductId;
+          if (!pid || t.user.imageUri) continue;
+          void getProduct(pid)
+            .then((detail) => {
+              if (cancelled || !detail.image_url) return;
+              setMessages((prev) =>
+                prev.map((x) =>
+                  x.id === t.id
+                    ? { ...x, user: { ...x.user, imageUri: detail.image_url } }
+                    : x,
+                ),
+              );
+            })
+            .catch(() => {
+              // 상품이 사라졌거나 조회 실패 — 텍스트만 유지
+            });
         }
       } catch {
         // ignore — empty state will show
