@@ -1,4 +1,5 @@
-import * as SecureStore from 'expo-secure-store';
+import * as SecureStore from '@/lib/secure-storage';
+import { Platform } from 'react-native';
 import {
   createContext,
   ReactNode,
@@ -104,6 +105,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      // 웹 개발 미리보기(pnpm web) 전용 mock 세션 — 소셜 로그인(Apple/카카오/
+      // 구글)이 웹에서 동작하지 않아 디자인 확인이 막히므로 자동 통과시킨다.
+      // __DEV__ + web 이중 가드라 네이티브/프로덕션 빌드에는 절대 포함되지 않음.
+      // API 호출은 401 이 나지만 화면 렌더에는 영향 없음.
+      if (Platform.OS === 'web' && __DEV__) {
+        accessTokenRef.current = 'dev-web-preview-token';
+        setUserId('dev-web-preview');
+        setStatus('authenticated');
+        return;
+      }
       const refreshToken = await readRefreshToken();
       if (!refreshToken) {
         if (!cancelled) setStatus('unauthenticated');
