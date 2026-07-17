@@ -22,7 +22,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { GlassSurface } from "@/components/glass-surface";
 import { Haptic, IOSColors, IOSFont, IOSText, Opacity , Radius , withAlpha , Scrim } from "@/theme";
 import { ApiError } from "@/lib/api";
-import { stripAnchorPrefix } from "@/lib/anchor";
+import { chatDisplayText } from "@/lib/anchor";
 import { deleteSession, listSessions, renameSession } from "@/lib/chat";
 import { getMe } from "@/lib/me";
 import { stripFamilyName } from "@/lib/name";
@@ -158,7 +158,7 @@ export default function SidebarScreen() {
 
   const promptRename = useCallback(
     (session: SessionSummary) => {
-      const current = stripAnchorPrefix(session.title);
+      const current = chatDisplayText(session.title);
       Alert.prompt(
         "제목 변경",
         undefined,
@@ -254,7 +254,7 @@ export default function SidebarScreen() {
   const openSessionActions = useCallback(
     (session: SessionSummary) => {
       Haptic.medium();
-      const title = stripAnchorPrefix(session.title) || "제목 없음";
+      const title = chatDisplayText(session.title) || "제목 없음";
       if (Platform.OS === "ios") {
         ActionSheetIOS.showActionSheetWithOptions(
           {
@@ -394,7 +394,7 @@ export default function SidebarScreen() {
                         ]}
                         numberOfLines={1}
                       >
-                        {stripAnchorPrefix(s.title) || "제목 없음"}
+                        {chatDisplayText(s.title) || "제목 없음"}
                       </Text>
                     </Pressable>
                   );

@@ -49,7 +49,11 @@ import { useAuth } from "@/state/auth";
 import { useBanner } from "@/state/banner";
 import { useCuration } from "@/state/curation";
 import { readOnboardingGender, type OnboardingGender } from "@/state/onboarding";
-import { chipsForGender, type SuggestionChip } from "@/state/suggestion-chips";
+import {
+  chipLabelForQuery,
+  chipsForGender,
+  type SuggestionChip,
+} from "@/state/suggestion-chips";
 import { useCap } from "@/state/cap";
 import { buildFilterLabel, PRICE_MAX, useFilter } from "@/state/filter";
 import { MOCK_PRODUCTS, type Product } from "@/state/products";
@@ -302,9 +306,12 @@ function messageItemsToTurns(
     }
     const assistantMsg =
       sorted[i + 1]?.role === "assistant" ? sorted[i + 1] : null;
-    const { text: userText, anchorProductId } = parseAnchorPrefix(
+    const { text: parsedText, anchorProductId } = parseAnchorPrefix(
       userMsg.content,
     );
+    // 유도 칩은 서버에 검증된 영어 query 로 저장돼 재입장 시 영어로 뜬다.
+    // 알려진 칩 query 면 한국어 label 로 되돌려 사용자가 친 대로 보이게 한다.
+    const userText = chipLabelForQuery(parsedText) ?? parsedText;
     turns.push({
       id: nextIdRef.current++,
       user: { text: userText, anchorProductId },
@@ -665,24 +672,29 @@ export default function ChatEntryScreen() {
     scrollRef.current?.scrollTo({ y: 0, animated: true });
   };
 
-  // 전체 콘텐츠의 하단 95%까지 내려갔을 때만 플로팅 버튼 노출(재관 스펙
-  // "95% 이상 스크롤 내려갔을때"). 최상단(메인 진입)엔 안 보이고, 항상 도달
-  // 가능한 비율 기준이라 대화 유무와 무관하게 동작한다. 스크롤 여지가 거의
-  // 없으면(짧은 화면) 아예 안 띄운다. setState 는 boolean 이 바뀔 때만.
+  // 큐레이션 블록이 화면에 5% 미만 남았을 때만 헤더 '큐레이션' 버튼 노출.
+  // 큐레이션 블록의 위치(y)·높이를 onLayout 으로 재고, 스크롤 시 뷰포트와
+  // 겹치는 양(overlap)을 화면 높이 대비로 판정한다. 최상단(다 보임)엔 안 뜨고,
+  // 스크롤을 내려 큐레이션이 거의 화면 밖으로 나가면 뜬다.
+  const curationLayoutRef = useRef({ y: 0, height: 0 });
   const [showJumpTop, setShowJumpTop] = useState(false);
   const handleHomeScroll = (e: {
     nativeEvent: {
       contentOffset: { y: number };
-      contentSize: { height: number };
       layoutMeasurement: { height: number };
     };
   }) => {
-    const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
-    const scrollRoom = contentSize.height - layoutMeasurement.height;
-    const nearBottom =
-      scrollRoom > 240 &&
-      contentOffset.y + layoutMeasurement.height >= contentSize.height * 0.95;
-    setShowJumpTop((prev) => (prev === nearBottom ? prev : nearBottom));
+    const { y: cTop, height: cH } = curationLayoutRef.current;
+    if (cH <= 0) return;
+    const scrollY = e.nativeEvent.contentOffset.y;
+    const vpH = e.nativeEvent.layoutMeasurement.height;
+    // 큐레이션 블록[cTop, cTop+cH] 과 뷰포트[scrollY, scrollY+vpH] 의 겹침.
+    const overlap = Math.max(
+      0,
+      Math.min(scrollY + vpH, cTop + cH) - Math.max(scrollY, cTop),
+    );
+    const next = overlap < vpH * 0.05;
+    setShowJumpTop((prev) => (prev === next ? prev : next));
   };
 
   const updateTurn = (id: number, patch: Partial<Turn>) => {
@@ -1501,7 +1513,13 @@ export default function ChatEntryScreen() {
         {/* 히어로 표제 + 큐레이션 구좌 — '메인 홈'에서만. 히스토리에서 연
             과거 채팅(resumedFromHistory)에는 채팅 내용만 보인다. */}
         {!resumedFromHistory && (
-          <View style={styles.curationBlock}>
+          <View
+            style={styles.curationBlock}
+            onLayout={(e) => {
+              const { y, height } = e.nativeEvent.layout;
+              curationLayoutRef.current = { y, height };
+            }}
+          >
             <Text style={styles.emptyHeroTitle} numberOfLines={2}>
               {heroGreeting}
             </Text>

@@ -41,3 +41,18 @@ export const SUGGESTION_CHIPS_MEN: readonly SuggestionChip[] = [
 export function chipsForGender(gender: 'women' | 'men' | null | undefined): readonly SuggestionChip[] {
   return gender === 'men' ? SUGGESTION_CHIPS_MEN : SUGGESTION_CHIPS_WOMEN;
 }
+
+// 검증된 영어 query → 한국어 label 역매핑. 유도 칩은 버블엔 한국어 label 을
+// 보이지만 서버엔 영어 query 를 보내 저장하므로, 재입장(getMessages) 시 유저
+// 메시지가 영어로 뜬다. 이 맵으로 알려진 칩 query 를 한국어 label 로 되돌린다.
+const CHIP_QUERY_TO_LABEL: ReadonlyMap<string, string> = new Map(
+  [...SUGGESTION_CHIPS_WOMEN, ...SUGGESTION_CHIPS_MEN].map((c) => [
+    c.query.trim().toLowerCase(),
+    c.label,
+  ]),
+);
+
+/** 텍스트가 알려진 유도 칩의 영어 query 면 한국어 label 을, 아니면 null. */
+export function chipLabelForQuery(text: string): string | null {
+  return CHIP_QUERY_TO_LABEL.get(text.trim().toLowerCase()) ?? null;
+}
