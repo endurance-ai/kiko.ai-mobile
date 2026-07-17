@@ -40,6 +40,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets, type EdgeInsets } from 'react-native-safe-area-context';
 
+import { GlassSurface } from '@/components/glass-surface';
 import { api } from '@/lib/api';
 import { saveOnboarding } from '@/state/onboarding';
 import { REP_BRAND_IDS, STYLE_NODES } from '@/state/style-nodes';
@@ -49,6 +50,7 @@ import {
   BrandRole,
   Duration,
   Elevation,
+  Glass,
   Haptic,
   IOSColors,
   IOSFont,
@@ -656,10 +658,9 @@ function TasteStep({
       <Text style={styles.stepSubtitle}>여기서부터 취향을 맞춰갈게요</Text>
 
       {/* 검색창은 스크롤 밖 고정 — 그리드를 아무리 내려도 항상 그 자리.
-          애플 서치바 문법(회색 채움 + 돋보기) — 글래스는 iOS26 흰 배경서
-          faint 하고 작아 보여, 성별 카드와 같은 filled 톤으로 통일하고 키웠다.
-          GET /v1/brands/search 디바운스 호출, 실패 시 로컬 스냅샷 매치. */}
-      <View style={styles.searchField}>
+          iOS 26 리퀴드 글래스 서치바(Glass.composer) + 돋보기 + 네이티브
+          클리어(✕). GET /v1/brands/search 디바운스, 실패 시 로컬 스냅샷 매치. */}
+      <GlassSurface {...Glass.composer} style={styles.searchField}>
         {Platform.OS !== 'web' && (
           <SymbolView name="magnifyingglass" size={19} tintColor={IOSColors.secondaryLabel} weight="regular" />
         )}
@@ -669,8 +670,13 @@ function TasteStep({
           placeholder="좋아하는 브랜드를 검색해보세요"
           placeholderTextColor={IOSColors.placeholderText}
           style={styles.searchInput}
+          // 애플 서치바 네이티브 클리어(✕) 버튼 — 입력 중 우측에 표시(iOS).
+          clearButtonMode="while-editing"
+          autoCorrect={false}
+          autoCapitalize="none"
+          returnKeyType="search"
         />
-      </View>
+      </GlassSurface>
 
       {searchResults.length > 0 && (
         <View style={styles.searchResultsRow}>
@@ -1133,21 +1139,22 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 
-  // 애플 서치바 — 회색 채움(secondarySystemFill), 넉넉한 높이(56, 성별 카드와
-  // 동일 스케일)로 존재감 확보. 돋보기 + 입력.
+  // iOS 26 리퀴드 글래스 서치바 — 배경 채움은 GlassSurface(글래스 소재)가
+  // 담당하므로 여기선 형태만. 넉넉한 높이(56) + 완전 캡슐(pill) 라운드로
+  // iOS 26 서치바 룩(각진 사각형 X). 성별 카드/칩과 같은 캡슐 문법.
   searchField: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.two + Spacing.half,
     minHeight: 56,
-    borderRadius: RadiusRole.field,
-    paddingHorizontal: Spacing.four - Spacing.half,
+    borderRadius: Radius.pill,
+    paddingHorizontal: Spacing.four,
     marginTop: Spacing.four,
-    backgroundColor: IOSColors.secondarySystemFill,
     overflow: 'hidden',
   },
   searchInput: {
-    ...IOSText.headline,
+    // 애플 서치 입력 텍스트는 regular(body) — semibold 는 과함.
+    ...IOSText.body,
     flex: 1,
     color: IOSColors.label,
     fontFamily: IOSFont.sans,
