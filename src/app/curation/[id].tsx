@@ -155,6 +155,7 @@ export default function CurationSectionScreen() {
   const title = params.title ?? '큐레이션';
 
   const { sections } = useCuration(gender);
+  const { status: authStatus } = useAuth();
   const { locked: capLocked } = useCap();
   const { value: filter } = useFilter();
   const [text, setText] = useState('');
@@ -181,6 +182,12 @@ export default function CurationSectionScreen() {
     const trimmed = raw.trim();
     if (!trimmed || capLocked) return;
     Haptic.medium();
+    // 비로그인은 홈으로 넘겨 검색을 돌리는 대신 여기서 바로 로그인 시트.
+    // (홈 경유하면 메인이 깜빡였다 로그인이 뜨는 문제 — PDP kickoffChat 과 동일)
+    if (authStatus !== 'authenticated') {
+      router.push('/login');
+      return;
+    }
     const qs: string[] = [`seed=${encodeURIComponent(trimmed)}`];
     if (pinnedProduct) {
       qs.push(`pin_id=${encodeURIComponent(String(pinnedProduct.product_id))}`);
