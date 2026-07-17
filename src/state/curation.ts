@@ -10,6 +10,7 @@
  *   (null 이면 CurationSheet 가 mock, home 칩이 로컬 골든셋 상수로 폴백).
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Image as ExpoImage } from 'expo-image';
 import { useEffect, useState } from 'react';
 
 import { api } from '@/lib/api';
@@ -23,6 +24,23 @@ function cacheKey(gender: OnboardingGender | null): string {
   // gender 미상(재설치한 기존 계정 유저 등)은 서버가 프로필로 해석 —
   // 캐시도 별도 슬롯에 둔다.
   return `${CACHE_KEY_PREFIX}${gender ?? 'profile'}`;
+}
+
+// 첫 화면 구좌 이미지 미리 데워두기 — 가로 스크롤로 아직 안 보인 카드까지
+// 디스크·메모리 캐시에 올려, 스크롤 중 늦게 뜨는 팝을 줄인다. 앞쪽 구좌 위주로
+// 상한을 둬(과다 프리페치 방지) 첫인상 체감만 잡는다.
+const PREFETCH_LIMIT = 24;
+
+function prefetchSectionImages(res: CurationResponse): void {
+  const urls: string[] = [];
+  for (const s of res.sections) {
+    for (const p of s.products) {
+      if (p.image_url) urls.push(p.image_url);
+      if (urls.length >= PREFETCH_LIMIT) break;
+    }
+    if (urls.length >= PREFETCH_LIMIT) break;
+  }
+  if (urls.length > 0) void ExpoImage.prefetch(urls, 'memory-disk');
 }
 
 // 서버 chips[] → 홈 composer 유도 칩. 빈 배열(men 골든셋 등록 전)은 null 을
@@ -67,6 +85,7 @@ export function useCuration(gender: OnboardingGender | null): {
         if (cancelled) return;
         gotFresh = true;
         setData(res);
+        prefetchSectionImages(res);
         void AsyncStorage.setItem(cacheKey(gender), JSON.stringify(res));
       })
       .catch(() => {

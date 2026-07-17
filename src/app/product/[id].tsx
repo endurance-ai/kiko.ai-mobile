@@ -22,6 +22,7 @@ import { Haptic, IOSColors, IOSFont, IOSText, Opacity , Radius , withAlpha , Scr
 import { trackEvent } from '@/lib/analytics';
 import { ApiError } from '@/lib/api';
 import { checkProductLink, getProduct, recordProductView } from '@/lib/products';
+import { useAuth } from '@/state/auth';
 import { useCap } from '@/state/cap';
 import { useWishlist } from '@/state/wishlist';
 import type { ProductDetail, SimilarProduct } from '@/types/api';
@@ -93,9 +94,20 @@ export default function ProductDetailScreen() {
   const [heroAspect, setHeroAspect] = useState<number>(SCREEN_W / HERO_HEIGHT);
 
   const { isSaved, toggle: toggleSaved } = useWishlist();
+  const { status: authStatus } = useAuth();
   const { locked: capLocked } = useCap();
   const productIdStr = product ? String(product.id) : '';
   const saved = productIdStr ? isSaved(productIdStr) : false;
+
+  // 찜 = 로그인 필요. 비로그인은 조용히 실패(401) 대신 로그인 시트로 유도
+  // — 큐레이션/결과 카드 찜과 동일한 게이트.
+  const saveOrLogin = (pid: string) => {
+    if (authStatus !== 'authenticated') {
+      router.push('/login');
+      return;
+    }
+    void toggleSaved(pid);
+  };
   const canSend = !capLocked && text.trim().length > 0;
 
   // 현재 anchor 로 잡힌 상품의 pin 정보. 기본은 메인 상품이지만 사용자가
@@ -136,6 +148,13 @@ export default function ProductDetailScreen() {
   const kickoffChat = useCallback(
     (msg: string) => {
       if (!anchorPin) return;
+      // 비로그인은 홈으로 넘겨 검색을 돌리는 대신 여기서 바로 로그인 시트를
+      // 띄운다 — 홈을 한 번 거치면 메인 화면이 깜빡였다 로그인이 뜨는 문제.
+      if (authStatus !== 'authenticated') {
+        Haptic.medium();
+        router.push('/login');
+        return;
+      }
       Haptic.medium();
       const params: string[] = [`seed=${encodeURIComponent(msg)}`];
       if (session) params.push(`session=${encodeURIComponent(session)}`);
@@ -155,7 +174,7 @@ export default function ProductDetailScreen() {
         );
       router.replace(`/home?${params.join('&')}` as never);
     },
-    [anchorPin, session],
+    [anchorPin, session, authStatus],
   );
 
   const handleCritique = useCallback(
@@ -351,7 +370,7 @@ export default function ProductDetailScreen() {
                 onPress={() => {
                   if (!productIdStr) return;
                   Haptic.selection();
-                  void toggleSaved(productIdStr);
+                  saveOrLogin(productIdStr);
                 }}
               >
                 <SymbolView
@@ -584,6 +603,15 @@ function SimilarProducts({
   searchId?: string;
 }) {
   const { isSaved, toggle: toggleSaved } = useWishlist();
+  const { status: authStatus } = useAuth();
+  // 찜 = 로그인 필요 (메인 PDP saveOrLogin 과 동일 게이트).
+  const saveOrLogin = (pid: string) => {
+    if (authStatus !== 'authenticated') {
+      router.push('/login');
+      return;
+    }
+    void toggleSaved(pid);
+  };
   const isEmpty = items.length === 0;
   // Skeleton tiles during loading (or before the SSE has fired) keep the
   // grid scaffold visible so the layout doesn't pop in. Six tiles = two
@@ -690,7 +718,7 @@ function SimilarProducts({
                               ]}
                               onPress={() => {
                                 Haptic.selection();
-                                void toggleSaved(pidStr);
+                                saveOrLogin(pidStr);
                               }}
                             >
                               <SymbolView

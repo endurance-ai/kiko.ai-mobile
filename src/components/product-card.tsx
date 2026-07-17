@@ -63,12 +63,22 @@ export function ProductCard({
 
   return (
     <View style={styles.root}>
-      <Pressable style={styles.imageWrap} onPress={handlePress}>
+      {/* 로딩 중엔 colorHint 가 배경으로 보여 회색 빈칸 대신 자리를 채운다. */}
+      <Pressable
+        style={[styles.imageWrap, { backgroundColor: product.colorHint }]}
+        onPress={handlePress}
+      >
         {product.imageUri ? (
           <Image
             source={{ uri: product.imageUri }}
             style={styles.image}
             contentFit="cover"
+            // 스크롤 중 이미지가 늦게 뜨는 것 완화: 메모리+디스크 캐시로
+            // 재노출 즉시 표시, 첫 디코드는 150ms 페이드로 팝을 부드럽게.
+            // recyclingKey 로 가로 리스트에서 뷰 재사용 시 이전 이미지 잔상 방지.
+            cachePolicy="memory-disk"
+            transition={150}
+            recyclingKey={String(product.id)}
           />
         ) : (
           <View style={[styles.image, { backgroundColor: product.colorHint }]} />

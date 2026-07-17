@@ -15,6 +15,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Image as ExpoImage } from "expo-image";
@@ -571,9 +572,30 @@ export default function ChatEntryScreen() {
     return () => clearTimeout(t);
   }, [messages, kbHeight]);
 
-  // 헤더 '큐레이션' 버튼 — 대화를 아무리 내려도 최상단 큐레이션으로 복귀.
+  // 컴포저 위 플로팅 '큐레이션' 버튼 — 최상단 큐레이션으로 복귀.
   const scrollToCuration = () => {
+    Haptic.light();
     scrollRef.current?.scrollTo({ y: 0, animated: true });
+  };
+
+  // 전체 콘텐츠의 하단 95%까지 내려갔을 때만 플로팅 버튼 노출(재관 스펙
+  // "95% 이상 스크롤 내려갔을때"). 최상단(메인 진입)엔 안 보이고, 항상 도달
+  // 가능한 비율 기준이라 대화 유무와 무관하게 동작한다. 스크롤 여지가 거의
+  // 없으면(짧은 화면) 아예 안 띄운다. setState 는 boolean 이 바뀔 때만.
+  const [showJumpTop, setShowJumpTop] = useState(false);
+  const handleHomeScroll = (e: {
+    nativeEvent: {
+      contentOffset: { y: number };
+      contentSize: { height: number };
+      layoutMeasurement: { height: number };
+    };
+  }) => {
+    const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+    const scrollRoom = contentSize.height - layoutMeasurement.height;
+    const nearBottom =
+      scrollRoom > 240 &&
+      contentOffset.y + layoutMeasurement.height >= contentSize.height * 0.95;
+    setShowJumpTop((prev) => (prev === nearBottom ? prev : nearBottom));
   };
 
   const updateTurn = (id: number, patch: Partial<Turn>) => {
@@ -1348,14 +1370,9 @@ export default function ChatEntryScreen() {
     setPinnedCurationProduct((prev) => (prev?.id === p.id ? null : p));
   };
 
-  // 큐레이션 상품 탭 — 로그인 상태면 PDP, 아니면 로그인 시트. PDP 로딩
-  // (GET /v1/products/{id})이 인증 필수라 비로그인 진입은 401 이 나므로,
-  // 홈에서 미리 게이트해 원자재 에러 대신 로그인 유도로 잇는다.
+  // 큐레이션 상품 탭 — 비로그인도 PDP 진입 가능(서버 GET /v1/products/{id}
+  // optional-auth 배포 완료, 2026-07-17). 찜·전송 같은 액션만 로그인 게이트.
   const handleCurationPress = (p: Product) => {
-    if (authStatus !== "authenticated") {
-      router.push("/login");
-      return;
-    }
     router.push(`/product/${p.id}`);
   };
 
@@ -1391,6 +1408,8 @@ export default function ChatEntryScreen() {
         // 스크롤(드래그) 시작하는 순간 키보드 내려감. 흔한 iOS 메시징 앱 UX.
         keyboardDismissMode="on-drag"
         showsVerticalScrollIndicator={false}
+        onScroll={handleHomeScroll}
+        scrollEventThrottle={16}
       >
         {/* 히어로 표제 + 큐레이션 구좌 — 항상 노출 (발견형 첫인상). */}
         <View style={styles.curationBlock}>
@@ -1933,6 +1952,33 @@ export default function ChatEntryScreen() {
         style={styles.composerFloat}
         pointerEvents="box-none"
       >
+        {/* 큐레이션 복귀 플로팅 버튼 — 스크롤을 큐레이션 아래로 충분히
+            내렸을 때만(showJumpTop) 컴포저 위에 떠서 최상단으로 데려간다.
+            메인 진입(최상단)에는 안 보인다. */}
+        {showJumpTop && !capLocked && (
+          <Animated.View
+            entering={FadeIn.duration(180)}
+            exiting={FadeOut.duration(180)}
+            style={styles.jumpTopRow}
+            pointerEvents="box-none"
+          >
+            <Pressable hitSlop={8} onPress={scrollToCuration}>
+              <GlassSurface
+                variant="pill"
+                isInteractive
+                style={styles.jumpTopPill}
+              >
+                <SymbolView
+                  name="chevron.up"
+                  size={14}
+                  tintColor={IOSColors.label}
+                  weight="semibold"
+                />
+                <Text style={styles.jumpTopText}>큐레이션</Text>
+              </GlassSurface>
+            </Pressable>
+          </Animated.View>
+        )}
         <View
           style={[
             styles.composerWrap,
@@ -2119,7 +2165,6 @@ export default function ChatEntryScreen() {
             const sid = sessionIdRef.current;
             router.push(sid ? `/sidebar?current=${sid}` : "/sidebar");
           }}
-          onOpenCuration={scrollToCuration}
           onOpenList={() => {
             const sid = sessionIdRef.current;
             router.push(sid ? `/history?session=${sid}` : "/history");
@@ -2149,6 +2194,26 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     zIndex: 40,
+  },
+  // 큐레이션 복귀 플로팅 버튼 — 컴포저 바로 위 중앙.
+  jumpTopRow: {
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  jumpTopPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    height: 38,
+    paddingHorizontal: 16,
+    borderRadius: 19,
+    overflow: "hidden",
+  },
+  jumpTopText: {
+    ...IOSText.subhead,
+    fontWeight: "600",
+    color: IOSColors.label,
+    fontFamily: IOSFont.sans,
   },
   // 큐레이션(발견) 블록 — 항상 최상단. CurationSheet rowScroll 의 -16
   // 인셋과 짝을 맞춰 좌우 16. (구 emptyScroll/emptyScrollContent 는 단일
