@@ -151,15 +151,36 @@ const HERO_GREETINGS = [
   "머릿속 그 옷,\n마법처럼 찾아드릴게요",
 ];
 
-// SSE 결과 카드의 caption(HTML-ish, "브랜드\n상품명" 형태)을 ProductCard 의
-// brand/name 으로 분해. 첫 줄=브랜드, 나머지=상품명(한 줄이면 브랜드만).
-function parseStreamCaption(caption: string): { brand: string; name: string } {
-  const stripped = caption.replace(/<[^>]+>/g, "").trim();
-  const lines = stripped
+// SSE 결과 카드의 caption(HTML-ish)을 ProductCard 의 brand/name/price 로 분해.
+// 서버 caption 순서(send_results.py): 브랜드[ · 서브카테고리] / "💰 ₩가격" /
+// 상품명 / "🏬 플랫폼". 가격 줄에서 숫자만 뽑아 priceWon 으로(큐레이션 카드와
+// 동일하게 가격 태그 노출), 플랫폼 줄은 카드에 안 쓴다.
+function parseStreamCaption(caption: string): {
+  brand: string;
+  name: string;
+  priceWon: number;
+} {
+  const lines = caption
+    .replace(/<[^>]+>/g, "")
     .split("\n")
     .map((l) => l.trim())
     .filter(Boolean);
-  return { brand: lines[0] ?? "", name: lines.slice(1).join(" ") };
+  let brand = "";
+  let name = "";
+  let priceWon = 0;
+  for (const line of lines) {
+    if (line.startsWith("💰")) {
+      const digits = line.replace(/[^0-9]/g, "");
+      if (digits) priceWon = parseInt(digits, 10);
+    } else if (line.startsWith("🏬")) {
+      // 플랫폼 — 카드엔 미표시
+    } else if (!brand) {
+      brand = line.split(" · ")[0].trim(); // 브랜드(서브카테고리 앞부분)
+    } else if (!name) {
+      name = line;
+    }
+  }
+  return { brand, name, priceWon };
 }
 
 const AGENT_INTRO_DEFAULT = "이런 거 어때? · 콕집기로 골라봐";
@@ -1685,7 +1706,8 @@ export default function ChatEntryScreen() {
                               : `/product/${productId}`;
                             router.push(url as never);
                           };
-                          const { brand, name } = parseStreamCaption(p.caption);
+                          const { brand, name, priceWon } =
+                            parseStreamCaption(p.caption);
                           return (
                             <ProductCard
                               key={key}
@@ -1693,7 +1715,7 @@ export default function ChatEntryScreen() {
                                 id: key,
                                 brand,
                                 name,
-                                priceWon: 0,
+                                priceWon,
                                 colorHint: IOSColors.systemGray5,
                                 imageUri: p.image_url,
                               }}
