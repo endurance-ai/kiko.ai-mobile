@@ -15,7 +15,6 @@ import {
   TextInput,
   View,
 } from "react-native";
-import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Image as ExpoImage } from "expo-image";
@@ -1952,33 +1951,6 @@ export default function ChatEntryScreen() {
         style={styles.composerFloat}
         pointerEvents="box-none"
       >
-        {/* 큐레이션 복귀 플로팅 버튼 — 스크롤을 큐레이션 아래로 충분히
-            내렸을 때만(showJumpTop) 컴포저 위에 떠서 최상단으로 데려간다.
-            메인 진입(최상단)에는 안 보인다. */}
-        {showJumpTop && !capLocked && (
-          <Animated.View
-            entering={FadeIn.duration(180)}
-            exiting={FadeOut.duration(180)}
-            style={styles.jumpTopRow}
-            pointerEvents="box-none"
-          >
-            <Pressable hitSlop={8} onPress={scrollToCuration}>
-              <GlassSurface
-                variant="pill"
-                isInteractive
-                style={styles.jumpTopPill}
-              >
-                <SymbolView
-                  name="chevron.up"
-                  size={14}
-                  tintColor={IOSColors.label}
-                  weight="semibold"
-                />
-                <Text style={styles.jumpTopText}>큐레이션</Text>
-              </GlassSurface>
-            </Pressable>
-          </Animated.View>
-        )}
         <View
           style={[
             styles.composerWrap,
@@ -2165,6 +2137,8 @@ export default function ChatEntryScreen() {
             const sid = sessionIdRef.current;
             router.push(sid ? `/sidebar?current=${sid}` : "/sidebar");
           }}
+          showCuration={showJumpTop}
+          onOpenCuration={scrollToCuration}
           onOpenList={() => {
             const sid = sessionIdRef.current;
             router.push(sid ? `/history?session=${sid}` : "/history");
@@ -2194,26 +2168,6 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     zIndex: 40,
-  },
-  // 큐레이션 복귀 플로팅 버튼 — 컴포저 바로 위 중앙.
-  jumpTopRow: {
-    alignItems: "center",
-    marginBottom: 10,
-  },
-  jumpTopPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    height: 38,
-    paddingHorizontal: 16,
-    borderRadius: 19,
-    overflow: "hidden",
-  },
-  jumpTopText: {
-    ...IOSText.subhead,
-    fontWeight: "600",
-    color: IOSColors.label,
-    fontFamily: IOSFont.sans,
   },
   // 큐레이션(발견) 블록 — 항상 최상단. CurationSheet rowScroll 의 -16
   // 인셋과 짝을 맞춰 좌우 16. (구 emptyScroll/emptyScrollContent 는 단일
