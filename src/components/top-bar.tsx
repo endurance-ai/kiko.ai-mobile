@@ -7,11 +7,12 @@ import { Haptic, IOSColors, IOSFont, IOSText } from '@/theme';
 
 type Props = {
   onOpenMenu?: () => void;
+  onOpenCuration?: () => void;
   onOpenList?: () => void;
   onOpenWishlist?: () => void;
 };
 
-export function TopBar({ onOpenMenu, onOpenList, onOpenWishlist }: Props) {
+export function TopBar({ onOpenMenu, onOpenCuration, onOpenList, onOpenWishlist }: Props) {
   const tap = (cb?: () => void) => () => {
     Haptic.light();
     cb?.();
@@ -32,6 +33,19 @@ export function TopBar({ onOpenMenu, onOpenList, onOpenWishlist }: Props) {
         </Pressable>
 
         <View style={styles.rightGroup}>
+          {/* 큐레이션 — 홈 스크롤 최상단(발견 구좌)으로 복귀. 히스토리 왼쪽. */}
+          <Pressable hitSlop={6} onPress={tap(onOpenCuration)}>
+            <GlassSurface variant="pill" isInteractive style={styles.textPill}>
+              <SymbolView
+                name="sparkles"
+                size={16}
+                tintColor={IOSColors.label}
+                weight="medium"
+              />
+              <Text style={styles.pillText}>큐레이션</Text>
+            </GlassSurface>
+          </Pressable>
+
           <Pressable hitSlop={6} onPress={tap(onOpenList)}>
             <GlassSurface variant="pill" isInteractive style={styles.textPill}>
               <SymbolView

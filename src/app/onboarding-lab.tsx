@@ -5,10 +5,10 @@
  * 화면이며, 내비게이션(sidebar, tab, _layout Stack.Screen 등)에 절대
  * 연결하지 않는다 — curation-lab.tsx 와 동일한 관례.
  *
- * 상태머신: 'welcome' → 'gender' → 'taste' → 'done'. 실제 서비스에서는
- * done 시점에 로컬 저장(secure-storage) 후 메인으로 진입하고, 로그인
- * 상태라면 POST /v1/onboarding 으로 서버에도 반영한다 — 여기서는 mock
- * 요약 화면만 보여준다.
+ * 상태머신: 'welcome' → 'gender' → 'taste' → 'done'. 완료 시 로컬 저장
+ * (AsyncStorage, src/state/onboarding.ts) 후 홈 진입 — 서버 반영은 로그인
+ * 성공 시점에 auth.tsx 가 promoteOnboardingToServer() 로 승격한다.
+ * 브랜드 검색은 GET /v1/brands/search 실연동 (실패 시 로컬 스냅샷 폴백).
  *
  * 규칙 참고: docs/design-system.md — 모든 디자인 값은 `@/theme` 토큰을
  * 사용하고(`IOSColors`, `IOSText`, `RadiusRole`, `Glass`, `Duration` 등),
@@ -41,8 +41,10 @@ import Animated, {
 import { useSafeAreaInsets, type EdgeInsets } from 'react-native-safe-area-context';
 
 import { GlassSurface } from '@/components/glass-surface';
+import { api } from '@/lib/api';
 import { saveOnboarding } from '@/state/onboarding';
-import { STYLE_NODES } from '@/state/style-nodes';
+import { REP_BRAND_IDS, STYLE_NODES } from '@/state/style-nodes';
+import type { BrandSearchResponse } from '@/types/api';
 import {
   BrandColors,
   BrandRole,
@@ -76,6 +78,7 @@ const GENDER_CARD_HEIGHT = 56;
 const BRAND_CHIP_HEIGHT = 48;
 const SEARCH_CHIP_HEIGHT = 44;
 const MAX_SEARCH_RESULTS = 8;
+const SEARCH_DEBOUNCE_MS = 250;
 // 성별 카드 선택 → 다음 스텝 자동 진입까지의 유예(스펙 300ms) — 선택 표시가
 // 눈에 보일 최소한의 시간만 주고 바로 넘어간다.
 const MIN_TASTE_PICKS = 3;
@@ -96,8 +99,12 @@ function getRepBrands(gender: 'women' | 'men'): string[] {
   return brands;
 }
 
+// 검색 결과 1건 — 서버 BrandSearchItem 의 화면용 축약. 로컬 스냅샷 폴백
+// 결과는 REP_BRAND_IDS 에 없으면 id: null (승격 시 제외되고 로컬에만 남음).
+type SearchHit = { id: number | null; name: string };
+
 // 검색 스냅샷 풀 — repBrand + sampleBrands 전체를 성별 기준으로 flatten·dedup.
-// 실서비스는 GET /v1/brands/search — 프로토타입은 이 로컬 스냅샷에서만 찾는다.
+// 기본 경로는 GET /v1/brands/search — 이 로컬 스냅샷은 오프라인/서버 오류 폴백.
 function getSearchPool(gender: 'women' | 'men'): string[] {
   const pool = new Set<string>();
   for (const node of STYLE_NODES) {
@@ -111,7 +118,7 @@ function getSearchPool(gender: 'women' | 'men'): string[] {
 
 // 선택된 브랜드명 → STYLE_NODES 역매핑으로 노드 id 유도 (done 화면 확인용).
 // repBrand 또는 sampleBrands 어느 쪽에 매칭돼도 해당 노드를 채택한다.
-function mapBrandsToNodeIds(selectedBrands: Set<string>, gender: Gender): number[] {
+function mapBrandsToNodeIds(selectedBrands: Map<string, number | null>, gender: Gender): number[] {
   if (!gender || selectedBrands.size === 0) return [];
   const ids: number[] = [];
   for (const node of STYLE_NODES) {
@@ -129,7 +136,8 @@ export default function OnboardingLabScreen() {
   const insets = useSafeAreaInsets();
   const [step, setStep] = useState<Step>('welcome');
   const [gender, setGender] = useState<Gender>(null);
-  const [selectedBrands, setSelectedBrands] = useState<Set<string>>(new Set());
+  // 픽 = 브랜드명 → brand_nodes.id (그리드는 REP_BRAND_IDS, 검색은 API 응답).
+  const [selectedBrands, setSelectedBrands] = useState<Map<string, number | null>>(new Map());
   const [searchQuery, setSearchQuery] = useState('');
 
   // 스텝 전환 애니메이션 — 새 스텝 콘텐츠가 opacity 0→1 + translateY 8→0 로
@@ -169,12 +177,12 @@ export default function OnboardingLabScreen() {
     setGender(next);
   };
 
-  const toggleBrand = (brand: string) => {
+  const toggleBrand = (brand: string, id: number | null) => {
     Haptic.selection();
     setSelectedBrands((prev) => {
-      const next = new Set(prev);
+      const next = new Map(prev);
       if (next.has(brand)) next.delete(brand);
-      else next.add(brand);
+      else next.set(brand, id);
       return next;
     });
   };
@@ -183,18 +191,21 @@ export default function OnboardingLabScreen() {
     Haptic.light();
     setStep('welcome');
     setGender(null);
-    setSelectedBrands(new Set());
+    setSelectedBrands(new Map());
     setSearchQuery('');
   };
 
   // 완료(시작하기/건너뛰기) → gender·selectedBrands 를 로컬 저장(AsyncStorage,
   // src/state/onboarding.ts)하고 홈으로 진입. 홈이 이 값으로 유도 칩을 성별
-  // 분기한다. 로그인 성공 시 서버 프로필로 승격(POST /v1/onboarding — 추후
-  // 배선, 서버 기존 값 우선). 스플래시(index.tsx)가 미완료+비로그인일 때만
-  // 이 화면으로 게이트한다.
+  // 분기한다. 로그인 성공 시 서버 프로필로 승격 — auth.tsx 가
+  // promoteOnboardingToServer() 로 POST /v1/onboarding 전송. 스플래시
+  // (index.tsx)가 미완료+비로그인일 때만 이 화면으로 게이트한다.
   const handleFinish = () => {
     Haptic.medium();
-    void saveOnboarding({ gender, brands: [...selectedBrands] });
+    void saveOnboarding({
+      gender,
+      brands: [...selectedBrands].map(([name, id]) => ({ id, name })),
+    });
     router.replace('/home');
   };
 
@@ -532,18 +543,36 @@ function GenderCard({
   selected: boolean;
   onPress: () => void;
 }) {
+  // 글래스 대신 애플 표준 filled 버튼 — iOS 26 리퀴드 글래스는 흰 배경 위에
+  // 굴절할 배경이 없어 사실상 투명해 버튼으로 안 읽힌다. 미선택은 보더 없이
+  // secondarySystemFill(반투명 회색, iOS "회색 filled 버튼" 표준)로 채우고,
+  // 선택은 label(블랙) 채움 + 텍스트 반전 — CTA 와 같은 accent 문법.
+  // press-scale 0.97 스프링은 PrimaryButton 과 동일 — 큰 탭 타깃에 즉시
+  // 반응하는 피드백(apple-design §1)을 CTA 와 통일한다.
+  const scale = useSharedValue(1);
+  const scaleStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
   return (
-    <Pressable onPress={onPress}>
-      <GlassSurface {...Glass.chip} isInteractive style={styles.genderCard}>
-        {/* GlassSurface 는 내부적으로 style 뒤에 자체 base/edge 스타일을 다시
-            머지해 backgroundColor 를 style prop 으로 덮어쓰기 어렵다 —
-            선택 강조는 children 으로 얹는 불투명 오버레이(블랙/label)로
-            그린다. 텍스트는 반전(systemBackground). */}
-        {selected && <View pointerEvents="none" style={styles.genderCardTint} />}
+    <Pressable
+      unstable_pressDelay={0}
+      onPressIn={() => {
+        scale.value = withSpring(0.97, Motion.snappy);
+      }}
+      onPressOut={() => {
+        scale.value = withSpring(1, Motion.snappy);
+      }}
+      onPress={onPress}
+    >
+      <Animated.View
+        style={[
+          styles.genderCard,
+          selected ? styles.genderCardSelected : styles.genderCardUnselected,
+          scaleStyle,
+        ]}
+      >
         <Text style={[styles.genderCardText, selected && styles.genderCardTextSelected]}>
           {label}
         </Text>
-      </GlassSurface>
+      </Animated.View>
     </Pressable>
   );
 }
@@ -557,18 +586,66 @@ function TasteStep({
   onChangeSearch,
 }: {
   gender: Gender;
-  selectedBrands: Set<string>;
-  onToggleBrand: (brand: string) => void;
+  selectedBrands: Map<string, number | null>;
+  onToggleBrand: (brand: string, id: number | null) => void;
   searchQuery: string;
   onChangeSearch: (q: string) => void;
 }) {
   const gridBrands = useMemo(() => (gender ? getRepBrands(gender) : []), [gender]);
   const searchPool = useMemo(() => (gender ? getSearchPool(gender) : []), [gender]);
-  const searchResults = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    if (!q) return [];
-    return searchPool.filter((brand) => brand.toLowerCase().includes(q)).slice(0, MAX_SEARCH_RESULTS);
-  }, [searchPool, searchQuery]);
+
+  // 검색으로 골랐지만 대표 그리드엔 없는 브랜드 — 그리드 맨 앞에 고정 노출.
+  // 이게 없으면 검색어를 지우는 순간 선택한 칩이 사라져 "내가 뭘 골랐는지"가
+  // 증발한다(선택 유지 = 온보딩 신뢰의 기본). 선택 해제하면 자연히 목록에서
+  // 빠진다(대표 브랜드가 아니므로). 순서는 선택(삽입) 순서 유지.
+  const extraSelected = useMemo(
+    () => [...selectedBrands.keys()].filter((name) => !gridBrands.includes(name)),
+    [selectedBrands, gridBrands],
+  );
+
+  // 브랜드 → 칩 tint 매핑. 그리드 칩이 실제로 그리는 색과 정확히 같은 값을
+  // 담아, 검색 결과 칩도 같은 브랜드면 같은 색으로 선택되게 한다(선택색 =
+  // 상단 추가 칩색 일치). extraSelected/gridBrands 는 겹치지 않으므로 충돌 없음.
+  const tintOf = useMemo(() => {
+    const m = new Map<string, string>();
+    gridBrands.forEach((b, i) => m.set(b, NODE_CHIP_TINTS[i % NODE_CHIP_TINTS.length]));
+    extraSelected.forEach((b, i) => m.set(b, NODE_CHIP_TINTS[i % NODE_CHIP_TINTS.length]));
+    return m;
+  }, [gridBrands, extraSelected]);
+
+  // 브랜드 검색 — GET /v1/brands/search (no auth, 서버 정규화 prefix 매치).
+  // 타이핑 디바운스 250ms, 응답 역전 방지는 cancelled 플래그로. 서버 실패
+  // 시에만 로컬 스냅샷 부분일치 폴백 (오프라인에서도 그리드+검색이 살아있게).
+  const [searchResults, setSearchResults] = useState<SearchHit[]>([]);
+  useEffect(() => {
+    const q = searchQuery.trim();
+    if (!q) {
+      setSearchResults([]);
+      return;
+    }
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      api
+        .get<BrandSearchResponse>('/v1/brands/search', { q }, false)
+        .then((res) => {
+          if (!cancelled) setSearchResults(res.brands.map(({ id, name }) => ({ id, name })));
+        })
+        .catch(() => {
+          if (cancelled) return;
+          const lq = q.toLowerCase();
+          setSearchResults(
+            searchPool
+              .filter((brand) => brand.toLowerCase().includes(lq))
+              .slice(0, MAX_SEARCH_RESULTS)
+              .map((name) => ({ id: REP_BRAND_IDS[name] ?? null, name })),
+          );
+        });
+    }, SEARCH_DEBOUNCE_MS);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [searchQuery, searchPool]);
 
   // 스크롤 하단 경계 페이드 — 칩이 하드 클립되지 않고 배경으로 녹아들게.
   // 주의: 웹 프리뷰는 IOSColors 폴백이 고정 라이트라서 OS 스킴과 무관하게
@@ -586,7 +663,7 @@ function TasteStep({
       <Text style={styles.stepSubtitle}>여기서부터 취향을 맞춰갈게요</Text>
 
       {/* 검색창은 스크롤 밖 고정 — 그리드를 아무리 내려도 항상 그 자리.
-          실서비스는 GET /v1/brands/search, 프로토타입은 로컬 스냅샷 매치. */}
+          GET /v1/brands/search 디바운스 호출, 실패 시 로컬 스냅샷 매치. */}
       <GlassSurface {...Glass.composer} style={styles.searchField}>
         {Platform.OS !== 'web' && (
           <SymbolView name="magnifyingglass" size={16} tintColor={IOSColors.secondaryLabel} weight="regular" />
@@ -602,12 +679,13 @@ function TasteStep({
 
       {searchResults.length > 0 && (
         <View style={styles.searchResultsRow}>
-          {searchResults.map((brand) => (
+          {searchResults.map((hit) => (
             <SearchResultChip
-              key={brand}
-              label={brand}
-              selected={selectedBrands.has(brand)}
-              onPress={() => onToggleBrand(brand)}
+              key={hit.id ?? hit.name}
+              label={hit.name}
+              tint={tintOf.get(hit.name) ?? BrandRole.primary}
+              selected={selectedBrands.has(hit.name)}
+              onPress={() => onToggleBrand(hit.name, hit.id)}
             />
           ))}
         </View>
@@ -621,13 +699,24 @@ function TasteStep({
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.brandGrid}>
+          {/* 검색으로 추가된 선택 브랜드 — 항상 선택 상태로 그리드 앞에.
+              id 는 선택 시 저장한 값(검색 API 응답)을 그대로 재사용. */}
+          {extraSelected.map((brand, i) => (
+            <BrandChip
+              key={brand}
+              label={brand}
+              tint={NODE_CHIP_TINTS[i % NODE_CHIP_TINTS.length]}
+              selected
+              onPress={() => onToggleBrand(brand, selectedBrands.get(brand) ?? null)}
+            />
+          ))}
           {gridBrands.map((brand, i) => (
             <BrandChip
               key={brand}
               label={brand}
               tint={NODE_CHIP_TINTS[i % NODE_CHIP_TINTS.length]}
               selected={selectedBrands.has(brand)}
-              onPress={() => onToggleBrand(brand)}
+              onPress={() => onToggleBrand(brand, REP_BRAND_IDS[brand] ?? null)}
             />
           ))}
         </View>
@@ -701,13 +790,16 @@ function BrandChip({
 }
 
 // 검색 결과 칩 — 그리드 칩보다 한 단계 작은 서브 칩. 탭 시 그리드와 동일한
-// selectedBrands 상태로 합류(toggleBrand 재사용)한다.
+// selectedBrands 상태로 합류(toggleBrand 재사용)한다. 선택 시 tint 는 그리드
+// 트윈 칩과 같은 값(tintOf)을 받아 "선택색 = 상단 추가 칩색"을 맞춘다.
 function SearchResultChip({
   label,
+  tint,
   selected,
   onPress,
 }: {
   label: string;
+  tint: string;
   selected: boolean;
   onPress: () => void;
 }) {
@@ -718,6 +810,7 @@ function SearchResultChip({
           style={[
             styles.searchResultChip,
             selected && styles.brandChipSelected,
+            selected && { backgroundColor: tint },
             pressed && styles.brandChipPressed,
           ]}
         >
@@ -745,11 +838,11 @@ function DoneStep({
   onReset,
 }: {
   gender: Gender;
-  selectedBrands: Set<string>;
+  selectedBrands: Map<string, number | null>;
   insets: EdgeInsets;
   onReset: () => void;
 }) {
-  const brandList = useMemo(() => Array.from(selectedBrands), [selectedBrands]);
+  const brandList = useMemo(() => Array.from(selectedBrands.keys()), [selectedBrands]);
   const nodeIds = useMemo(() => mapBrandsToNodeIds(selectedBrands, gender), [selectedBrands, gender]);
   const genderLabel = gender === 'women' ? '여성복' : gender === 'men' ? '남성복' : '미선택';
 
@@ -931,7 +1024,7 @@ const styles = StyleSheet.create({
     marginTop: Spacing.five,
     gap: Spacing.three,
   },
-  // 글래스 캡슐 칩 — 위아래 1개씩. 취향 칩과 같은 캡슐 문법, 소재만 글래스.
+  // 채움 캡슐 pill — 위아래 1개씩. 선택 상태만 색이 갈린다.
   genderCard: {
     // 다이나믹 타입 확대 시 라벨이 잘리지 않게 min 만 고정.
     minHeight: GENDER_CARD_HEIGHT,
@@ -940,9 +1033,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     overflow: 'hidden',
   },
+  // 미선택 = 보더 없는 회색 채움 (iOS 표준 secondary filled 버튼).
+  genderCardUnselected: {
+    backgroundColor: IOSColors.secondarySystemFill,
+  },
   // 선택 = 블랙 필 (label 토큰 — 라이트=검정/다크=흰색, CTA 버튼과 동일 문법).
-  genderCardTint: {
-    ...StyleSheet.absoluteFill,
+  genderCardSelected: {
     backgroundColor: IOSColors.label,
   },
   genderCardText: {
@@ -1064,14 +1160,14 @@ const styles = StyleSheet.create({
     gap: Spacing.two,
     marginTop: Spacing.three,
   },
+  // 보더 없는 회색 채움 — 성별 카드 미선택과 같은 secondary filled 문법으로
+  // 통일 (아웃라인 칩은 흰 배경에서 약하고 결이 튀어서 폐기).
   searchResultChip: {
     minHeight: SEARCH_CHIP_HEIGHT,
     justifyContent: 'center',
     paddingHorizontal: Spacing.three,
     borderRadius: SEARCH_CHIP_HEIGHT,
-    borderWidth: 1.5,
-    borderColor: IOSColors.opaqueSeparator,
-    backgroundColor: 'transparent',
+    backgroundColor: IOSColors.secondarySystemFill,
   },
   // 그리드 칩(headline)의 한 단계 아래 — 보조 칩은 subhead 로 통일.
   searchResultChipText: {

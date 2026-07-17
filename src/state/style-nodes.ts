@@ -9,6 +9,49 @@
 
 export type StyleNode = (typeof STYLE_NODES)[number];
 
+// repBrand* → public.brand_nodes.id (2026-07-15 스냅샷, dev GET /v1/brands/search
+// 정확 일치 36/36 해석 — node_id 교차검증 완료). 온보딩 그리드 픽을
+// POST /v1/onboarding 의 selected_brand_ids 로 보내기 위한 매핑.
+// 검색 추가 픽은 검색 API 응답이 id 를 직접 주므로 이 맵을 안 탄다.
+export const REP_BRAND_IDS: Record<string, number> = {
+  'Matin Kim': 5344,
+  'A.P.C.': 234,
+  'LOW CLASSIC': 136,
+  'Mardi Mercredi': 4820,
+  'Thom Browne': 200,
+  'Carhartt WIP': 445,
+  NEEDLES: 1191,
+  WOOYOUNGMI: 1786,
+  thisisneverthat: 2411,
+  Supreme: 1591,
+  'ADER error': 1673,
+  'Off-White': 2083,
+  'HYEIN SEO': 500,
+  MM6: 43,
+  'Gentle Monster': 1993,
+  'Vivienne Westwood': 1769,
+  KIJUN: 845,
+  SKIMS: 587,
+  "Arc'teryx": 691,
+  Moncler: 1181,
+  MARGESHERWOOD: 1789,
+  'Post Archive Faction': 3922,
+  'Maison Kitsuné': 1171,
+  Lemaire: 664,
+  nanamica: 589,
+  'Polo Ralph Lauren': 67,
+  EASTLOGUE: 2585,
+  'Engineered Garments': 1726,
+  'Fear of God': 609,
+  'Rick Owens': 1997,
+  'Juun.J': 1436,
+  sacai: 1167,
+  Gucci: 490,
+  Salomon: 787,
+  'Stone Island': 1758,
+  'ANDERSSON BELL': 585,
+};
+
 export const STYLE_NODES = [
   {"id": 1, "code": "A", "nameKo": "컨템퍼러리 캐주얼", "nameEn": "Contemporary Casual", "brandCount": 394, "womenBrandCount": 187, "menBrandCount": 127, "repBrandWomen": "Matin Kim", "repBrandMen": "Post Archive Faction", "sampleBrandsWomen": ["ANYTIME LOREAK (애니타임로릭)", "BONNIE CLYDE", "COA NYC", "Dunst", "Grlfrnd", "HommeGirls"], "sampleBrandsMen": ["ANYTIME LOREAK (애니타임로릭)", "BONNIE CLYDE", "CARRER", "Dunst", "Glass Cypress", "Howlin’"]},
   {"id": 2, "code": "B", "nameKo": "프렌치 이펄리스", "nameEn": "French Effortless", "brandCount": 87, "womenBrandCount": 32, "menBrandCount": 9, "repBrandWomen": "A.P.C.", "repBrandMen": "Maison Kitsuné", "sampleBrandsWomen": ["OSPERA", "Isabel Marant Etoile", "IRO Paris", "REQINS", "Maison Kitsuné", "Loulou de Saison"], "sampleBrandsMen": ["Officine Générale", "OSPERA", "Maison Kitsuné", "AMI Paris", "A.P.C.", "Becay"]},

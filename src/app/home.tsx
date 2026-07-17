@@ -45,6 +45,7 @@ import { uploadImage } from "@/lib/uploads";
 import { CurationSheet } from "@/components/curation-sheet";
 import { useAuth } from "@/state/auth";
 import { useBanner } from "@/state/banner";
+import { useCuration } from "@/state/curation";
 import { readOnboardingGender, type OnboardingGender } from "@/state/onboarding";
 import { chipsForGender, type SuggestionChip } from "@/state/suggestion-chips";
 import { useCap } from "@/state/cap";
@@ -139,12 +140,16 @@ const IDLE_AFTER_RESULTS_HINTS = [
 ];
 const PICK_PROMPT = (n: number) =>
   `이 사진에서 ${n}개 아이템 찾았어. 어떤 거 찾아줄까?`;
-// Empty-state greetings shown in the centered hero before the first turn.
-// One is picked at random per mount. Named variants substitute the user's
-// display_name (skipped when name isn't loaded yet — generic ones still
-// keep the surface from looking blank).
-// (빈 상태 그리팅 카피 풀 제거 — 7/14. 빈 상태는 큐레이션 시트가 첫인상.
-//  카피 자산은 curation-lab.tsx HERO_GREETINGS 에 보존.)
+// 빈 상태 히어로 카피 — 큐레이션 시트 위에 얹는 메인 표제. 핵심가치를
+// 하나씩 말하는 3종을 마운트마다 랜덤 로테이션 (7/16 재이식 — 7/14 정리 때
+// curation-lab.tsx HERO_GREETINGS 로 보존했던 자산 복원, 카피 원본 동일).
+// ① 발견: 인디 브랜드 풀·신선함 ② 취향: 발견·취향 매칭 ③ 목적: v1.0 시그니처.
+// 로그인 시 ②의 이름 치환("OO님이 몰랐던")은 display_name fetch 와 함께 추후.
+const HERO_GREETINGS = [
+  "몰랐던 브랜드가\n매일 새로 도착해요",
+  "당신이 몰랐던\n취향저격 브랜드",
+  "머릿속 그 옷,\n마법처럼 찾아드릴게요",
+];
 
 const AGENT_INTRO_DEFAULT = "이런 거 어때? · 콕집기로 골라봐";
 const AGENT_INTRO_NARROWING = "이런 거 찾았어 · 근데 좀 갈리네";
@@ -321,6 +326,12 @@ export default function ChatEntryScreen() {
   const [uploading, setUploading] = useState(false);
   const [messages, setMessages] = useState<Turn[]>([]);
   const [pinnedId, setPinnedId] = useState<string | null>(null);
+  // 빈 상태(큐레이션 구좌)에서 + 핀한 상품 — 결과 리스트의 pinnedId 모델은
+  // lastTurn.results 를 조회하는데 큐레이션 상품은 거기 없으므로 별도 보관.
+  // 컴포저 첨부(pinnedAttachment)로 흘러 들어가고, 전송은 비로그인 게이트가
+  // 로그인 시트로 보낸다 (handleSend).
+  const [pinnedCurationProduct, setPinnedCurationProduct] =
+    useState<Product | null>(null);
   const scrollRef = useRef<ScrollView | null>(null);
   const nextIdRef = useRef(1);
   const sessionIdRef = useRef<string | null>(null);
@@ -469,6 +480,16 @@ export default function ChatEntryScreen() {
     productName?: string;
     productPrice?: string;
   } | null = (() => {
+    // 큐레이션 핀 우선 — 빈 상태에서 온 상품은 messages 밖에 있다.
+    if (pinnedCurationProduct) {
+      return {
+        thumbColor: pinnedCurationProduct.colorHint,
+        imageUrl: pinnedCurationProduct.imageUri,
+        label: pinnedCurationProduct.brand,
+        productId: pinnedCurationProduct.id,
+        productName: pinnedCurationProduct.name,
+      };
+    }
     if (!pinnedId) return null;
     const mockHit = lastTurn?.results?.find((p) => p.id === pinnedId);
     if (mockHit) {
@@ -495,12 +516,14 @@ export default function ChatEntryScreen() {
     return null;
   })();
   // Legacy name kept for the few mock-only branches still using `.colorHint`.
-  const pinnedProduct = pinnedId
-    ? (lastTurn?.results?.find((p) => p.id === pinnedId) ?? null)
-    : null;
+  const pinnedProduct =
+    pinnedCurationProduct ??
+    (pinnedId ? (lastTurn?.results?.find((p) => p.id === pinnedId) ?? null) : null);
   const critiqueChips = CRITIQUE_CHIPS;
 
   // 골든셋 유도 칩 (빈 상태 전용) — 온보딩에서 받은 성별로 분기.
+  // GET /v1/curation 이 구좌(CurationSheet)와 칩을 함께 공급한다. 서버 칩이
+  // 없으면(오프라인, men 골든셋 등록 전 빈 배열) 로컬 상수 폴백 —
   // 여성 = 문형 채택 셋 / 남성 = 화이트리스트 셋 (src/state/suggestion-chips.ts).
   const [onboardGender, setOnboardGender] = useState<OnboardingGender | null>(
     null,
@@ -508,7 +531,15 @@ export default function ChatEntryScreen() {
   useEffect(() => {
     void readOnboardingGender().then(setOnboardGender);
   }, []);
-  const suggestionChips = chipsForGender(onboardGender);
+  const { sections: curationSections, chips: curationChips } =
+    useCuration(onboardGender);
+  const suggestionChips = curationChips ?? chipsForGender(onboardGender);
+
+  // 빈 상태 히어로 표제 — 마운트당 1회 랜덤 (curation-lab Hero3 관례 동일).
+  const heroGreeting = useMemo(
+    () => HERO_GREETINGS[Math.floor(Math.random() * HERO_GREETINGS.length)],
+    [],
+  );
 
   // Composer placeholder — one random pick per state context. Recomputes
   // only when the relevant state combo changes (busy ↔ idle, results ↔ empty),
@@ -529,14 +560,21 @@ export default function ChatEntryScreen() {
   const kbHeight = useKeyboardHeight();
 
   // Auto-scroll to bottom whenever messages, status, or keyboard change.
+  // 대화가 있을 때만 — 대화 없는(큐레이션만) 상태에서 scrollToEnd 하면
+  // 큐레이션이 위로 밀려 올라가므로, 최초 진입은 최상단(큐레이션)을 유지한다.
   useEffect(() => {
-    if (!scrollRef.current) return;
+    if (!scrollRef.current || messages.length === 0) return;
     const t = setTimeout(
       () => scrollRef.current?.scrollToEnd({ animated: true }),
       60,
     );
     return () => clearTimeout(t);
   }, [messages, kbHeight]);
+
+  // 헤더 '큐레이션' 버튼 — 대화를 아무리 내려도 최상단 큐레이션으로 복귀.
+  const scrollToCuration = () => {
+    scrollRef.current?.scrollTo({ y: 0, animated: true });
+  };
 
   const updateTurn = (id: number, patch: Partial<Turn>) => {
     setMessages((prev) =>
@@ -579,7 +617,7 @@ export default function ChatEntryScreen() {
     setText("");
     setPickedImage(null);
     pickedAssetRef.current = null;
-    setPinnedId(null);
+    clearPin();
 
     if (hasImageInput) {
       setTimeout(() => {
@@ -828,7 +866,7 @@ export default function ChatEntryScreen() {
       })(),
     };
     setMessages((prev) => [...prev, turn]);
-    if (attachment) setPinnedId(null);
+    if (attachment) clearPin();
     // Server takes plain text; if a product is pinned, prefix the message so
     // the ReAct loop anchors to it.
     // Build a context-rich prefix the server's ReAct agent can anchor on.
@@ -1294,6 +1332,42 @@ export default function ChatEntryScreen() {
     setPinnedId((prev) => (prev === p.id ? null : p.id));
   };
 
+  // 컴포저 핀 해제 — 결과 핀(pinnedId)과 큐레이션 핀(pinnedCurationProduct)
+  // 어느 쪽이든 한 번에 비운다.
+  const clearPin = () => {
+    setPinnedId(null);
+    setPinnedCurationProduct(null);
+  };
+
+  // 큐레이션 카드 + 핀 토글 — 같은 상품을 다시 누르면 해제. 컴포저 위에
+  // 상품 칩이 뜨고, 전송 시 handleSend 의 비로그인 게이트가 로그인 시트로
+  // 보낸다 (로그인 상태면 정상 검색 앵커로 사용).
+  const handlePinCuration = (p: Product) => {
+    if (capLocked) return;
+    setPinnedId(null);
+    setPinnedCurationProduct((prev) => (prev?.id === p.id ? null : p));
+  };
+
+  // 큐레이션 상품 탭 — 로그인 상태면 PDP, 아니면 로그인 시트. PDP 로딩
+  // (GET /v1/products/{id})이 인증 필수라 비로그인 진입은 401 이 나므로,
+  // 홈에서 미리 게이트해 원자재 에러 대신 로그인 유도로 잇는다.
+  const handleCurationPress = (p: Product) => {
+    if (authStatus !== "authenticated") {
+      router.push("/login");
+      return;
+    }
+    router.push(`/product/${p.id}`);
+  };
+
+  // 큐레이션 상품 찜 — 로그인 상태면 위시리스트 토글, 아니면 로그인 시트.
+  const handleCurationSave = (p: Product) => {
+    if (authStatus !== "authenticated") {
+      router.push("/login");
+      return;
+    }
+    void toggleWishlist(String(p.id));
+  };
+
   const handleRemovePreview = () => {
     Haptic.light();
     setPickedImage(null);
@@ -1304,21 +1378,37 @@ export default function ChatEntryScreen() {
 
   return (
     <View style={styles.root}>
-      {hasConversation ? (
-        <ScrollView
-          ref={scrollRef}
-          contentContainerStyle={[
-            styles.chatContent,
-            {
-              paddingTop: topPad,
-              paddingBottom: insets.bottom + 180 + kbHeight,
-            },
-          ]}
-          keyboardShouldPersistTaps="handled"
-          // 스크롤(드래그) 시작하는 순간 키보드 내려감. 흔한 iOS 메시징 앱 UX.
-          keyboardDismissMode="on-drag"
-          showsVerticalScrollIndicator={false}
-        >
+      {/* 홈 = 단일 스크롤. 큐레이션(발견 구좌)이 항상 최상단에 있고, 사용자가
+          요청을 보내면 그 아래로 대화가 이어붙는다. 최초 진입은 최상단
+          유지(auto-scroll 가드), 대화 후엔 헤더 '큐레이션' 버튼으로 복귀. */}
+      <ScrollView
+        ref={scrollRef}
+        contentContainerStyle={{
+          paddingTop: topPad + 16,
+          paddingBottom: insets.bottom + 180 + kbHeight,
+        }}
+        keyboardShouldPersistTaps="handled"
+        // 스크롤(드래그) 시작하는 순간 키보드 내려감. 흔한 iOS 메시징 앱 UX.
+        keyboardDismissMode="on-drag"
+        showsVerticalScrollIndicator={false}
+      >
+        {/* 히어로 표제 + 큐레이션 구좌 — 항상 노출 (발견형 첫인상). */}
+        <View style={styles.curationBlock}>
+          <Text style={styles.emptyHeroTitle} numberOfLines={2}>
+            {heroGreeting}
+          </Text>
+          <CurationSheet
+            sections={curationSections}
+            pinnedProductId={pinnedCurationProduct?.id ?? null}
+            onPressProduct={handleCurationPress}
+            onPinProduct={handlePinCuration}
+            onSaveProduct={handleCurationSave}
+            isSaved={(id) => isWishlisted(id)}
+          />
+        </View>
+
+        {hasConversation && (
+          <View style={styles.conversationBlock}>
           {messages.map((turn) => {
             const isLast = turn.id === lastTurn?.id;
             const agentText = turn.narrowing
@@ -1831,27 +1921,9 @@ export default function ChatEntryScreen() {
               </View>
             );
           })}
-        </ScrollView>
-      ) : (
-        // 빈 상태 = 발견형 본진 (3안 이식) — 히어로 카피 아래로 큐레이션
-        // 구좌가 스크롤로 이어진다. 목적을 강요하지 않고 구경하다 디깅으로
-        // 빠지는 진입이 기본값. 드래그 시작 시 키보드 내림.
-        <ScrollView
-          style={styles.emptyScroll}
-          // topPad = insets.top + 플로팅 탑바 높이 — 결과 리스트와 동일한
-          // 클리어런스. +16 은 첫 구좌 헤더가 탑바에 붙어 보인다는 7/14
-          // 피드백 반영 숨통.
-          contentContainerStyle={[styles.emptyScrollContent, { paddingTop: topPad + 16 }]}
-          keyboardDismissMode="on-drag"
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-          {/* 그리팅·로그인 버튼 제거 (7/14) — 빈 상태는 큐레이션이 곧
-              첫인상. 로그인 진입은 검색 시도 시 게이트(runStreamingTurn)와
-              사이드바에 남아 있다. */}
-          <CurationSheet />
-        </ScrollView>
-      )}
+          </View>
+        )}
+      </ScrollView>
 
       {/* Composer — floats over content so chips/input show real glass with
           the result cards scrolling underneath. */}
@@ -1892,7 +1964,7 @@ export default function ChatEntryScreen() {
                 <Text style={styles.attachmentBrand} numberOfLines={1}>
                   {pinnedAttachment.label}
                 </Text>
-                <Pressable hitSlop={6} onPress={() => setPinnedId(null)}>
+                <Pressable hitSlop={6} onPress={clearPin}>
                   <SymbolView
                     name="xmark.circle.fill"
                     size={18}
@@ -2047,6 +2119,7 @@ export default function ChatEntryScreen() {
             const sid = sessionIdRef.current;
             router.push(sid ? `/sidebar?current=${sid}` : "/sidebar");
           }}
+          onOpenCuration={scrollToCuration}
           onOpenList={() => {
             const sid = sessionIdRef.current;
             router.push(sid ? `/history?session=${sid}` : "/history");
@@ -2077,24 +2150,38 @@ const styles = StyleSheet.create({
     bottom: 0,
     zIndex: 40,
   },
-  // Empty state
-  // Empty hero — Claude-browser style: single centered headline, no cards.
-  // 빈 상태 스크롤 시트 (3안 이식) — 큐레이션 구좌.
-  // (그리팅 히어로·로그인 pill 스타일 제거 — 7/14)
-  emptyScroll: {
-    flex: 1,
+  // 큐레이션(발견) 블록 — 항상 최상단. CurationSheet rowScroll 의 -16
+  // 인셋과 짝을 맞춰 좌우 16. (구 emptyScroll/emptyScrollContent 는 단일
+  // 스크롤 병합으로 제거 — 대화·큐레이션이 한 ScrollView 를 공유한다.)
+  curationBlock: {
+    paddingHorizontal: 16,
   },
-  emptyScrollContent: {
-    paddingHorizontal: 16, // CurationSheet rowScroll 의 -16 인셋과 짝
-    paddingBottom: 200, // 플로팅 컴포저(칩 행 포함) 아래로 안 깔리게
+  // 대화 블록 — 큐레이션 아래로 이어붙는다. 대화 버블은 좌우 20(기존
+  // chatContent 값). 큐레이션과 시각적으로 떨어지게 상단 여백 + 헤어라인.
+  conversationBlock: {
+    paddingHorizontal: 20,
+    marginTop: 8,
+    paddingTop: 24,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: IOSColors.separator,
+    gap: 22, // 기존 chatContent 의 턴 간격 — 병합 후에도 유지
+  },
+  // 히어로 표제 — curation-lab heroTitleManifesto 확정 튜닝값 그대로
+  // (title1 기반, 아이폰 14 과대·과볼드 피드백 반영 semibold + 넉넉한 행간).
+  // 좌측 paddingHorizontal 은 emptyScrollContent 의 16 을 물려받아 구좌
+  // 섹션 타이틀과 같은 기준선 공유. 아래 여백은 hero3 의 paddingBottom(32).
+  emptyHeroTitle: {
+    ...IOSText.title1,
+    fontSize: 27,
+    lineHeight: 38,
+    fontWeight: "600",
+    letterSpacing: -0.2,
+    color: IOSColors.label,
+    fontFamily: IOSFont.sans,
+    textAlign: "left",
+    paddingBottom: 32,
   },
   // Conversation
-  chatContent: {
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 24,
-    gap: 22,
-  },
   turn: {
     gap: 14,
   },

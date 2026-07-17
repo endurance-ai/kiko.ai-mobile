@@ -13,8 +13,13 @@ const CARD_HEIGHT = 196;
 type Props = {
   product: Product;
   pinned?: boolean;
+  /** 찜(위시리스트) 상태. onSave 가 있을 때만 하트 버튼을 렌더한다. */
+  saved?: boolean;
   onPress?: () => void;
   onPin?: () => void;
+  /** 찜 토글. 넘기면 핀(+) 아래 하트 버튼이 함께 뜬다. 비로그인 게이트는
+   *  호출부 책임 (로그인 시트 유도 등) — 카드는 콜백만 위임한다. */
+  onSave?: () => void;
   /** 이 노출을 발생시킨 검색의 search_id. 없으면 impression 미발사. */
   searchId?: string | null;
   /** 리스트에서의 0-based 위치. */
@@ -26,8 +31,10 @@ type Props = {
 export function ProductCard({
   product,
   pinned = false,
+  saved = false,
   onPress,
   onPin,
+  onSave,
   searchId,
   position,
   source,
@@ -49,6 +56,10 @@ export function ProductCard({
     Haptic.selection();
     onPin?.();
   };
+  const handleSave = () => {
+    Haptic.selection();
+    onSave?.();
+  };
 
   return (
     <View style={styles.root}>
@@ -63,16 +74,40 @@ export function ProductCard({
           <View style={[styles.image, { backgroundColor: product.colorHint }]} />
         )}
 
-        {/* Pin (+) — top right. Sits on a white pill over the photo, so the
-            icon must stay dark regardless of system color scheme. */}
-        <Pressable hitSlop={8} style={styles.pinBtn} onPress={handlePin}>
-          <SymbolView
-            name={pinned ? 'checkmark' : 'plus'}
-            size={14}
-            tintColor="#1C1C1E"
-            weight="bold"
-          />
-        </Pressable>
+        {/* 액션 행 — top right. 찜(하트) 왼쪽, 핀(+) 오른쪽으로 가로 배치.
+            흰 알약 위에 얹혀서 아이콘은 시스템 스킴과 무관하게 항상 딥그레이.
+            찜 on 상태만 알약을 label(다크) 로 채우고 하트를 반전한다 —
+            결과 카드(streamCardHeartBtnOn)와 동일한 on-state 문법. */}
+        <View style={styles.actionRow}>
+          {onSave && (
+            <Pressable
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 3 }}
+              style={[styles.pinBtn, saved && styles.saveBtnOn]}
+              onPress={handleSave}
+            >
+              <SymbolView
+                name={saved ? 'heart.fill' : 'heart'}
+                size={13}
+                tintColor={saved ? IOSColors.systemBackground : '#1C1C1E'}
+                weight="bold"
+              />
+            </Pressable>
+          )}
+          {/* hitSlop 은 간격(6px) 쪽만 3 으로 좁혀 두 버튼 히트영역이 겹쳐
+              오탭 나는 걸 막고, 바깥쪽은 넉넉히 8 을 준다. */}
+          <Pressable
+            hitSlop={onSave ? { top: 8, bottom: 8, left: 3, right: 8 } : 8}
+            style={styles.pinBtn}
+            onPress={handlePin}
+          >
+            <SymbolView
+              name={pinned ? 'checkmark' : 'plus'}
+              size={14}
+              tintColor="#1C1C1E"
+              weight="bold"
+            />
+          </Pressable>
+        </View>
 
         {/* Price tag — bottom left */}
         <View style={styles.priceTag}>
@@ -107,16 +142,23 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
-  pinBtn: {
+  actionRow: {
     position: 'absolute',
     top: 10,
     right: 10,
+    flexDirection: 'row',
+    gap: 6,
+  },
+  pinBtn: {
     width: 28,
     height: 28,
     borderRadius: Radius.pill,
     backgroundColor: withAlpha('#FFFFFF', Opacity.nearFull),
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  saveBtnOn: {
+    backgroundColor: IOSColors.label,
   },
   priceTag: {
     position: 'absolute',
