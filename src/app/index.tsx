@@ -10,8 +10,9 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { Haptic, IOSFont } from '@/theme';
+import { getMe } from '@/lib/me';
 import { useAuth } from '@/state/auth';
-import { readOnboardingDone } from '@/state/onboarding';
+import { readOnboardingDone, readOnboardingGender } from '@/state/onboarding';
 
 // ─── Lottie module (optional native dep) ─────────────────────────────────
 // lottie-react-native is bundled into the next EAS build but isn't in the
@@ -129,16 +130,29 @@ export default function SplashScreen() {
   useEffect(() => {
     if (!animationDone || status === 'loading' || navigatedRef.current) return;
     navigatedRef.current = true;
-    // 온보딩 게이트 — 미완료 유저만 1회, 로그인 전 배치 (2026-07-14 확정).
-    // 이미 계정이 있는(authenticated) 유저는 재설치 등으로 로컬 플래그가
-    // 없어도 온보딩을 건너뛴다 — 취향은 서버 프로필이 source of truth.
+    // 온보딩 게이트.
+    //  - 비로그인: 온보딩 미완료면 온보딩.
+    //  - 로그인: 성별이 어디에도 없으면(로컬 온보딩 + 서버 프로필 모두 없음)
+    //    온보딩으로 유도. 온보딩 이전에 가입한 기존 유저가 성별 없이 홈에
+    //    들어가 큐레이션이 안 뜨는 문제를 막는다. 성별이 있으면 홈으로.
     void (async () => {
-      const onboarded = await readOnboardingDone();
-      if (!onboarded && status !== 'authenticated') {
-        router.replace('/onboarding-lab');
-      } else {
-        router.replace('/home');
+      if (status !== 'authenticated') {
+        const onboarded = await readOnboardingDone();
+        router.replace(onboarded ? '/home' : '/onboarding-lab');
+        return;
       }
+      // 로그인 유저 — 성별 보유 여부 확인 (로컬 우선, 없으면 서버 프로필).
+      let hasGender = (await readOnboardingGender()) !== null;
+      if (!hasGender) {
+        try {
+          const me = await getMe();
+          hasGender = me.gender != null;
+        } catch {
+          // 프로필 조회 실패 — 홈으로 보내되 women 폴백이 큐레이션을 살린다.
+          hasGender = true;
+        }
+      }
+      router.replace(hasGender ? '/home' : '/onboarding-lab');
     })();
   }, [animationDone, status]);
 
