@@ -65,10 +65,14 @@ export function useCuration(gender: OnboardingGender | null): {
   loading: boolean;
 } {
   const [data, setData] = useState<CurationResponse | null>(null);
+  // 서버 요청이 성공이든 실패든 '끝났는지'. 실패해도 true 가 되어 스켈레톤이
+  // 무한히 도는 걸 막는다(에러 시엔 빈 상태로 폴백).
+  const [settled, setSettled] = useState(false);
 
   // gender 가 바뀌면 이전 gender 의 데이터를 남기지 않고 다시 로딩 상태로.
   useEffect(() => {
     setData(null);
+    setSettled(false);
   }, [gender]);
 
   useEffect(() => {
@@ -97,6 +101,9 @@ export function useCuration(gender: OnboardingGender | null): {
       })
       .catch(() => {
         // 비로그인+gender 미상이면 422 정상 — 캐시/폴백 경로로 처리
+      })
+      .finally(() => {
+        if (!cancelled) setSettled(true);
       });
 
     return () => {
@@ -107,6 +114,6 @@ export function useCuration(gender: OnboardingGender | null): {
   return {
     sections: data && data.sections.length > 0 ? data.sections : null,
     chips: data ? toSuggestionChips(data) : null,
-    loading: data === null,
+    loading: data === null && !settled,
   };
 }

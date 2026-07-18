@@ -623,11 +623,15 @@ export default function ChatEntryScreen() {
   useEffect(() => {
     void readOnboardingGender().then(setOnboardGender);
   }, []);
+  // 성별이 없으면(온보딩 안 한 기존 로그인 유저 등) 'women' 기본값으로 요청.
+  // 서버는 프로필 성별을 우선하므로(있으면 그걸 씀) 안전하고, 프로필 성별도
+  // 없는 유저의 422(→ 스켈레톤 무한 로딩)를 막는다. useCuration·더보기 양쪽 공용.
+  const curationGender: OnboardingGender = onboardGender ?? "women";
   const {
     sections: curationSections,
     chips: curationChips,
     loading: curationLoading,
-  } = useCuration(onboardGender);
+  } = useCuration(curationGender);
   const suggestionChips = curationChips ?? chipsForGender(onboardGender);
 
   // 빈 상태 히어로 표제 — 마운트당 1회 랜덤 (curation-lab Hero3 관례 동일).
@@ -1531,8 +1535,10 @@ export default function ChatEntryScreen() {
               onPinProduct={handlePinCuration}
               onSaveProduct={handleCurationSave}
               onSeeMore={(section) => {
-                const q = [`title=${encodeURIComponent(section.title)}`];
-                if (onboardGender) q.push(`gender=${onboardGender}`);
+                const q = [
+                  `title=${encodeURIComponent(section.title)}`,
+                  `gender=${curationGender}`,
+                ];
                 router.push(`/curation/${section.key}?${q.join("&")}`);
               }}
               isSaved={(id) => isWishlisted(id)}
