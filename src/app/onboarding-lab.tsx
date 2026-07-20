@@ -41,6 +41,7 @@ import Animated, {
 import { useSafeAreaInsets, type EdgeInsets } from 'react-native-safe-area-context';
 
 import { GlassSurface } from '@/components/glass-surface';
+import { trackOnboarding, type OnboardingEvent } from '@/lib/analytics';
 import { api } from '@/lib/api';
 import { saveOnboarding } from '@/state/onboarding';
 import { REP_BRAND_IDS, STYLE_NODES } from '@/state/style-nodes';
@@ -68,6 +69,16 @@ const Spacing = { half: 2, one: 4, two: 8, three: 16, four: 24, five: 32, six: 6
 
 type Step = 'welcome' | 'value' | 'gender' | 'taste' | 'done';
 type Gender = 'women' | 'men' | null;
+
+// 스텝 진입 시 발사할 퍼널 *_viewed 이벤트 (기획 스펙 2026-07). value 스텝은
+// 스펙상 'welcome2'. done 은 프로토타입 확인용이라 트래킹 대상 아님(실서비스
+// 흐름은 taste → home). 성별→female/male 매핑은 발사 시점에서 변환한다.
+const STEP_VIEWED_EVENT: Partial<Record<Step, OnboardingEvent>> = {
+  welcome: 'onboarding_welcome_viewed',
+  value: 'onboarding_welcome2_viewed',
+  gender: 'onboarding_gender_viewed',
+  taste: 'onboarding_preference_viewed',
+};
 
 // ── 레이아웃 상수 (구조적 수치 — 하드코딩 예외 대상) ───────────────────────
 // 컴포넌트 높이 — 애플 UIKit 표준 수치에 정렬 (2026-07-14):
@@ -170,6 +181,14 @@ export default function OnboardingLabScreen() {
     transform: [{ translateY: contentTranslateY.value }],
   }));
 
+  // 온보딩 퍼널 트래킹 — 스텝 진입 시 *_viewed 발사. 초기 마운트('welcome')와
+  // 이후 모든 스텝 전환에서 각각 1회 발사된다(뒤로가기로 재진입해도 발사 —
+  // 스펙: "진입 시 발생").
+  useEffect(() => {
+    const viewedEvent = STEP_VIEWED_EVENT[step];
+    if (viewedEvent) trackOnboarding(viewedEvent);
+  }, [step]);
+
   const handleBack = () => {
     Haptic.light();
     if (step === 'value') setStep('welcome');
@@ -212,7 +231,22 @@ export default function OnboardingLabScreen() {
       gender,
       brands: [...selectedBrands].map(([name, id]) => ({ id, name })),
     });
-    router.replace('/home');
+    // from=onboarding 마커 — 홈이 이 진입만 "온보딩 최종 전환"으로 보고
+    // main_screen_viewed 를 1회 발사한다(재방문/PDP 왕복 재진입은 제외).
+    // 건너뛰기·완료 둘 다 온보딩을 벗어나 메인 진입 = 전환이므로 공통 경로.
+    router.replace('/home?from=onboarding');
+  };
+
+  // 취향 [다음] 전용 — preference_completed(선택 브랜드 목록·개수)를 발사한 뒤
+  // 완료 처리. 건너뛰기는 "다음 버튼 클릭"이 아니므로 이 이벤트를 발사하지
+  // 않고 handleFinish 만 태운다(스펙 8번 = 다음 버튼 클릭 시).
+  const handleTasteNext = () => {
+    const brands = [...selectedBrands.keys()];
+    trackOnboarding('onboarding_preference_completed', {
+      selected_brands: brands,
+      selected_brands_count: brands.length,
+    });
+    handleFinish();
   };
 
   return (
@@ -269,17 +303,40 @@ export default function OnboardingLabScreen() {
 
       {step === 'welcome' && (
         <View style={[styles.ctaArea, { paddingBottom: insets.bottom + Spacing.three }]}>
-          <PrimaryButton label="다음" onPress={() => setStep('value')} />
+          <PrimaryButton
+            label="다음"
+            onPress={() => {
+              trackOnboarding('onboarding_welcome_next_clicked');
+              setStep('value');
+            }}
+          />
         </View>
       )}
       {step === 'value' && (
         <View style={[styles.ctaArea, { paddingBottom: insets.bottom + Spacing.three }]}>
-          <PrimaryButton label="다음" onPress={() => setStep('gender')} />
+          <PrimaryButton
+            label="다음"
+            onPress={() => {
+              trackOnboarding('onboarding_welcome2_next_clicked');
+              setStep('gender');
+            }}
+          />
         </View>
       )}
       {step === 'gender' && (
         <View style={[styles.ctaArea, { paddingBottom: insets.bottom + Spacing.three }]}>
-          <PrimaryButton label="다음" disabled={!gender} onPress={() => setStep('taste')} />
+          <PrimaryButton
+            label="다음"
+            disabled={!gender}
+            onPress={() => {
+              // disabled={!gender} 라 여기 도달 시 gender 는 non-null.
+              // 스펙 허용값 male/female 로 매핑(코드 내부는 women/men).
+              trackOnboarding('onboarding_gender_completed', {
+                gender: gender === 'women' ? 'female' : 'male',
+              });
+              setStep('taste');
+            }}
+          />
         </View>
       )}
       {/* 취향 CTA — HIG 셋업 플로우 정석: primary 필 버튼 + 아래 텍스트형
@@ -295,7 +352,7 @@ export default function OnboardingLabScreen() {
                   : `${MIN_TASTE_PICKS - selectedBrands.size}개 더 골라주세요`
             }
             disabled={selectedBrands.size < MIN_TASTE_PICKS}
-            onPress={handleFinish}
+            onPress={handleTasteNext}
           />
           <Pressable
             hitSlop={8}
