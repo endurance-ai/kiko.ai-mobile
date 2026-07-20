@@ -901,7 +901,7 @@ export default function ChatEntryScreen() {
           priority: "error",
           title: isTooLarge ? "이미지가 너무 커요" : "이미지 업로드 실패",
           subtitle: isTooLarge
-            ? "1MB 이하로 줄여서 다시 시도해주세요."
+            ? "10MB 이하로 줄여서 다시 시도해주세요."
             : "잠시 후 다시 시도해주세요.",
           autoDismissMs: 4000,
         });
