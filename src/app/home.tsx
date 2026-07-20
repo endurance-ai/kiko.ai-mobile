@@ -33,7 +33,7 @@ import {
   sendCallbackStream,
   sendMessageStream,
 } from "@/lib/chat";
-import { FREE_LIMIT_VERSION, trackEvent } from "@/lib/analytics";
+import { FREE_LIMIT_VERSION, trackEvent, trackOnboarding } from "@/lib/analytics";
 import { ApiError } from "@/lib/api";
 import { parseAnchorPrefix } from "@/lib/anchor";
 import { getProduct } from "@/lib/products";
@@ -426,6 +426,15 @@ export default function ChatEntryScreen() {
     },
     [],
   );
+
+  // 온보딩 최종 전환 완료 트리거 — 온보딩(onboarding-lab)이 from=onboarding 으로
+  // 진입시킨 마운트에서만 1회 발사(기획 스펙 2026-07 #9). 재방문·PDP 왕복 등
+  // 일반 홈 진입은 마커가 없어 제외된다. 빈 deps 로 마운트 시점 fromParam 만
+  // 보므로 재발사 없음. platform 은 trackOnboarding 이 자동 주입.
+  useEffect(() => {
+    if (fromParam === "onboarding") trackOnboarding("main_screen_viewed");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // 그리팅/타이핑 머신 제거 (7/14) — 빈 상태가 큐레이션 시트로 바뀌면서
   // display_name fetch·typewriter reveal 로직도 함께 정리. 히어로 카피

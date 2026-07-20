@@ -108,6 +108,30 @@ export function trackEvent(
   }
 }
 
+// ── 온보딩 퍼널 (기획 스펙 2026-07) ────────────────────────────────────────
+// platform 은 온보딩 퍼널 전 이벤트의 공통 프로퍼티라, 개별 호출부에서
+// 매번 싣지 않고 이 헬퍼가 자동 주입한다. 각 스텝은 필요한 추가
+// 프로퍼티(gender, selected_brands 등)만 넘기면 된다. Platform.OS 는
+// 'ios' | 'android' | 'web' — 웹은 dev 프리뷰 경로라 스펙 허용값(ios/android)
+// 밖이지만 그대로 흘려보낸다(분석에서 필터).
+export type OnboardingEvent =
+  | 'onboarding_welcome_viewed'
+  | 'onboarding_welcome_next_clicked'
+  | 'onboarding_welcome2_viewed'
+  | 'onboarding_welcome2_next_clicked'
+  | 'onboarding_gender_viewed'
+  | 'onboarding_gender_completed'
+  | 'onboarding_preference_viewed'
+  | 'onboarding_preference_completed'
+  | 'main_screen_viewed';
+
+export function trackOnboarding(
+  event: OnboardingEvent,
+  props?: Record<string, unknown>,
+): void {
+  trackEvent(event, { platform: Platform.OS, ...props });
+}
+
 // (search_id, product_id, source) 조합 dedupe. 페이지네이션 재렌더 / 리스트
 // 스크롤 왕복 / 컴포넌트 unmount+remount 로 같은 카드가 다시 mount 돼도 세션
 // 내 1회만 발사. resetAnalytics 시 초기화.
