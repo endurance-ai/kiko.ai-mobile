@@ -105,7 +105,9 @@ export function AppUpdateGate() {
   if (state.kind === 'idle') return null;
 
   const blocking = state.kind === 'blocked';
-  const copy = MODAL_COPY[state.kind];
+  // 카피는 2종 — 강제(blocked) vs 그 외(권장 soft / OTA). soft·ota 는 동작만
+  // 다르고(스토어 이동 vs 즉시 적용) 문구·버튼은 동일하게 노출한다.
+  const copy = blocking ? MODAL_COPY.blocked : MODAL_COPY.update;
 
   return (
     <Modal
@@ -156,17 +158,12 @@ const MODAL_COPY = {
     body: '원활한 사용을 위해 최신 버전으로 업데이트해 주세요.',
     primary: '업데이트하기',
   },
-  soft: {
-    emoji: '✨',
-    title: '새 버전이 나왔어요',
-    body: '더 나아진 키코를 App Store에서 만나보세요.',
-    primary: '지금 업데이트',
-  },
-  ota: {
+  // 권장(soft) + OTA 공용 카피 — 동작만 다르고 문구는 동일.
+  update: {
     emoji: '✨',
     title: '새 버전이 준비됐어요',
-    body: '지금 적용하면 바로 최신 상태로 시작해요.',
-    primary: '지금 적용',
+    body: '업데이트하고 새로워진 키코를 만나보세요.',
+    primary: '업데이트하기',
   },
 } as const;
 
