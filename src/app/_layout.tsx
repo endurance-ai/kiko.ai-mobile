@@ -3,6 +3,7 @@ import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import { ReactNode, useEffect } from 'react';
 import { useColorScheme } from 'react-native';
 
+import { AppUpdateGate } from '@/components/app-update-gate';
 import { useRegisterDevice } from '@/hooks/use-register-device';
 import { useShareIntent } from '@/hooks/use-share-intent';
 import { initAnalytics } from '@/lib/analytics';
@@ -94,6 +95,7 @@ export default function RootLayout() {
                           }}
                         />
                       </Stack>
+                      <AppUpdateGate />
                     </FeedbackProvider>
                   </SubscriptionProvider>
                 </WishlistProvider>
