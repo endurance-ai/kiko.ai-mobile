@@ -493,3 +493,17 @@ export interface CreateUploadResponse {
   expires_at: string;
   max_size_bytes: number;
 }
+
+/** GET /v1/app/config — 모바일 버전 게이트 설정 (무인증). */
+export interface AppPlatformConfig {
+  /** 이 미만은 강제 업데이트(차단 모달). */
+  min_version: string;
+  /** 이 미만은 권장 업데이트(닫기 가능 모달). */
+  latest_version: string;
+  /** App Store 딥링크 (itms-apps://). */
+  store_url: string;
+}
+
+export interface AppConfig {
+  ios: AppPlatformConfig;
+}
