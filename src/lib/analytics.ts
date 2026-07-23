@@ -21,6 +21,15 @@ let initialized = false;
 // setUserId 는 SDK 안에 저장되지만 매 이벤트 프로퍼티에도 user_id 를 실어
 // 달라는 요구가 있어 편의상 module-level 캐시로 유지. resetAnalytics 시 해제.
 let cachedUserId: string | null = null;
+// 채팅 세션 ID — home 이 SSE session 이벤트로 받으면 여기 캐시해 두고,
+// session_id 를 직접 싣지 않는 이벤트(wishlist 등)에 자동 첨부한다.
+// (기획 7/23: 세션 문맥 없는 이벤트는 역추적 조인이 안 됨)
+let cachedSessionId: string | null = null;
+
+/** home 의 SSE 세션 확정 시점에 호출. null 로 해제. */
+export function setAnalyticsSessionId(sessionId: string | null): void {
+  cachedSessionId = sessionId;
+}
 
 /** 앱 부팅 시 한 번 호출. 키가 없거나 실패해도 조용히 pass. */
 export async function initAnalytics(): Promise<void> {
@@ -80,6 +89,7 @@ export function identifyUser(
 /** 로그아웃 시 호출 — 세션 / 유저 식별자 초기화. */
 export function resetAnalytics(): void {
   cachedUserId = null;
+  cachedSessionId = null;
   impressionSeen.clear();
   if (!initialized) return;
   try {
@@ -100,6 +110,8 @@ export function trackEvent(
     const payload: Record<string, unknown> = {
       ts: Date.now(),
       ...(cachedUserId ? { user_id: cachedUserId } : {}),
+      // 호출부가 session_id 를 직접 실으면 그 값이 이김 (아래 spread).
+      ...(cachedSessionId ? { session_id: cachedSessionId } : {}),
       ...(props ?? {}),
     };
     track(name, payload);
@@ -137,27 +149,37 @@ export function trackOnboarding(
 // 내 1회만 발사. resetAnalytics 시 초기화.
 const impressionSeen = new Set<string>();
 
-/** 검색 결과 카드가 렌더될 때 1개당 1회 발사. 같은 search_id + product_id +
- * source 조합은 세션 내 dedupe. 스펙: product_impression = "노출됐지만 미선택"
- * 신호 확보 (product_view 와 짝 맞춤). */
+/** 상품 카드가 렌더될 때 1개당 1회 발사. 스펙: product_impression =
+ * "노출됐지만 미선택" 신호 확보 (product_view 와 짝 맞춤).
+ *
+ * 문맥 키 규칙 (2026-07-23 기획 — 큐레이션 impression 유실 수정):
+ * - search 발(發): search_id 필수 — 없으면 skip (기존 오염 방지 유지)
+ * - curation 발: section_id 필수 — search_id 는 원래 없음. 기존 가드가
+ *   search_id 부재를 이유로 큐레이션 노출을 전부 drop 하던 버그 수정.
+ * 같은 (문맥|product|source) 조합은 세션 내 dedupe (재렌더/스크롤 왕복). */
 export function trackProductImpression(params: {
   productId: string;
   brand: string | null | undefined;
   searchId: string | null | undefined;
+  /** 큐레이션 구좌 ID (popular / trending-search / under-100 / editorial-*) */
+  sectionId?: string | null;
   position?: number | null;
   source?: string;
 }): void {
   if (!initialized) return;
   const source = params.source ?? "search";
-  // search_id 는 짝 맞추기의 핵심이라 없으면 발사 자체를 skip (오염 방지).
-  if (!params.searchId) return;
-  const key = `${params.searchId}|${params.productId}|${source}`;
+  // 발화 문맥: 검색은 search_id, 큐레이션은 section_id 가 조인 키.
+  // 둘 다 없으면 역추적 조인이 불가능한 고아 이벤트라 skip (오염 방지).
+  const contextKey = params.searchId ?? params.sectionId;
+  if (!contextKey) return;
+  const key = `${contextKey}|${params.productId}|${source}`;
   if (impressionSeen.has(key)) return;
   impressionSeen.add(key);
   trackEvent("product_impression", {
     product_id: params.productId,
     brand: params.brand ?? null,
-    search_id: params.searchId,
+    search_id: params.searchId ?? null,
+    section_id: params.sectionId ?? null,
     position: params.position ?? null,
     source,
   });

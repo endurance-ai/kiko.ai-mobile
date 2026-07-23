@@ -30,7 +30,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CURATION_ROW_LIMIT } from '@/components/curation-sheet';
 import { FLOATING_HEADER_OFFSET, FloatingHeader } from '@/components/floating-header';
 import { GlassSurface } from '@/components/glass-surface';
-import { trackProductImpression } from '@/lib/analytics';
+import { trackEvent, trackProductImpression } from '@/lib/analytics';
 import { useAuth } from '@/state/auth';
 import { useCap } from '@/state/cap';
 import { useCuration } from '@/state/curation';
@@ -61,11 +61,14 @@ const CRITIQUE_CHIPS = [
 function GridTile({
   product,
   position,
+  sectionId,
   pinned,
   onTogglePin,
 }: {
   product: CurationProduct;
   position: number;
+  /** 구좌 ID — impression·PDP 발화 문맥 (기획 7/23). */
+  sectionId?: string;
   pinned: boolean;
   onTogglePin: () => void;
 }) {
@@ -79,18 +82,31 @@ function GridTile({
       productId: pidStr,
       brand: product.brand,
       searchId: null,
+      sectionId,
       position,
-      source: 'curation-more',
+      // 홈 구좌와 동일한 'curation' — 이 화면에서 넘어간 product_view 도
+      // source='curation' 이라 값이 갈리면 impression↔view 조인이 어긋난다.
+      // 홈 행과의 구분은 position(구좌 내 절대 위치 ≥ CURATION_ROW_LIMIT)으로.
+      source: 'curation',
     });
-  }, [pidStr, product.brand, position]);
+  }, [pidStr, product.brand, sectionId, position]);
 
   const openPdp = () => {
     Haptic.light();
-    router.push(`/product/${product.product_id}` as never);
+    const q = sectionId
+      ? `?source=curation&section_id=${encodeURIComponent(sectionId)}`
+      : '?source=curation';
+    router.push(`/product/${product.product_id}${q}` as never);
   };
   const onSave = () => {
     Haptic.selection();
     if (authStatus !== 'authenticated') {
+      trackEvent('login_gate_shown', {
+        trigger: 'wishlist',
+        source: 'curation',
+        section_id: sectionId ?? null,
+        product_id: pidStr,
+      });
       router.push('/login');
       return;
     }
@@ -178,6 +194,14 @@ export default function CurationSectionScreen() {
   const togglePinnedProduct = (productId: string) => {
     if (capLocked) return;
     Haptic.selection();
+    // 핀 ON 시에만 발사 — 앵커 디깅 시작점 (기획 7/23).
+    if (pinnedProductId !== productId) {
+      trackEvent('product_pin', {
+        product_id: productId,
+        source: 'curation',
+        section_id: sectionId ?? null,
+      });
+    }
     setPinnedProductId((prev) => (prev === productId ? null : productId));
   };
 
@@ -190,6 +214,11 @@ export default function CurationSectionScreen() {
     // 비로그인은 홈으로 넘겨 검색을 돌리는 대신 여기서 바로 로그인 시트.
     // (홈 경유하면 메인이 깜빡였다 로그인이 뜨는 문제 — PDP kickoffChat 과 동일)
     if (authStatus !== 'authenticated') {
+      trackEvent('login_gate_shown', {
+        trigger: 'composer',
+        source: 'curation',
+        section_id: sectionId ?? null,
+      });
       router.push('/login');
       return;
     }
@@ -234,7 +263,11 @@ export default function CurationSectionScreen() {
                 <GridTile
                   key={p.product_id}
                   product={p}
-                  position={idx}
+                  // 구좌 내 절대 위치 — 이 그리드는 홈 행이 이미 보여준 앞
+                  // CURATION_ROW_LIMIT 개를 제외하고 시작하므로 오프셋 보정.
+                  // (홈 행 impression 의 position 과 좌표계 통일)
+                  position={CURATION_ROW_LIMIT + idx}
+                  sectionId={sectionId}
                   pinned={pinnedProductId === pidStr}
                   onTogglePin={() => togglePinnedProduct(pidStr)}
                 />

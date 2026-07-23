@@ -33,7 +33,12 @@ import {
   sendCallbackStream,
   sendMessageStream,
 } from "@/lib/chat";
-import { FREE_LIMIT_VERSION, trackEvent, trackOnboarding } from "@/lib/analytics";
+import {
+  FREE_LIMIT_VERSION,
+  setAnalyticsSessionId,
+  trackEvent,
+  trackOnboarding,
+} from "@/lib/analytics";
 import { ApiError } from "@/lib/api";
 import { parseAnchorPrefix } from "@/lib/anchor";
 import { getProduct } from "@/lib/products";
@@ -427,12 +432,20 @@ export default function ChatEntryScreen() {
     [],
   );
 
-  // 온보딩 최종 전환 완료 트리거 — 온보딩(onboarding-lab)이 from=onboarding 으로
-  // 진입시킨 마운트에서만 1회 발사(기획 스펙 2026-07 #9). 재방문·PDP 왕복 등
-  // 일반 홈 진입은 마커가 없어 제외된다. 빈 deps 로 마운트 시점 fromParam 만
-  // 보므로 재발사 없음. platform 은 trackOnboarding 이 자동 주입.
+  // 메인 진입 이벤트 — 마운트당 1회 (기획 2026-07-23: 기존엔 온보딩 직후에만
+  // 발사돼 일반 진입이 전부 미기록 → 큐레이션 화면 로그 공백의 원인 1).
+  // entry_source 로 온보딩 퍼널(#9 최종 전환)은 계속 구분 가능 —
+  // 온보딩 분석은 entry_source='onboarding' 필터로 동일하게 조회된다.
+  // 단, seed/session 핸드오프로 뜬 새 홈 인스턴스는 제외 — /list·큐레이션
+  // 그리드·PDP 컴포저의 검색 이어가기(?seed=)와 히스토리 열기(?session=)도
+  // 홈을 새로 마운트하므로, 안 거르면 검색 1회마다 "메인 진입"이 1건씩
+  // 부풀어 큐레이션→디깅 전환율 분모가 오염된다.
+  // 빈 deps 로 마운트 시점 파라미터만 보므로 재발사 없음.
   useEffect(() => {
-    if (fromParam === "onboarding") trackOnboarding("main_screen_viewed");
+    if (seedParam || sessionParam) return;
+    trackOnboarding("main_screen_viewed", {
+      entry_source: fromParam === "onboarding" ? "onboarding" : "direct",
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -471,6 +484,7 @@ export default function ChatEntryScreen() {
     if (sessionIdRef.current === sessionParam && messages.length > 0) return;
     let cancelled = false;
     sessionIdRef.current = sessionParam;
+    setAnalyticsSessionId(sessionParam);
     (async () => {
       try {
         const res = await getMessages(sessionParam, { limit: 50 });
@@ -547,7 +561,10 @@ export default function ChatEntryScreen() {
         }
       : undefined;
     // Defer slightly so the session effect can stamp sessionIdRef first.
-    setTimeout(() => runStreamingTurn(seedParam, attachment), 50);
+    setTimeout(
+      () => runStreamingTurn(seedParam, attachment, undefined, undefined, "seed"),
+      50,
+    );
   }, [
     seedParam,
     pinImageParam,
@@ -857,6 +874,11 @@ export default function ChatEntryScreen() {
       setText("");
       setPickedImage(null);
       pickedAssetRef.current = null;
+      // 기획 7/23: 게이트 노출 이벤트 — 퍼널이 어디서 끊기는지 관측.
+      trackEvent("login_gate_shown", {
+        trigger: "composer",
+        session_id: sessionIdRef.current,
+      });
       setTimeout(() => router.push("/login"), 450);
       return;
     }
@@ -864,18 +886,9 @@ export default function ChatEntryScreen() {
     const hasImage = pickedImage !== null;
     Haptic.medium();
     lastSendFromCritiqueRef.current = false;
-    // 기획 스펙: search_query — session_id, query, user_id, ts 필수.
-    // (user_id + ts 는 analytics 헬퍼가 자동 첨부).
-    queryIndexRef.current += 1;
-    trackEvent("search_query", {
-      session_id: sessionIdRef.current,
-      query: trimmed,
-      query_index: queryIndexRef.current,
-      has_image: hasImage,
-      has_pinned_product: pinnedId != null,
-      char_len: trimmed.length,
-      gender_filter: filter.gender,
-    });
+    // search_query 트래킹은 runStreamingTurn(모든 검색 경로의 합류점)에서
+    // 1회 발사 — 기존엔 여기(typed 경로)만 찍혀 칩/재시도/시드 검색이
+    // 전부 미기록이었다 (기획 2026-07-23).
 
     // If the user attached a photo, materialize it via POST /v1/uploads
     // before opening the SSE turn so the server can anchor on a stable
@@ -941,11 +954,20 @@ export default function ChatEntryScreen() {
      * 한국어 label 이 흘러가면 골든셋 검증이 무효가 되기 때문 (칩 계약).
      */
     serverQueryOverride?: string,
+    /** 검색 진입 경로 (기획 7/23) — 디깅 시작 방식 분류.
+     *  typed=컴포저 직접 입력 / chip=골든셋 유도 칩 / critique=보정 칩 /
+     *  seed=PDP·그리드 핸드오프 / retry=실패 재시도. */
+    entryPoint: "typed" | "chip" | "critique" | "seed" | "retry" = "typed",
   ) => {
     // 비로그인 상태에선 어떤 경로로 들어오든 (composer send / seedParam /
     // critique / retry) 로그인 화면으로 유도. Apple 5.1.1(v) 대응 —
     // 계정 없이도 홈 진입은 가능하되 실제 검색은 로그인 후 실행.
     if (authStatus !== "authenticated") {
+      trackEvent("login_gate_shown", {
+        trigger: "composer",
+        entry_point: entryPoint,
+        session_id: sessionIdRef.current,
+      });
       router.push("/login");
       return;
     }
@@ -957,6 +979,24 @@ export default function ChatEntryScreen() {
     // Explicit override wins (e.g. handoff from PDP). Otherwise use the
     // currently-pinned product from the composer.
     const attachment = overrideAttachment ?? pinnedAttachment;
+    // 기획 스펙: search_query — session_id, query, user_id, ts 필수
+    // (user_id + ts 는 analytics 헬퍼 자동 첨부). 모든 실검색 경로가 이
+    // 함수로 합류하므로 여기서 1회 발사 (guard 통과 = 실제 실행된 검색만).
+    // pinned_product_id 는 앵커 디깅(케이스 ⑤) 조인 키 (기획 7/23).
+    queryIndexRef.current += 1;
+    trackEvent("search_query", {
+      session_id: sessionIdRef.current,
+      query: trimmed,
+      query_index: queryIndexRef.current,
+      has_image: Boolean(
+        imagePayload?.serverImageUrl || imagePayload?.localImageUri,
+      ),
+      has_pinned_product: attachment != null,
+      pinned_product_id: attachment?.productId ?? null,
+      entry_point: entryPoint,
+      char_len: trimmed.length,
+      gender_filter: filter.gender,
+    });
     // 서버가 vision + link_resolve 를 거치는 케이스는 첫 이벤트까지 10s
     // 넘게 걸릴 수 있어 stall 임계치를 20s 로 늘린다. 순수 텍스트 검색은
     // 10s 유지 (embedding + search RPC 만).
@@ -1078,7 +1118,8 @@ export default function ChatEntryScreen() {
         subtitle: "다시 시도해주세요",
         action: {
           label: "다시 시도",
-          onPress: () => runStreamingTurn(trimmed),
+          onPress: () =>
+            runStreamingTurn(trimmed, undefined, undefined, undefined, "retry"),
         },
       });
     };
@@ -1092,6 +1133,7 @@ export default function ChatEntryScreen() {
         bumpTimeout();
         const wasNewThread = sessionIdRef.current !== sessionId;
         sessionIdRef.current = sessionId;
+        setAnalyticsSessionId(sessionId);
         if (wasNewThread && !threadStartFiredRef.current) {
           // 이번 로그인 후 첫 스레드면 is_new_user=true 로 태그.
           const isNewUser = messages.length === 0;
@@ -1233,7 +1275,8 @@ export default function ChatEntryScreen() {
           title: "요청을 처리하지 못했어요",
           action: {
             label: "다시 시도",
-            onPress: () => runStreamingTurn(trimmed),
+            onPress: () =>
+            runStreamingTurn(trimmed, undefined, undefined, undefined, "retry"),
           },
         });
       },
@@ -1451,7 +1494,7 @@ export default function ChatEntryScreen() {
     // server's ReAct loop handles the refine intent. The pinned-product
     // anchor pattern stays available for the mock pipeline if needed.
     if (sessionIdRef.current) {
-      runStreamingTurn(label);
+      runStreamingTurn(label, undefined, undefined, undefined, "critique");
       return;
     }
     if (pinnedProduct) {
@@ -1461,8 +1504,17 @@ export default function ChatEntryScreen() {
     }
   };
 
-  const handlePin = (p: Product) => {
+  const handlePin = (p: Product, searchId?: string | null) => {
     if (capLocked) return;
+    // 핀 ON 시에만 발사 — 앵커 디깅(케이스 ⑤)의 시작점 기록 (기획 7/23).
+    if (pinnedId !== p.id) {
+      trackEvent("product_pin", {
+        product_id: String(p.id),
+        source: "search",
+        search_id: searchId ?? null,
+        session_id: sessionIdRef.current,
+      });
+    }
     setPinnedId((prev) => (prev === p.id ? null : p.id));
   };
 
@@ -1476,21 +1528,42 @@ export default function ChatEntryScreen() {
   // 큐레이션 카드 + 핀 토글 — 같은 상품을 다시 누르면 해제. 컴포저 위에
   // 상품 칩이 뜨고, 전송 시 handleSend 의 비로그인 게이트가 로그인 시트로
   // 보낸다 (로그인 상태면 정상 검색 앵커로 사용).
-  const handlePinCuration = (p: Product) => {
+  const handlePinCuration = (p: Product, sectionKey?: string) => {
     if (capLocked) return;
+    // 핀 ON 시에만 발사 — 큐레이션 발 앵커 디깅의 시작점 (기획 7/23:
+    // "큐레이션 구경 → 첫 디깅 전환" 퍼널의 두 번째 스텝).
+    if (pinnedCurationProduct?.id !== p.id) {
+      trackEvent("product_pin", {
+        product_id: String(p.id),
+        source: "curation",
+        section_id: sectionKey ?? null,
+        session_id: sessionIdRef.current,
+      });
+    }
     setPinnedId(null);
     setPinnedCurationProduct((prev) => (prev?.id === p.id ? null : p));
   };
 
   // 큐레이션 상품 탭 — 비로그인도 PDP 진입 가능(서버 GET /v1/products/{id}
   // optional-auth 배포 완료, 2026-07-17). 찜·전송 같은 액션만 로그인 게이트.
-  const handleCurationPress = (p: Product) => {
-    router.push(`/product/${p.id}`);
+  // source/section_id 를 PDP 에 넘겨 product_view·outbound_click 의 발화
+  // 문맥(큐레이션 vs 검색)을 보존한다 (기획 7/23).
+  const handleCurationPress = (p: Product, sectionKey?: string) => {
+    const q = sectionKey
+      ? `?source=curation&section_id=${encodeURIComponent(sectionKey)}`
+      : "?source=curation";
+    router.push(`/product/${p.id}${q}`);
   };
 
   // 큐레이션 상품 찜 — 로그인 상태면 위시리스트 토글, 아니면 로그인 시트.
-  const handleCurationSave = (p: Product) => {
+  const handleCurationSave = (p: Product, sectionKey?: string) => {
     if (authStatus !== "authenticated") {
+      trackEvent("login_gate_shown", {
+        trigger: "wishlist",
+        source: "curation",
+        section_id: sectionKey ?? null,
+        product_id: String(p.id),
+      });
       router.push("/login");
       return;
     }
@@ -1805,6 +1878,18 @@ export default function ChatEntryScreen() {
                                   ? undefined
                                   : () => {
                                       if (capLocked) return;
+                                      // 핀 ON 시에만 발사 — 앵커 디깅 시작점
+                                      // (기획 7/23: has_pinned_product 는 결과
+                                      // 플래그라 "선택 후 미검색" 이탈을 못 봄).
+                                      if (!pinned) {
+                                        trackEvent("product_pin", {
+                                          product_id: String(productId),
+                                          source: "search",
+                                          search_id:
+                                            turn.streamSearchId ?? null,
+                                          session_id: sessionIdRef.current,
+                                        });
+                                      }
                                       setPinnedId((prev) =>
                                         prev === key ? null : key,
                                       );
@@ -1955,7 +2040,9 @@ export default function ChatEntryScreen() {
                             product={p}
                             pinned={isLast && pinnedId === p.id}
                             onPress={() => router.push(`/product/${p.id}`)}
-                            onPin={() => isLast && handlePin(p)}
+                            onPin={() =>
+                              isLast && handlePin(p, turn.streamSearchId ?? null)
+                            }
                             searchId={turn.streamSearchId ?? null}
                             position={idx}
                             source="search"
@@ -2126,11 +2213,20 @@ export default function ChatEntryScreen() {
                     disabled={isBusy}
                     onPress={() => {
                       Haptic.selection();
+                      // 기획 7/23: 칩 탭 자체를 기록 — search_query 와는
+                      // entry_point='chip' 으로 페어 (이중 카운트 아님).
+                      trackEvent("chip_tap", {
+                        chip_id: chip.id,
+                        label_ko: chip.label,
+                        query_en: chip.query,
+                        session_id: sessionIdRef.current,
+                      });
                       runStreamingTurn(
                         chip.label,
                         undefined,
                         undefined,
                         chip.query,
+                        "chip",
                       );
                     }}
                   >
