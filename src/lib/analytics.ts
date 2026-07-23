@@ -31,6 +31,17 @@ export function setAnalyticsSessionId(sessionId: string | null): void {
   cachedSessionId = sessionId;
 }
 
+// init 완료 전에 발화된 이벤트 버퍼 — 콜드 스타트에선 홈 마운트
+// (main_screen_viewed, 첫 임프레션)가 initAnalytics 의 async init 보다
+// 빨라서, initialized 가드가 이벤트를 조용히 삼키는 레이스가 있다
+// (시뮬레이터 실측: 콜드 스타트 main_screen_viewed 유실 — A1 재발 경로).
+// init 성공 시 재발사하고, 실패(키 없음 등) 시엔 상한까지만 쌓고 버린다.
+const PENDING_MAX = 100;
+let pendingEvents: Array<{
+  name: string;
+  props: Record<string, unknown>;
+}> = [];
+
 /** 앱 부팅 시 한 번 호출. 키가 없거나 실패해도 조용히 pass. */
 export async function initAnalytics(): Promise<void> {
   if (initialized || !KEY) return;
@@ -55,6 +66,10 @@ export async function initAnalytics(): Promise<void> {
       }
     }
     initialized = true;
+    // init 전에 큐잉된 이벤트 재발사 — ts 는 큐잉 시점 값을 보존한다.
+    const queued = pendingEvents;
+    pendingEvents = [];
+    for (const e of queued) trackEvent(e.name, e.props);
   } catch {
     // 초기화 실패는 앱 흐름을 절대 막지 않는다.
   }
@@ -90,6 +105,7 @@ export function identifyUser(
 export function resetAnalytics(): void {
   cachedUserId = null;
   cachedSessionId = null;
+  pendingEvents = [];
   impressionSeen.clear();
   if (!initialized) return;
   try {
@@ -105,7 +121,16 @@ export function trackEvent(
   name: string,
   props?: Record<string, unknown>,
 ): void {
-  if (!initialized) return;
+  if (!initialized) {
+    // init 완료 전 — 유실 대신 큐잉 (init 성공 시 재발사).
+    if (pendingEvents.length < PENDING_MAX) {
+      pendingEvents.push({
+        name,
+        props: { ts: Date.now(), ...(props ?? {}) },
+      });
+    }
+    return;
+  }
   try {
     const payload: Record<string, unknown> = {
       ts: Date.now(),
@@ -166,7 +191,8 @@ export function trackProductImpression(params: {
   position?: number | null;
   source?: string;
 }): void {
-  if (!initialized) return;
+  // initialized 가드 없음 — init 전 발화는 trackEvent 가 큐잉한다.
+  // (dedupe Set 은 init 여부와 무관하게 동작해야 재발사 중복이 없다)
   const source = params.source ?? "search";
   // 발화 문맥: 검색은 search_id, 큐레이션은 section_id 가 조인 키.
   // 둘 다 없으면 역추적 조인이 불가능한 고아 이벤트라 skip (오염 방지).
