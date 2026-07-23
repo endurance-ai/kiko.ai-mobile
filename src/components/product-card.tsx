@@ -20,8 +20,10 @@ type Props = {
   /** 찜 토글. 넘기면 핀(+) 아래 하트 버튼이 함께 뜬다. 비로그인 게이트는
    *  호출부 책임 (로그인 시트 유도 등) — 카드는 콜백만 위임한다. */
   onSave?: () => void;
-  /** 이 노출을 발생시킨 검색의 search_id. 없으면 impression 미발사. */
+  /** 이 노출을 발생시킨 검색의 search_id. 검색 발 노출의 조인 키. */
   searchId?: string | null;
+  /** 큐레이션 구좌 ID — 큐레이션 발 노출의 조인 키 (search_id 대체). */
+  sectionId?: string | null;
   /** 리스트에서의 0-based 위치. */
   position?: number | null;
   /** 노출 경로. 기본 "search". 향후 큐레이션 등 확장. */
@@ -36,6 +38,7 @@ export function ProductCard({
   onPin,
   onSave,
   searchId,
+  sectionId,
   position,
   source,
 }: Props) {
@@ -44,10 +47,11 @@ export function ProductCard({
       productId: String(product.id),
       brand: product.brand,
       searchId,
+      sectionId,
       position,
       source,
     });
-  }, [product.id, product.brand, searchId, position, source]);
+  }, [product.id, product.brand, searchId, sectionId, position, source]);
   const handlePress = () => {
     Haptic.light();
     onPress?.();

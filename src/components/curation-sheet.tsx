@@ -74,6 +74,7 @@ function toProducts(section: CurationSection): Product[] {
 function PressScaleCard({
   product,
   position,
+  sectionId,
   pinned,
   saved,
   onPress,
@@ -82,6 +83,8 @@ function PressScaleCard({
 }: {
   product: Product;
   position: number;
+  /** 구좌 ID — impression 조인 키로 ProductCard 에 전달. */
+  sectionId: string;
   pinned: boolean;
   saved: boolean;
   onPress: () => void;
@@ -111,6 +114,7 @@ function PressScaleCard({
           onPin={onPin}
           onSave={onSave}
           position={position}
+          sectionId={sectionId}
           source="curation"
         />
       </Animated.View>
@@ -138,12 +142,13 @@ export function CurationSheet({
   loading?: boolean;
   /** 현재 컴포저에 핀된 상품 id (핀 체크마크 표시용). */
   pinnedProductId?: string | null;
-  /** 상품 탭 — 로그인 시 PDP, 비로그인 시 로그인 시트 (home 이 분기). */
-  onPressProduct: (product: Product) => void;
+  /** 상품 탭 — 로그인 시 PDP, 비로그인 시 로그인 시트 (home 이 분기).
+   * sectionKey = 구좌 ID — PDP·이벤트에 발화 문맥으로 전달 (기획 7/23). */
+  onPressProduct: (product: Product, sectionKey: string) => void;
   /** + 핀 — 컴포저 위 상품 표시 토글 (home 상태). */
-  onPinProduct: (product: Product) => void;
+  onPinProduct: (product: Product, sectionKey: string) => void;
   /** 찜 토글 — 로그인 시 위시리스트, 비로그인 시 로그인 시트 (home 이 분기). */
-  onSaveProduct: (product: Product) => void;
+  onSaveProduct: (product: Product, sectionKey: string) => void;
   /** 더보기 — 구좌 전용 그리드 페이지로 이동 (home 이 gender/route 처리). */
   onSeeMore?: (section: { key: string; title: string }) => void;
   /** 찜 여부 조회 (위시리스트). */
@@ -200,11 +205,12 @@ export function CurationSheet({
                 key={product.id}
                 product={product}
                 position={i}
+                sectionId={section.key}
                 pinned={pinnedProductId === product.id}
                 saved={isSaved(product.id)}
-                onPress={() => onPressProduct(product)}
-                onPin={() => onPinProduct(product)}
-                onSave={() => onSaveProduct(product)}
+                onPress={() => onPressProduct(product, section.key)}
+                onPin={() => onPinProduct(product, section.key)}
+                onSave={() => onSaveProduct(product, section.key)}
               />
             ))}
           </ScrollView>
