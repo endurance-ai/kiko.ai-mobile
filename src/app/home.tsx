@@ -436,8 +436,13 @@ export default function ChatEntryScreen() {
   // 발사돼 일반 진입이 전부 미기록 → 큐레이션 화면 로그 공백의 원인 1).
   // entry_source 로 온보딩 퍼널(#9 최종 전환)은 계속 구분 가능 —
   // 온보딩 분석은 entry_source='onboarding' 필터로 동일하게 조회된다.
-  // 빈 deps 로 마운트 시점 fromParam 만 보므로 재발사 없음.
+  // 단, seed/session 핸드오프로 뜬 새 홈 인스턴스는 제외 — /list·큐레이션
+  // 그리드·PDP 컴포저의 검색 이어가기(?seed=)와 히스토리 열기(?session=)도
+  // 홈을 새로 마운트하므로, 안 거르면 검색 1회마다 "메인 진입"이 1건씩
+  // 부풀어 큐레이션→디깅 전환율 분모가 오염된다.
+  // 빈 deps 로 마운트 시점 파라미터만 보므로 재발사 없음.
   useEffect(() => {
+    if (seedParam || sessionParam) return;
     trackOnboarding("main_screen_viewed", {
       entry_source: fromParam === "onboarding" ? "onboarding" : "direct",
     });

@@ -84,7 +84,10 @@ function GridTile({
       searchId: null,
       sectionId,
       position,
-      source: 'curation-more',
+      // 홈 구좌와 동일한 'curation' — 이 화면에서 넘어간 product_view 도
+      // source='curation' 이라 값이 갈리면 impression↔view 조인이 어긋난다.
+      // 홈 행과의 구분은 position(구좌 내 절대 위치 ≥ CURATION_ROW_LIMIT)으로.
+      source: 'curation',
     });
   }, [pidStr, product.brand, sectionId, position]);
 
@@ -100,7 +103,7 @@ function GridTile({
     if (authStatus !== 'authenticated') {
       trackEvent('login_gate_shown', {
         trigger: 'wishlist',
-        source: 'curation-more',
+        source: 'curation',
         section_id: sectionId ?? null,
         product_id: pidStr,
       });
@@ -195,7 +198,7 @@ export default function CurationSectionScreen() {
     if (pinnedProductId !== productId) {
       trackEvent('product_pin', {
         product_id: productId,
-        source: 'curation-more',
+        source: 'curation',
         section_id: sectionId ?? null,
       });
     }
@@ -213,7 +216,7 @@ export default function CurationSectionScreen() {
     if (authStatus !== 'authenticated') {
       trackEvent('login_gate_shown', {
         trigger: 'composer',
-        source: 'curation-more',
+        source: 'curation',
         section_id: sectionId ?? null,
       });
       router.push('/login');
@@ -260,7 +263,10 @@ export default function CurationSectionScreen() {
                 <GridTile
                   key={p.product_id}
                   product={p}
-                  position={idx}
+                  // 구좌 내 절대 위치 — 이 그리드는 홈 행이 이미 보여준 앞
+                  // CURATION_ROW_LIMIT 개를 제외하고 시작하므로 오프셋 보정.
+                  // (홈 행 impression 의 position 과 좌표계 통일)
+                  position={CURATION_ROW_LIMIT + idx}
                   sectionId={sectionId}
                   pinned={pinnedProductId === pidStr}
                   onTogglePin={() => togglePinnedProduct(pidStr)}
