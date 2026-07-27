@@ -9,6 +9,8 @@ import {
 } from '@amplitude/analytics-react-native';
 import { Platform } from 'react-native';
 
+import { enqueueCurationImpression } from '@/lib/curation-impressions';
+
 // EXPO_PUBLIC_ prefix 는 클라이언트 번들에 인라인됨 — 앰플리튜드 client
 // SDK key 는 원래 노출 대상이라 안전. 서버 API key 는 별개.
 const KEY = process.env.EXPO_PUBLIC_AMPLITUDE_API_KEY;
@@ -209,4 +211,17 @@ export function trackProductImpression(params: {
     position: params.position ?? null,
     source,
   });
+
+  // 큐레이션 노출은 서버에도 기록 → 개인화 taste score 입력. (검색 노출은 대상 아님)
+  // product_id 는 서버가 int 로 받으므로 숫자화. 파싱 실패 시 skip.
+  if (source === "curation" && params.sectionId) {
+    const productId = Number(params.productId);
+    if (Number.isInteger(productId)) {
+      enqueueCurationImpression({
+        section_id: params.sectionId,
+        product_id: productId,
+        position: params.position ?? null,
+      });
+    }
+  }
 }

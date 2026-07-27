@@ -420,6 +420,25 @@ export interface CurationResponse {
   chips: CurationChip[];
 }
 
+/** POST /v1/curation/impressions 의 item — 서버가 product_id 로 style_node 를
+ * 조회해 저장하므로 클라는 조인 키(section_id·product_id)와 position 만 보낸다.
+ * position 은 서버에서 0–100 검증. (ai-server dev app/api/curation.py) */
+export interface CurationImpressionItem {
+  section_id: string;
+  product_id: number;
+  position?: number | null;
+}
+
+/** POST /v1/curation/impressions — 취향 신호(노출) 배치 기록. 인증 필수.
+ * items 1–50개, 서버가 일별 dedupe. 개인화 taste score 의 입력 데이터. */
+export interface CurationImpressionRequest {
+  items: CurationImpressionItem[];
+}
+
+export interface CurationImpressionResponse {
+  recorded: number;
+}
+
 export interface StyleNodeItem {
   id: number;
   code: string;
