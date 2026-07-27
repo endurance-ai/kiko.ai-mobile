@@ -1,7 +1,6 @@
 import { api } from '@/lib/api';
 import type {
   LinkCheckResponse,
-  OutboundResponse,
   ProductDetail,
   RecordViewRequest,
   RecordViewResponse,
@@ -24,16 +23,6 @@ export function recordProductView(
 ): Promise<RecordViewResponse> {
   return api.post<RecordViewResponse>(
     `/v1/products/${encodeURIComponent(String(productId))}/view`,
-    req,
-  );
-}
-
-export function recordProductOutbound(
-  productId: string | number,
-  req: { source?: 'curation' | 'search' | 'pdp' | 'wishlist' | 'history'; section_id?: string },
-): Promise<OutboundResponse> {
-  return api.post<OutboundResponse>(
-    `/v1/products/${encodeURIComponent(String(productId))}/outbound`,
     req,
   );
 }

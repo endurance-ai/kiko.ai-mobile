@@ -215,30 +215,14 @@ export interface ProductDetail {
 }
 
 export interface RecordViewRequest {
-  session_id?: string;
+  session_id: string;
   source_search_id?: string;
   dwell_ms?: number;
-  source?: string;
-  section_id?: string;
 }
 
 export interface RecordViewResponse {
   recorded: boolean;
   view_id: string | null;
-}
-
-export interface OutboundResponse {
-  recorded: boolean;
-}
-
-export interface CurationImpression {
-  section_id: string;
-  product_id: number;
-  position?: number;
-}
-
-export interface CurationImpressionResponse {
-  recorded: number;
 }
 
 export interface ViewedProduct {
