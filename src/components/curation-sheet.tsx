@@ -8,8 +8,8 @@
  * ProductCard 의 impression 트래킹에 source="curation" 을 태워 취향 신호
  * 로깅(클릭·노출)의 씨앗을 심는다 — 나중 취향 큐레이션 전환의 재료.
  */
-import { useMemo } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useMemo, useRef } from 'react';
+import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -17,6 +17,8 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { ProductCard } from '@/components/product-card';
+import { recordCurationImpressions } from '@/lib/curation';
+import { useAuth } from '@/state/auth';
 import { type Product } from '@/state/products';
 import { Haptic, IOSColors, IOSFont, IOSText, Motion } from '@/theme';
 import type { CurationSection } from '@/types/api';
@@ -126,6 +128,104 @@ function PressScaleCard({
 // 그리드 페이지는 이 개수만큼 건너뛰고 나머지를 보여주므로 공유(export).
 export const CURATION_ROW_LIMIT = 10;
 
+function CurationRow({
+  section,
+  pinnedProductId,
+  onPressProduct,
+  onPinProduct,
+  onSaveProduct,
+  onSeeMore,
+  isSaved,
+}: {
+  section: ViewSection;
+  pinnedProductId?: string | null;
+  onPressProduct: (product: Product, sectionId: string) => void;
+  onPinProduct: (product: Product, sectionKey: string) => void;
+  onSaveProduct: (product: Product, sectionKey: string) => void;
+  onSeeMore?: (section: { key: string; title: string }) => void;
+  isSaved: (productId: string) => boolean;
+}) {
+  const { status: authStatus } = useAuth();
+  const authStatusRef = useRef(authStatus);
+  authStatusRef.current = authStatus;
+  const sectionKeyRef = useRef(section.key);
+  sectionKeyRef.current = section.key;
+  const hasMore = section.products.length > CURATION_ROW_LIMIT;
+  const visible = section.products.slice(0, CURATION_ROW_LIMIT);
+  const goMore = () => {
+    Haptic.light();
+    onSeeMore?.({ key: section.key, title: section.title });
+  };
+  const onViewableItemsChanged = useRef(
+    ({
+      viewableItems,
+    }: {
+      viewableItems: Array<{
+        item: Product;
+        index: number | null;
+        isViewable: boolean;
+      }>;
+    }) => {
+      if (authStatusRef.current !== 'authenticated') return;
+      const items = viewableItems
+        .filter((token) => token.isViewable)
+        .map((token) => ({
+          section_id: sectionKeyRef.current,
+          product_id: Number(token.item.id),
+          position: token.index ?? undefined,
+        }))
+        .filter((item) => Number.isFinite(item.product_id));
+      if (items.length > 0) void recordCurationImpressions(items).catch(() => {});
+    },
+  ).current;
+  const viewabilityConfig = useMemo(
+    () => ({
+      itemVisiblePercentThreshold: 50,
+      minimumViewTime: 500,
+    }),
+    [],
+  );
+
+  return (
+    <View style={styles.rowSection}>
+      <View style={styles.rowHeader}>
+        <Text style={styles.sectionTitle}>{section.title}</Text>
+        {hasMore && (
+          <Pressable hitSlop={6} onPress={goMore}>
+            <Text style={styles.rowMoreText}>더보기</Text>
+          </Pressable>
+        )}
+      </View>
+      {section.subtitle != null && (
+        <Text style={styles.sectionSubtitle}>{section.subtitle}</Text>
+      )}
+      <FlatList
+        horizontal
+        data={visible}
+        keyExtractor={(product) => product.id}
+        renderItem={({ item: product, index }) => (
+          <PressScaleCard
+            product={product}
+            position={index}
+            sectionId={section.key}
+            pinned={pinnedProductId === product.id}
+            saved={isSaved(product.id)}
+            onPress={() => onPressProduct(product, section.key)}
+            onPin={() => onPinProduct(product, section.key)}
+            onSave={() => onSaveProduct(product, section.key)}
+          />
+        )}
+        ItemSeparatorComponent={() => <View style={styles.rowGap} />}
+        showsHorizontalScrollIndicator={false}
+        style={styles.rowScroll}
+        contentContainerStyle={styles.rowScrollContent}
+        onViewableItemsChanged={onViewableItemsChanged}
+        viewabilityConfig={viewabilityConfig}
+      />
+    </View>
+  );
+}
+
 export function CurationSheet({
   sections: serverSections,
   loading,
@@ -173,50 +273,18 @@ export function CurationSheet({
 
   return (
     <View>
-      {sections.map((section) => {
-        // 가로엔 5개만. 그 이상 있으면 '더보기'로 전용 그리드 페이지 유도.
-        const hasMore = section.products.length > CURATION_ROW_LIMIT;
-        const visible = section.products.slice(0, CURATION_ROW_LIMIT);
-        const goMore = () => {
-          Haptic.light();
-          onSeeMore?.({ key: section.key, title: section.title });
-        };
-        return (
-        <View key={section.key} style={styles.rowSection}>
-          <View style={styles.rowHeader}>
-            <Text style={styles.sectionTitle}>{section.title}</Text>
-            {hasMore && (
-              <Pressable hitSlop={6} onPress={goMore}>
-                <Text style={styles.rowMoreText}>더보기</Text>
-              </Pressable>
-            )}
-          </View>
-          {section.subtitle != null && (
-            <Text style={styles.sectionSubtitle}>{section.subtitle}</Text>
-          )}
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.rowScroll}
-            contentContainerStyle={styles.rowScrollContent}
-          >
-            {visible.map((product, i) => (
-              <PressScaleCard
-                key={product.id}
-                product={product}
-                position={i}
-                sectionId={section.key}
-                pinned={pinnedProductId === product.id}
-                saved={isSaved(product.id)}
-                onPress={() => onPressProduct(product, section.key)}
-                onPin={() => onPinProduct(product, section.key)}
-                onSave={() => onSaveProduct(product, section.key)}
-              />
-            ))}
-          </ScrollView>
-        </View>
-        );
-      })}
+      {sections.map((section) => (
+        <CurationRow
+          key={section.key}
+          section={section}
+          pinnedProductId={pinnedProductId}
+          onPressProduct={onPressProduct}
+          onPinProduct={onPinProduct}
+          onSaveProduct={onSaveProduct}
+          onSeeMore={onSeeMore}
+          isSaved={isSaved}
+        />
+      ))}
     </View>
   );
 }
@@ -254,7 +322,9 @@ const styles = StyleSheet.create({
   },
   rowScrollContent: {
     paddingHorizontal: Spacing.three,
-    gap: Spacing.two,
+  },
+  rowGap: {
+    width: Spacing.two,
   },
 
   // ── 로딩 스켈레톤 ──

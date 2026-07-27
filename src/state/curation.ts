@@ -11,19 +11,24 @@
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Image as ExpoImage } from 'expo-image';
-import { useEffect, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
 
 import { api } from '@/lib/api';
+import { useAuth } from '@/state/auth';
 import type { OnboardingGender } from '@/state/onboarding';
 import type { SuggestionChip } from '@/state/suggestion-chips';
 import type { CurationResponse, CurationSection } from '@/types/api';
 
 const CACHE_KEY_PREFIX = 'kiko:curation:cache:v1:';
 
-function cacheKey(gender: OnboardingGender | null): string {
+function cacheKey(
+  gender: OnboardingGender | null,
+  userId: string | null,
+): string {
   // gender 미상(재설치한 기존 계정 유저 등)은 서버가 프로필로 해석 —
   // 캐시도 별도 슬롯에 둔다.
-  return `${CACHE_KEY_PREFIX}${gender ?? 'profile'}`;
+  return `${CACHE_KEY_PREFIX}${userId ?? 'guest'}:${gender ?? 'profile'}`;
 }
 
 // 첫 화면 구좌 이미지 미리 데워두기 — 가로 스크롤로 아직 안 보인 카드까지
@@ -64,6 +69,7 @@ export function useCuration(gender: OnboardingGender | null): {
   /** 캐시·서버 어느 쪽도 아직 안 온 첫 로딩 — 이때 mock 대신 스켈레톤. */
   loading: boolean;
 } {
+  const { userId } = useAuth();
   const [data, setData] = useState<CurationResponse | null>(null);
   // 서버 요청이 성공이든 실패든 '끝났는지'. 실패해도 true 가 되어 스켈레톤이
   // 무한히 도는 걸 막는다(에러 시엔 빈 상태로 폴백).
@@ -73,15 +79,14 @@ export function useCuration(gender: OnboardingGender | null): {
   useEffect(() => {
     setData(null);
     setSettled(false);
-  }, [gender]);
+  }, [gender, userId]);
 
   useEffect(() => {
     let cancelled = false;
-    let gotFresh = false;
 
     // 1) 캐시 즉시 표시 (구좌가 늦게 뜨는 빈 화면 방지)
-    void AsyncStorage.getItem(cacheKey(gender)).then((raw) => {
-      if (cancelled || gotFresh || !raw) return;
+    void AsyncStorage.getItem(cacheKey(gender, userId)).then((raw) => {
+      if (cancelled || !raw) return;
       try {
         setData(JSON.parse(raw) as CurationResponse);
       } catch {
@@ -89,27 +94,38 @@ export function useCuration(gender: OnboardingGender | null): {
       }
     });
 
-    // 2) 서버 fetch — 성공 시 상태·캐시 갱신, 실패 시 캐시 유지
-    api
-      .get<CurationResponse>('/v1/curation', gender ? { gender } : undefined)
-      .then((res) => {
-        if (cancelled) return;
-        gotFresh = true;
-        setData(res);
-        prefetchSectionImages(res);
-        void AsyncStorage.setItem(cacheKey(gender), JSON.stringify(res));
-      })
-      .catch(() => {
-        // 비로그인+gender 미상이면 422 정상 — 캐시/폴백 경로로 처리
-      })
-      .finally(() => {
-        if (!cancelled) setSettled(true);
-      });
-
     return () => {
       cancelled = true;
     };
-  }, [gender]);
+  }, [gender, userId]);
+
+  // 홈/더보기로 다시 포커스될 때 개인화 결과를 재조회한다. 사용자별 캐시를
+  // 먼저 보여주므로 화면은 비지 않고, 서버 결과가 오면 제자리 갱신된다.
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      api
+        .get<CurationResponse>('/v1/curation', gender ? { gender } : undefined)
+        .then((res) => {
+          if (cancelled) return;
+          setData(res);
+          prefetchSectionImages(res);
+          void AsyncStorage.setItem(
+            cacheKey(gender, userId),
+            JSON.stringify(res),
+          );
+        })
+        .catch(() => {
+          // 비로그인+gender 미상이면 422 정상 — 캐시/폴백 경로로 처리
+        })
+        .finally(() => {
+          if (!cancelled) setSettled(true);
+        });
+      return () => {
+        cancelled = true;
+      };
+    }, [gender, userId]),
+  );
 
   return {
     sections: data && data.sections.length > 0 ? data.sections : null,
