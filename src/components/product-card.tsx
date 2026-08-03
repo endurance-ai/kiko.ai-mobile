@@ -17,6 +17,8 @@ type Props = {
   saved?: boolean;
   onPress?: () => void;
   onPin?: () => void;
+  /** 브랜드명 탭 → 브랜드 홈 (2026-08-04 신설). 미전달 시 기존과 동일하게 비인터랙티브. */
+  onBrandPress?: () => void;
   /** 찜 토글. 넘기면 핀(+) 아래 하트 버튼이 함께 뜬다. 비로그인 게이트는
    *  호출부 책임 (로그인 시트 유도 등) — 카드는 콜백만 위임한다. */
   onSave?: () => void;
@@ -36,6 +38,7 @@ export function ProductCard({
   saved = false,
   onPress,
   onPin,
+  onBrandPress,
   onSave,
   searchId,
   sectionId,
@@ -135,9 +138,22 @@ export function ProductCard({
         )}
       </Pressable>
 
-      <Text style={styles.brand} numberOfLines={1}>
-        {product.brand}
-      </Text>
+      {onBrandPress ? (
+        <Pressable
+          hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+          accessibilityRole="button"
+          accessibilityLabel={`${product.brand} 브랜드 홈`}
+          onPress={onBrandPress}
+        >
+          <Text style={styles.brand} numberOfLines={1}>
+            {product.brand}
+          </Text>
+        </Pressable>
+      ) : (
+        <Text style={styles.brand} numberOfLines={1}>
+          {product.brand}
+        </Text>
+      )}
       <Text style={styles.name} numberOfLines={1}>
         {product.name}
       </Text>
