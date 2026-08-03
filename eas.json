@@ -10,7 +10,10 @@
       "ios": {
         "simulator": true
       },
-      "channel": "development"
+      "channel": "development",
+      "env": {
+        "EXPO_PUBLIC_APNS_ENV": "development"
+      }
     },
     "development-device": {
       "developmentClient": true,
@@ -18,18 +21,27 @@
       "ios": {
         "simulator": false
       },
-      "channel": "development-device"
+      "channel": "development-device",
+      "env": {
+        "EXPO_PUBLIC_APNS_ENV": "development"
+      }
     },
     "preview": {
       "distribution": "internal",
       "ios": {
         "simulator": false
       },
-      "channel": "preview"
+      "channel": "preview",
+      "env": {
+        "EXPO_PUBLIC_APNS_ENV": "development"
+      }
     },
     "production": {
       "autoIncrement": true,
-      "channel": "production"
+      "channel": "production",
+      "env": {
+        "EXPO_PUBLIC_APNS_ENV": "production"
+      }
     }
   },
   "submit": {

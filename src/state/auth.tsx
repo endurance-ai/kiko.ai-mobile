@@ -13,9 +13,11 @@ import {
 
 import { identifyUser, resetAnalytics } from '@/lib/analytics';
 import { api, registerAuthHooks } from '@/lib/api';
+import { clearStoredDeviceId, getStoredDeviceId } from '@/lib/device-id';
 import { promoteOnboardingToServer } from '@/state/onboarding';
 import type {
   AccessTokenResponse,
+  LogoutRequest,
   SocialLoginRequest,
   TokenResponse,
 } from '@/types/api';
@@ -72,6 +74,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUserId(null);
     await clearRefreshToken();
     await SecureStore.deleteItemAsync(USER_ID_KEY);
+    await clearStoredDeviceId();
     resetAnalytics();
     setStatus('unauthenticated');
   }, []);
@@ -87,8 +90,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = useCallback(async (): Promise<void> => {
     const refreshToken = await readRefreshToken();
     if (refreshToken) {
+      // Include device_id so the server deactivates this device's push
+      // endpoint. Local cleanup proceeds regardless of network outcome.
+      const deviceId = (await getStoredDeviceId()) ?? undefined;
+      const body: LogoutRequest = { refresh_token: refreshToken, device_id: deviceId };
       try {
-        await api.post('/v1/auth/logout', { refresh_token: refreshToken }, false);
+        await api.post('/v1/auth/logout', body, false);
       } catch {
         // ignore — local cleanup proceeds regardless
       }

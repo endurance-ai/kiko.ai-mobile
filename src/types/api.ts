@@ -24,6 +24,12 @@ export interface RevokeRequest {
   refresh_token: string;
 }
 
+export interface LogoutRequest {
+  refresh_token: string;
+  /** Deactivate this device's push endpoint server-side on logout. */
+  device_id?: string;
+}
+
 export interface ProductRef {
   image_url: string;
   caption: string;
@@ -249,10 +255,18 @@ export interface LinkCheckResponse {
 }
 
 export type DevicePlatform = 'ios' | 'android';
+export type DeviceProvider = 'apns' | 'fcm';
+export type ApnsEnvironment = 'development' | 'production';
 
 export interface RegisterDeviceRequest {
-  apns_token: string;
+  /** Native APNs token. Provider-neutral field; server also accepts legacy `apns_token`. */
+  push_token: string;
+  /** device_id returned by a prior registration; omit on first registration. */
+  device_id?: string;
   platform?: DevicePlatform;
+  provider?: DeviceProvider;
+  /** Sandbox vs production — derived from the SIGNED build, not `__DEV__`. */
+  environment?: ApnsEnvironment;
   app_version?: string;
   device_model?: string;
 }
@@ -260,6 +274,19 @@ export interface RegisterDeviceRequest {
 export interface RegisterDeviceResponse {
   device_id: string;
   registered_at: string;
+  provider: string;
+  environment: string;
+}
+
+/** APNs custom payload the server sends (schema_version 1). Product collections stay server-side. */
+export interface NotificationData {
+  schema_version: number;
+  message_id: string;
+  kind: string;
+  primary_product_id: string;
+  item_count: number;
+  /** Ready-to-navigate path: `/product/:id`, `/wishlist`, or `/home`. */
+  route: string;
 }
 
 export interface NotificationCategories {

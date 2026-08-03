@@ -4,6 +4,7 @@ import { ReactNode, useEffect } from 'react';
 import { useColorScheme } from 'react-native';
 
 import { AppUpdateGate } from '@/components/app-update-gate';
+import { useNotificationRouter } from '@/hooks/use-notification-router';
 import { useRegisterDevice } from '@/hooks/use-register-device';
 import { useShareIntent } from '@/hooks/use-share-intent';
 import { initAnalytics } from '@/lib/analytics';
@@ -22,6 +23,7 @@ const PRELOAD_ASSETS = [require('../../assets/brand/kiko-wordmark.png')];
 
 function AuthSideEffects({ children }: { children: ReactNode }) {
   useRegisterDevice();
+  useNotificationRouter();
   useShareIntent();
   useEffect(() => {
     void initAnalytics();
