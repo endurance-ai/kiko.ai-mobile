@@ -83,6 +83,8 @@ export default function RootLayout() {
                           }}
                         />
                         <Stack.Screen name="settings" />
+                        <Stack.Screen name="notifications-inbox" />
+                        <Stack.Screen name="notification-settings" />
                         <Stack.Screen
                           name="feedback"
                           options={{
