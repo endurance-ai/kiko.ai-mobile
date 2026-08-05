@@ -200,6 +200,38 @@ function parseStreamCaption(caption: string): {
 // 숨긴다. 모듈 레벨이라 PDP·더보기 왕복으로 새 홈 인스턴스가 떠도 유지된다.
 const HISTORY_OPENED_SESSIONS = new Set<string>();
 
+// 메인(Explore) 컴포저發 새 검색을 push 된 채팅 home 인스턴스로 넘기는 1회성
+// 버퍼. URL 로 로컬 이미지 URI·핀 attachment·칩 영문쿼리를 인코딩하면 취약해
+// 모듈 레벨로 전달하고, chat=1 home 이 mount 시 소비한다 (HISTORY_OPENED_
+// SESSIONS 와 동일한 모듈 레벨 핸드오프 관례).
+type PendingChatSeed = {
+  text: string;
+  overrideAttachment?: {
+    imageUrl?: string;
+    thumbColor?: string;
+    label: string;
+    productId?: string;
+    productName?: string;
+    productPrice?: string;
+  };
+  imagePayload?: { localImageUri?: string; serverImageUrl?: string };
+  serverQueryOverride?: string;
+  entryPoint: "typed" | "chip" | "critique" | "seed" | "retry";
+};
+// 모듈 레벨 상태는 컴포넌트 밖 함수로만 읽고/쓴다 — 컴포넌트/훅 본문에서
+// 직접 재할당하면 React Compiler 규칙("This value cannot be modified")에
+// 걸리므로, set/take 헬퍼로 감싸 모듈 스코프에서 변이한다.
+let pendingChatSeed: PendingChatSeed | null = null;
+function setPendingChatSeed(v: PendingChatSeed): void {
+  pendingChatSeed = v;
+}
+/** 대기 검색을 1회성으로 꺼낸다(꺼내면 비운다). */
+function takePendingChatSeed(): PendingChatSeed | null {
+  const v = pendingChatSeed;
+  pendingChatSeed = null;
+  return v;
+}
+
 const AGENT_INTRO_DEFAULT = "이런 거 어때? · 콕집기로 골라봐";
 const AGENT_INTRO_NARROWING = "이런 거 찾았어 · 근데 좀 갈리네";
 const EMPTY_FALLBACK = "이 무드는 아직 딱 맞는 걸 못 찾았어. 이렇게 해볼까?";
@@ -355,6 +387,7 @@ export default function ChatEntryScreen() {
     pin_id: pinIdParam,
     pin_name: pinNameParam,
     pin_price: pinPriceParam,
+    chat: chatParam,
   } = useLocalSearchParams<{
     session?: string;
     from?: string;
@@ -364,7 +397,11 @@ export default function ChatEntryScreen() {
     pin_id?: string;
     pin_name?: string;
     pin_price?: string;
+    chat?: string;
   }>();
+  // 채팅 모드 — 메인(Explore) 컴포저發 새 검색이 push 한 home 인스턴스. 큐레이션
+  // 을 숨겨 "새 세션 채팅 화면"으로 보이게 하고, 대기 중인 첫 검색을 소비한다.
+  const chatMode = chatParam === "1";
   const { value: filter, setValue: setFilter } = useFilter();
   const { isSaved: isWishlisted, toggle: toggleWishlist } = useWishlist();
   const { status: authStatus } = useAuth();
@@ -442,7 +479,7 @@ export default function ChatEntryScreen() {
   // 부풀어 큐레이션→디깅 전환율 분모가 오염된다.
   // 빈 deps 로 마운트 시점 파라미터만 보므로 재발사 없음.
   useEffect(() => {
-    if (seedParam || sessionParam) return;
+    if (seedParam || sessionParam || chatMode) return;
     trackOnboarding("main_screen_viewed", {
       entry_source: fromParam === "onboarding" ? "onboarding" : "direct",
     });
@@ -573,6 +610,30 @@ export default function ChatEntryScreen() {
     pinNameParam,
     pinPriceParam,
   ]);
+
+  // 채팅 모드 진입 — 메인(Explore) 컴포저가 남긴 대기 검색을 1회 소비해 이
+  // 화면에서 스트리밍한다. chatMode 라 runStreamingTurn 의 push 게이트를
+  // 통과하지 않고(재-push 없음) 인라인 실행 → createSessionStream 으로 새 세션
+  // 생성. seed 효과와 동일하게 살짝 defer 해 마운트 안정 후 착수.
+  const consumedPendingRef = useRef(false);
+  useEffect(() => {
+    if (!chatMode || consumedPendingRef.current) return;
+    const pending = takePendingChatSeed();
+    if (!pending) return;
+    consumedPendingRef.current = true;
+    setTimeout(
+      () =>
+        runStreamingTurn(
+          pending.text,
+          pending.overrideAttachment,
+          pending.imagePayload,
+          pending.serverQueryOverride,
+          pending.entryPoint,
+        ),
+      50,
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatMode]);
 
   const lastTurn = messages[messages.length - 1] ?? null;
   const lastStatus = lastTurn?.status ?? null;
@@ -975,6 +1036,26 @@ export default function ChatEntryScreen() {
     // critique / retry) 서버 호출 금지. 새 채팅에서 seed 로 들어오는 케이스
     // 도 여기 방어선 하나로 막힌다.
     if (capLocked) return;
+    // 메인(Explore)發 새 검색 → 인라인 확장 대신 "새 세션 채팅 화면"으로 이동.
+    // 조건: 아직 세션 없음 + 이 화면이 채팅 모드가 아님 + 유저가 직접 시작한
+    // 검색(typed/chip). seed(핸드오프)·critique·retry 나 이어가기(세션 보유)는
+    // 그대로 인라인. 페이로드(핀 attachment·업로드 이미지·칩 영문쿼리)는 모듈
+    // 버퍼로 넘겨, push 된 chat=1 home 이 mount 시 이 함수를 그대로 재실행한다.
+    if (
+      !sessionIdRef.current &&
+      !chatMode &&
+      (entryPoint === "typed" || entryPoint === "chip")
+    ) {
+      setPendingChatSeed({
+        text: trimmed,
+        overrideAttachment: overrideAttachment ?? pinnedAttachment ?? undefined,
+        imagePayload,
+        serverQueryOverride,
+        entryPoint,
+      });
+      router.push("/home?chat=1");
+      return;
+    }
     clearBanner("request-failure");
     // Explicit override wins (e.g. handoff from PDP). Otherwise use the
     // currently-pinned product from the composer.
@@ -1598,7 +1679,7 @@ export default function ChatEntryScreen() {
       >
         {/* 히어로 표제 + 큐레이션 구좌 — '메인 홈'에서만. 히스토리에서 연
             과거 채팅(resumedFromHistory)에는 채팅 내용만 보인다. */}
-        {!resumedFromHistory && (
+        {!resumedFromHistory && !chatMode && (
           <View
             style={styles.curationBlock}
             onLayout={(e) => {
@@ -1634,7 +1715,7 @@ export default function ChatEntryScreen() {
               styles.conversationBlock,
               // 큐레이션이 위에 있을 때만 구분선/여백. 과거 채팅(큐레이션
               // 없음)은 화면 최상단이라 구분선 없이 바로 시작.
-              !resumedFromHistory && styles.conversationDivider,
+              !resumedFromHistory && !chatMode && styles.conversationDivider,
             ]}
           >
           {messages.map((turn) => {
@@ -2316,12 +2397,9 @@ export default function ChatEntryScreen() {
             const sid = sessionIdRef.current;
             router.push(sid ? `/sidebar?current=${sid}` : "/sidebar");
           }}
-          showCuration={showJumpTop && !resumedFromHistory}
+          showCuration={showJumpTop && !resumedFromHistory && !chatMode}
           onOpenCuration={scrollToCuration}
-          onOpenList={() => {
-            const sid = sessionIdRef.current;
-            router.push(sid ? `/history?session=${sid}` : "/history");
-          }}
+          onOpenNotifications={() => router.push("/notifications-inbox")}
           onOpenWishlist={() => router.push("/wishlist")}
         />
       </View>

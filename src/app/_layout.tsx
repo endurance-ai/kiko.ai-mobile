@@ -56,7 +56,6 @@ export default function RootLayout() {
                           }}
                         />
                         <Stack.Screen name="home" />
-                        <Stack.Screen name="history" />
                         <Stack.Screen name="list" />
                         <Stack.Screen name="wishlist" />
                         <Stack.Screen name="product/[id]" />

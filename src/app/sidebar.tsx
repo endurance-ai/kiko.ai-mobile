@@ -126,6 +126,16 @@ export default function SidebarScreen() {
     });
   };
 
+  // Explore — 앱 첫 진입에서 보는 큐레이션(메인 /home). 최근 대화(세션)와
+  // 구분되는 상시 메뉴 항목. 홈으로 replace 해 큐레이션 표면으로 되돌린다.
+  const goExplore = () => {
+    Haptic.light();
+    animateClose(() => {
+      router.back();
+      setTimeout(() => router.replace("/home" as never), 30);
+    });
+  };
+
   const goSession = (sessionId: string) => {
     Haptic.light();
     animateClose(() => {
@@ -343,6 +353,20 @@ export default function SidebarScreen() {
               transition={0}
             />
 
+            {/* Explore — 큐레이션(메인) 진입. 최근 대화 목록 위에 상시 노출되는
+                동급 메뉴로, '최근 항목' 섹션과 구분한다. */}
+            <Pressable
+              style={({ pressed }) => [
+                styles.menuRow,
+                pressed && styles.historyRowActive,
+              ]}
+              onPress={goExplore}
+              accessibilityRole="button"
+              accessibilityLabel="Explore"
+            >
+              <Text style={styles.menuRowText}>Explore</Text>
+            </Pressable>
+
             <Text style={styles.sectionLabel}>최근 항목</Text>
 
             {sessions === null ? (
@@ -492,6 +516,22 @@ const styles = StyleSheet.create({
     marginLeft: 12,
     marginTop: 6,
     marginBottom: 24,
+  },
+
+  // Explore 메뉴 행 — historyRow 와 같은 리듬(12/12, Radius.lg)이되, 최근
+  // 대화보다 상위 동급 항목이라 살짝 강조(Semibold). 아래 '최근 항목'
+  // 섹션 라벨과 여백으로 구분된다.
+  menuRow: {
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderRadius: Radius.lg,
+    marginBottom: 12,
+  },
+  menuRowText: {
+    ...IOSText.body,
+    fontWeight: "600",
+    color: IOSColors.label,
+    fontFamily: IOSFont.sans,
   },
 
   sectionLabel: {

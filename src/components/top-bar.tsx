@@ -4,14 +4,16 @@ import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { GlassSurface } from '@/components/glass-surface';
-import { Haptic, IOSColors, IOSFont, IOSText } from '@/theme';
+import { Haptic, IOSColors, IOSFont, IOSText, Radius } from '@/theme';
 
 type Props = {
   onOpenMenu?: () => void;
   /** 스크롤을 충분히 내렸을 때만 헤더에 노출되는 '큐레이션'(최상단 복귀) 버튼. */
   showCuration?: boolean;
   onOpenCuration?: () => void;
-  onOpenList?: () => void;
+  /** 알림함(개인 소식함) 열기 — 히스토리 필을 대체(2026-08). 최근 대화는
+   *  사이드바 '최근 항목'이 전담하므로 헤더는 알림 + 찜만 노출한다. */
+  onOpenNotifications?: () => void;
   onOpenWishlist?: () => void;
 };
 
@@ -19,7 +21,7 @@ export function TopBar({
   onOpenMenu,
   showCuration,
   onOpenCuration,
-  onOpenList,
+  onOpenNotifications,
   onOpenWishlist,
 }: Props) {
   const tap = (cb?: () => void) => () => {
@@ -60,16 +62,24 @@ export function TopBar({
             </Animated.View>
           )}
 
-          <Pressable hitSlop={6} onPress={tap(onOpenList)}>
-            <GlassSurface variant="pill" isInteractive style={styles.textPill}>
+          {/* 알림 — 벨 아이콘 필 + 빨간 점(읽지 않은 소식). 뱃지 점이 헤더에
+              상시 보여야 알림함으로 유입된다. 점은 Pressable 기준으로 얹어
+              글래스 필의 overflow 클리핑을 피한다. */}
+          <Pressable
+            hitSlop={6}
+            onPress={tap(onOpenNotifications)}
+            accessibilityRole="button"
+            accessibilityLabel="알림, 읽지 않은 소식 있음"
+          >
+            <GlassSurface variant="pill" isInteractive style={styles.iconPill}>
               <SymbolView
-                name="list.bullet"
-                size={16}
+                name="bell"
+                size={18}
                 tintColor={IOSColors.label}
                 weight="medium"
               />
-              <Text style={styles.pillText}>히스토리</Text>
             </GlassSurface>
+            <View style={styles.bellDot} pointerEvents="none" />
           </Pressable>
 
           <Pressable hitSlop={6} onPress={tap(onOpenWishlist)}>
@@ -122,5 +132,16 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: IOSColors.label,
     fontFamily: IOSFont.sans,
+  },
+  // iOS 표준 unread dot — 8pt 빨간 점. 색 하나에 의존하지 않도록(HIG Color)
+  // 접근성 라벨("읽지 않은 소식 있음")로 의미를 별도 전달한다.
+  bellDot: {
+    position: 'absolute',
+    top: 5,
+    right: 5,
+    width: 8,
+    height: 8,
+    borderRadius: Radius.pill,
+    backgroundColor: IOSColors.systemRed,
   },
 });
