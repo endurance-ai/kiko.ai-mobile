@@ -2,6 +2,7 @@ import {
   ApiError,
   BASE_URL,
   getCurrentAccessToken,
+  normalizeErrorDetail,
   notifyUnauthorized,
   refreshAccessToken,
 } from '@/lib/api';
@@ -78,7 +79,7 @@ type SseEvent = { name: string; data: string };
 async function readErrorDetail(res: Response): Promise<string> {
   try {
     const body = (await res.json()) as ApiErrorBody;
-    return body.detail ?? `HTTP ${res.status}`;
+    return normalizeErrorDetail(body.detail) ?? `HTTP ${res.status}`;
   } catch {
     return res.statusText || `HTTP ${res.status}`;
   }
