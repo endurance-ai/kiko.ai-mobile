@@ -99,8 +99,13 @@ export default function ChatLabScreen() {
 
   return (
     <View style={styles.root}>
-      {/* 상단 바 — ‹ 하나 (드릴다운 문법: Chat 은 메인에서 파고드는 화면). */}
+      {/* 상단 바 — ‹ + 중앙 "Chat" 타이틀 (2026-08-05 사용자: 챗 진입 시에도
+          중앙 상단에 화면명. 뉴스·Explore 와 동일 문법 — 절대 중앙,
+          pointerEvents none, headline 17 Semibold). 드릴다운이라 좌측은 ‹ 하나. */}
       <View style={[styles.topBar, { top: topInset + Spacing.one }]}>
+        <View pointerEvents="none" style={styles.navTitleWrap}>
+          <Text style={styles.navTitle}>Chat</Text>
+        </View>
         <Pressable
           hitSlop={8}
           onPress={handleBack}
@@ -186,6 +191,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+  },
+  // 중앙 내비 타이틀 — 뉴스·Explore 와 동일(절대 중앙, headline 17 Semibold).
+  navTitleWrap: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+  },
+  navTitle: {
+    ...IOSText.headline,
+    color: IOSColors.label,
+    fontFamily: IOSFont.sans,
   },
   backPill: {
     flexDirection: 'row',

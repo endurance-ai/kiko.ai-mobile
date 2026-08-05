@@ -233,7 +233,7 @@ export default function NotifSettingsLabScreen() {
                   label="팔로우 브랜드 관리"
                   disabled={dimmed}
                   onPress={() => {
-                    // mock — 실서비스는 팔로우 브랜드 관리 화면으로.
+                    router.push('/follow-manage-lab' as never);
                   }}
                 />
               </View>
