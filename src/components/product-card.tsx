@@ -30,6 +30,17 @@ type Props = {
   position?: number | null;
   /** 노출 경로. 기본 "search". 향후 큐레이션 등 확장. */
   source?: string;
+  /** 할인 전 정가. 있으면 priceTag 안에 취소선 정가 + 현재가를 함께 그린다
+   *  (SSENSE 문법: 동일 타이포, 정가만 취소선 — 2026-08-03 확정). v1.2
+   *  큐레이션 구좌(세일 표기)용 신설, 2026-08-04. 미전달 시 기존과 동일. */
+  oldPriceWon?: number;
+  /** true 면 이미지 좌상단에 흰 알약 "NEW" 배지. v1.2 큐레이션 구좌(신상
+   *  표기)용 신설, 2026-08-04. 미전달 시 기존과 동일. */
+  isNew?: boolean;
+  /** size — v1.2 큐레이션 정사각 카드(2.5개 노출)용. 지정 시 root 폭 = size,
+   *  이미지 영역 = size × size 정사각. 미전달 시 기존 세로형(156×196) 유지
+   *  (2026-08-04) — 실서비스 호출부 무영향. */
+  size?: number;
 };
 
 export function ProductCard({
@@ -44,6 +55,9 @@ export function ProductCard({
   sectionId,
   position,
   source,
+  oldPriceWon,
+  isNew = false,
+  size,
 }: Props) {
   useEffect(() => {
     trackProductImpression({
@@ -69,10 +83,15 @@ export function ProductCard({
   };
 
   return (
-    <View style={styles.root}>
+    <View style={[styles.root, size != null && { width: size }]}>
       {/* 로딩 중엔 colorHint 가 배경으로 보여 회색 빈칸 대신 자리를 채운다. */}
       <Pressable
-        style={[styles.imageWrap, { backgroundColor: product.colorHint }]}
+        style={[
+          styles.imageWrap,
+          // size 지정 시 정사각 이미지(사이즈 체계 2번). 미지정이면 기존 세로형.
+          size != null && { width: size, height: size },
+          { backgroundColor: product.colorHint },
+        ]}
         onPress={handlePress}
       >
         {product.imageUri ? (
@@ -130,33 +149,99 @@ export function ProductCard({
           </View>
         )}
 
-        {/* Price tag — bottom left. 가격 있을 때만(스트림 결과 등 가격 없는 소스는 생략). */}
-        {product.priceWon > 0 && (
-          <View style={styles.priceTag}>
-            <Text style={styles.priceText}>{formatPrice(product.priceWon)}</Text>
+        {/* NEW 배지 — top left. isNew 전달 시에만(v1.2 큐레이션 신상 구좌). */}
+        {isNew && (
+          <View style={styles.newTag}>
+            <Text style={styles.newTagText}>NEW</Text>
+          </View>
+        )}
+
+        {/* Price tag — bottom left. 가격 있을 때만(스트림 결과 등 가격 없는 소스는 생략).
+            oldPriceWon 이 있으면 취소선 정가 + 현재가를 함께 그린다(SSENSE 문법:
+            동일 타이포, 정가만 취소선). 좁은 정사각 카드(size 지정)에선 한 줄
+            조합이 카드 폭을 넘어 현재가가 잘리므로 2줄 스택(취소선 위 / 현재가
+            아래)으로 전환하고 paddingHorizontal 을 축소한다 — 기본(세로형)
+            카드는 기존 한 줄 그대로. */}
+        {product.priceWon > 0 && size == null && (
+          <View
+            style={[styles.priceTag, size != null && oldPriceWon != null && styles.priceTagCompact]}
+          >
+            {oldPriceWon && size != null ? (
+              <>
+                <Text style={[styles.priceText, styles.oldPriceText]} numberOfLines={1}>
+                  {formatPrice(oldPriceWon)}
+                </Text>
+                <Text style={styles.priceText} numberOfLines={1}>
+                  {formatPrice(product.priceWon)}
+                </Text>
+              </>
+            ) : oldPriceWon ? (
+              <Text style={styles.priceText} numberOfLines={1}>
+                <Text style={styles.oldPriceText}>{formatPrice(oldPriceWon)}</Text>
+                {' '}
+                {formatPrice(product.priceWon)}
+              </Text>
+            ) : (
+              <Text style={styles.priceText}>{formatPrice(product.priceWon)}</Text>
+            )}
           </View>
         )}
       </Pressable>
 
-      {onBrandPress ? (
-        <Pressable
-          hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
-          accessibilityRole="button"
-          accessibilityLabel={`${product.brand} 브랜드 홈`}
-          onPress={onBrandPress}
-        >
-          <Text style={styles.brand} numberOfLines={1}>
-            {product.brand}
-          </Text>
-        </Pressable>
+      {size != null ? (
+        // SSENSE 문법(brand-lab.tsx tile 계열 이식, 2026-08-05) — 큐레이션
+        // 정사각 카드는 상품명을 렌더하지 않고 브랜드 + 가격 행만 노출한다.
+        <>
+          {onBrandPress ? (
+            <Pressable
+              hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+              accessibilityRole="button"
+              accessibilityLabel={`${product.brand} 브랜드 홈`}
+              onPress={onBrandPress}
+            >
+              <Text style={styles.ssenseBrand} numberOfLines={1}>
+                {product.brand}
+              </Text>
+            </Pressable>
+          ) : (
+            <Text style={styles.ssenseBrand} numberOfLines={1}>
+              {product.brand}
+            </Text>
+          )}
+          <View style={styles.ssensePriceRow}>
+            <Text style={styles.ssensePrice} numberOfLines={1}>
+              {formatPrice(product.priceWon)}
+            </Text>
+            {oldPriceWon != null && (
+              <Text style={styles.ssenseOldPrice} numberOfLines={1}>
+                {formatPrice(oldPriceWon)}
+              </Text>
+            )}
+          </View>
+        </>
       ) : (
-        <Text style={styles.brand} numberOfLines={1}>
-          {product.brand}
-        </Text>
+        <>
+          {onBrandPress ? (
+            <Pressable
+              hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+              accessibilityRole="button"
+              accessibilityLabel={`${product.brand} 브랜드 홈`}
+              onPress={onBrandPress}
+            >
+              <Text style={styles.brand} numberOfLines={1}>
+                {product.brand}
+              </Text>
+            </Pressable>
+          ) : (
+            <Text style={styles.brand} numberOfLines={1}>
+              {product.brand}
+            </Text>
+          )}
+          <Text style={styles.name} numberOfLines={1}>
+            {product.name}
+          </Text>
+        </>
       )}
-      <Text style={styles.name} numberOfLines={1}>
-        {product.name}
-      </Text>
     </View>
   );
 }
@@ -205,10 +290,38 @@ const styles = StyleSheet.create({
     borderRadius: Radius.md,
     backgroundColor: withAlpha('#FFFFFF', Opacity.nearFull),
   },
+  // 좁은 정사각 카드 + 취소선 2가격 조합 전용 — 태그가 카드 폭을 넘지 않게
+  // 여백만 축소하고 우측 클리어런스를 확보한다 (2026-08-04).
+  priceTagCompact: {
+    paddingHorizontal: 6,
+    maxWidth: '92%',
+  },
   priceText: {
     ...IOSText.footnote,
     fontWeight: '700',
     // Always dark — sits on a white tag pinned over the photo.
+    color: '#1C1C1E',
+    fontFamily: IOSFont.sans,
+  },
+  // 취소선 정가 세그먼트 — priceText 안에 nested Text 로 얹는다. 회색조는
+  // 흰 태그 배경 위 근사색 하드코딩 관례(위 priceText 의 '#1C1C1E'와 동일 근거).
+  oldPriceText: {
+    textDecorationLine: 'line-through',
+    color: '#8E8E93',
+  },
+  // NEW 배지 — priceTag 와 동일한 흰 알약 문법, 이미지 좌상단.
+  newTag: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: Radius.md,
+    backgroundColor: withAlpha('#FFFFFF', Opacity.nearFull),
+  },
+  newTagText: {
+    ...IOSText.footnote,
+    fontWeight: '700',
     color: '#1C1C1E',
     fontFamily: IOSFont.sans,
   },
@@ -223,6 +336,34 @@ const styles = StyleSheet.create({
     ...IOSText.footnote,
     color: IOSColors.secondaryLabel,
     marginTop: 2,
+    fontFamily: IOSFont.sans,
+  },
+  // SSENSE 문법 — brand-lab.tsx tileBrand/tilePriceRow/tilePrice/tileOriginalPrice
+  // 이식(2026-08-05). 큐레이션 정사각 카드(size 지정) 전용, 세로형 카드는
+  // 위 brand/name 을 그대로 쓴다.
+  ssenseBrand: {
+    ...IOSText.footnote,
+    fontWeight: '600',
+    color: IOSColors.label,
+    marginTop: 8,
+    fontFamily: IOSFont.sans,
+  },
+  ssensePriceRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 4,
+    marginTop: 2,
+  },
+  ssensePrice: {
+    ...IOSText.footnote,
+    fontWeight: '600',
+    color: IOSColors.label,
+    fontFamily: IOSFont.sans,
+  },
+  ssenseOldPrice: {
+    ...IOSText.footnote,
+    color: IOSColors.tertiaryLabel,
+    textDecorationLine: 'line-through',
     fontFamily: IOSFont.sans,
   },
 });
