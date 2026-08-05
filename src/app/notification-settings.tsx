@@ -8,10 +8,13 @@
  *
  * 기준: .claude/skills/apple-hig → docs/apple-blueprints.md → notifications.tsx (Switch 패턴)
  */
+import * as Notifications from 'expo-notifications';
 import { router } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
+  Alert,
+  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -24,7 +27,22 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { GlassSurface } from '@/components/glass-surface';
+import { trackEvent } from '@/lib/analytics';
+import { getNotifications, updateNotifications } from '@/lib/devices';
+import type { NotificationCategories } from '@/types/api';
 import { Glass, Haptic, IOSColors, IOSFont, IOSText, Opacity, Radius } from '@/theme';
+
+// 실 서버 카테고리는 3개(system·release_alerts·taste_push)뿐 — 이 화면의 6개
+// 토글 중 '알림 허용'=system, '마케팅, 이벤트'=release_alerts 만 GET/PATCH
+// /v1/me/notifications 로 실 배선한다(구 notifications.tsx 로직 승계). 나머지
+// (세일·재입고·브랜드 소식·데일리 브리핑)는 서버 카테고리 부재로 로컬 목업 —
+// 백엔드 신설 시 배선. 브랜드 팔로우 관리는 팔로우 API 부재로 보류(행 제거).
+function readEnabled(cat: NotificationCategories): boolean {
+  return cat.system !== false; // null/undefined → 기본 on
+}
+function readMarketing(cat: NotificationCategories): boolean {
+  return cat.release_alerts === true; // 명시적 true 일 때만 on
+}
 
 const Spacing = { half: 2, one: 4, two: 8, three: 16, four: 24, five: 32, six: 64 } as const;
 
@@ -35,14 +53,6 @@ const TOOLBAR_BTN = 36;
 
 // notifications.tsx와 동일 패턴 — trackColor 명시 지정.
 const SWITCH_TRACK_COLOR = { false: IOSColors.systemGray4, true: IOSColors.systemGreen };
-
-function Disclosure() {
-  return Platform.OS === 'web' ? (
-    <Text style={styles.disclosureGlyph}>›</Text>
-  ) : (
-    <SymbolView name="chevron.right" size={14} tintColor={IOSColors.tertiaryLabel} weight="semibold" />
-  );
-}
 
 function ToggleRow({
   label,
@@ -78,50 +88,111 @@ function ToggleRow({
   );
 }
 
-function DisclosureRow({
-  label,
-  onPress,
-  disabled,
-  first,
-}: {
-  label: string;
-  onPress: () => void;
-  disabled?: boolean;
-  first?: boolean;
-}) {
-  return (
-    <View>
-      {!first && <View style={styles.rowSeparator} />}
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={label}
-        disabled={disabled}
-        onPress={() => {
-          Haptic.light();
-          onPress();
-        }}
-        style={({ pressed }) => [styles.listRow, pressed && styles.rowPressed]}
-      >
-        <Text style={styles.listRowTitle} numberOfLines={1}>
-          {label}
-        </Text>
-        <Disclosure />
-      </Pressable>
-    </View>
-  );
-}
-
 export default function NotificationSettingsScreen() {
   const insets = useSafeAreaInsets();
   const topInset = Platform.OS === 'web' ? Math.max(insets.top, 59) : insets.top;
   const { width: windowWidth } = useWindowDimensions();
 
+  // 실 배선 토글(서버 저장) — 기본값은 서버 기본과 동일(system on, marketing off)
+  // 이라 로드 전에도 깜빡임 없이 맞다. 로드되면 실제 값으로 갱신.
   const [masterEnabled, setMasterEnabled] = useState(true);
+  const [marketing, setMarketing] = useState(false);
+  // 로컬 목업 토글(서버 카테고리 부재) — 백엔드 신설 시 배선.
   const [saleAlert, setSaleAlert] = useState(true);
   const [restockAlert, setRestockAlert] = useState(true);
   const [brandNews, setBrandNews] = useState(true);
-  const [marketing, setMarketing] = useState(false);
   const [briefing, setBriefing] = useState(false); // 옵트인 — 기본 OFF, 뉴스 탭 온보딩에서 제안
+
+  // 서버 옵트인 로드 (GET /v1/me/notifications) — 실 2토글만 반영.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await getNotifications();
+        if (cancelled) return;
+        setMasterEnabled(readEnabled(res.categories));
+        setMarketing(readMarketing(res.categories));
+      } catch {
+        // 401/네트워크 — 기본값 유지, 토글은 계속 조작 가능.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // 바뀐 키만 PATCH — 다른 카테고리(taste_push 등)를 덮지 않는다.
+  const persist = useCallback(async (patch: NotificationCategories) => {
+    try {
+      await updateNotifications(patch);
+    } catch {
+      // silent — 로컬 상태가 이미 의도를 반영.
+    }
+  }, []);
+
+  // 마스터(알림 허용)=system. 켜려면 iOS 권한 필요(미결정이면 요청, 거부돼
+  // 있으면 설정 앱 딥링크), 끌 땐 서버 상태만 반영. (구 notifications.tsx 승계)
+  const onMasterChange = async (v: boolean) => {
+    Haptic.light();
+    if (!v) {
+      setMasterEnabled(false);
+      void persist({ system: false });
+      return;
+    }
+    const current = await Notifications.getPermissionsAsync();
+    if (current.status === 'granted') {
+      setMasterEnabled(true);
+      void persist({ system: true });
+      return;
+    }
+    if (current.status === 'undetermined' || current.canAskAgain) {
+      const next = await Notifications.requestPermissionsAsync({
+        ios: { allowAlert: true, allowBadge: true, allowSound: true },
+      });
+      if (next.status === 'granted') {
+        setMasterEnabled(true);
+        void persist({ system: true });
+      }
+      return;
+    }
+    Alert.alert('알림 권한이 필요해요', 'iOS 설정에서 키코 앱의 알림을 켜 주세요.', [
+      { text: '취소', style: 'cancel' },
+      { text: '설정 열기', onPress: () => void Linking.openSettings() },
+    ]);
+  };
+
+  // 마케팅=release_alerts. 마스터와 동일한 iOS 권한 흐름 + 가입 트래킹.
+  const onMarketingChange = async (v: boolean) => {
+    Haptic.light();
+    trackEvent('notification_signup_tap', { tapped: v });
+    if (!v) {
+      setMarketing(false);
+      void persist({ release_alerts: false });
+      return;
+    }
+    const current = await Notifications.getPermissionsAsync();
+    if (current.status === 'granted') {
+      setMarketing(true);
+      void persist({ release_alerts: true });
+      trackEvent('notification_signup_complete', { contact_type: 'push' });
+      return;
+    }
+    if (current.status === 'undetermined' || current.canAskAgain) {
+      const next = await Notifications.requestPermissionsAsync({
+        ios: { allowAlert: true, allowBadge: true, allowSound: true },
+      });
+      if (next.status === 'granted') {
+        setMarketing(true);
+        void persist({ release_alerts: true });
+        trackEvent('notification_signup_complete', { contact_type: 'push' });
+      }
+      return;
+    }
+    Alert.alert('알림 권한이 필요해요', 'iOS 설정에서 키코 앱의 알림을 켜 주세요.', [
+      { text: '취소', style: 'cancel' },
+      { text: '설정 열기', onPress: () => void Linking.openSettings() },
+    ]);
+  };
 
   const handleBack = () => {
     Haptic.light();
@@ -170,10 +241,7 @@ export default function NotificationSettingsScreen() {
             first
             label="알림 허용"
             value={masterEnabled}
-            onValueChange={(v) => {
-              Haptic.light();
-              setMasterEnabled(v);
-            }}
+            onValueChange={onMasterChange}
           />
         </View>
 
@@ -218,13 +286,6 @@ export default function NotificationSettingsScreen() {
                 setBrandNews(v);
               }}
             />
-            <DisclosureRow
-              label="팔로우 브랜드 관리"
-              disabled={dimmed}
-              onPress={() => {
-                // 목업 — 실서비스는 팔로우 브랜드 관리 화면으로.
-              }}
-            />
           </View>
           <Text style={styles.sectionFooter}>팔로우한 브랜드의 세일, 신상 소식이에요</Text>
         </View>
@@ -256,10 +317,7 @@ export default function NotificationSettingsScreen() {
               label="마케팅, 이벤트"
               value={marketing}
               disabled={dimmed}
-              onValueChange={(v) => {
-                Haptic.light();
-                setMarketing(v);
-              }}
+              onValueChange={onMarketingChange}
             />
           </View>
         </View>
@@ -339,9 +397,6 @@ const styles = StyleSheet.create({
     backgroundColor: IOSColors.separator,
     marginLeft: Spacing.three,
   },
-  rowPressed: {
-    backgroundColor: IOSColors.systemGray5,
-  },
   listRow: {
     minHeight: LIST_ROW_HEIGHT,
     flexDirection: 'row',
@@ -357,13 +412,6 @@ const styles = StyleSheet.create({
   },
   switchTrailing: {
     alignSelf: 'center',
-  },
-  disclosureGlyph: {
-    fontSize: 20,
-    lineHeight: 20,
-    fontWeight: '600',
-    color: IOSColors.tertiaryLabel,
-    fontFamily: IOSFont.sans,
   },
   dimmed: {
     opacity: Opacity.faint,
