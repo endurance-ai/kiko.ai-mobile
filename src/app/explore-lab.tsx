@@ -233,8 +233,12 @@ const SLOT_DEFS: Array<{ id: string; title: string; subtitle: string; personal: 
     id: 'taste-sale-new',
     title: '취향저격 아이템',
     subtitle: '마음에 들 거예요',
-    // 취향(온보딩/행동) 데이터 없으면 숨김 — 신규·미온보딩 유저엔 안 뜬다
-    // (2026-08-06 사용자). 취향 상위 노드 시드가 있어야 성립하는 지면.
+    // [윤영 — 구좌 노출 로직] personal:true = 취향 시드(온보딩 노드 or 행동
+    // 점수표)가 없으면 숨김. 신규·미온보딩 유저엔 안 뜬다(2026-08-06 사용자).
+    // 노출 트리거는 binary(시드 유무), "상품 N개 탐색" 같은 임계 없음 — 온보딩이
+    // 즉시 시드를 준다. 실서비스 쿼리 = 온보딩 스타일 노드 → 브랜드 style_node
+    // 매핑으로 필터 → 인기순(조회/찜/클릭) 정렬, 이미 찜한 것 제외. 결과가 노출
+    // 최소치 미달이면 숨김 or 인기 백필(미결 — 노션 어드민 페이지 댓글 참조).
     personal: true,
   },
   {
@@ -766,6 +770,13 @@ function MainBannerCarousel() {
       <View style={styles.bannerHeader}>
         <SectionHeader title="트렌딩" showChevron={false} />
       </View>
+      {/* [윤영 실기기 구현 필요 — 스크롤 인터랙션] 배너 페이징(2026-08-05 확정):
+          지금은 snapToInterval + decelerationRate=fast 뿐이라 강한 fling 시 여러
+          장이 미끄러진다("다다다다"). 실서비스는 "속도 비례 1~2장 클램프"로 —
+          onScrollBeginDrag 에서 시작 인덱스 기록 → onScrollEndDrag(또는 momentum)
+          에서 제스처 velocity 로 목표 인덱스를 clamp(start-2 … start+2) 후 scrollTo.
+          저속 ±1, 고속 ±2 상한. RN 내장 disableIntervalMomentum(무조건 1장)은 가변성
+          없어 탈락. 배너뿐 아니라 큐레이션 상품 행에도 동일 적용 검토. */}
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
