@@ -30,6 +30,9 @@ type Props = {
   position?: number | null;
   /** 노출 경로. 기본 "search". 향후 큐레이션 등 확장. */
   source?: string;
+  /** 큐레이션 카드 변형 — 이미지 위 가격 태그를 없애고, 브랜드명 아래
+   *  (기존 상품명 자리)에 가격을 노출한다. 기본 false(가격 태그 + 상품명). */
+  priceBelow?: boolean;
 };
 
 export function ProductCard({
@@ -44,6 +47,7 @@ export function ProductCard({
   sectionId,
   position,
   source,
+  priceBelow = false,
 }: Props) {
   useEffect(() => {
     trackProductImpression({
@@ -130,8 +134,9 @@ export function ProductCard({
           </View>
         )}
 
-        {/* Price tag — bottom left. 가격 있을 때만(스트림 결과 등 가격 없는 소스는 생략). */}
-        {product.priceWon > 0 && (
+        {/* Price tag — bottom left. 가격 있을 때만(스트림 결과 등 가격 없는 소스는
+            생략). 큐레이션(priceBelow)에선 카드 밖 브랜드명 아래로 내려 생략. */}
+        {!priceBelow && product.priceWon > 0 && (
           <View style={styles.priceTag}>
             <Text style={styles.priceText}>{formatPrice(product.priceWon)}</Text>
           </View>
@@ -154,9 +159,17 @@ export function ProductCard({
           {product.brand}
         </Text>
       )}
-      <Text style={styles.name} numberOfLines={1}>
-        {product.name}
-      </Text>
+      {/* 큐레이션(priceBelow)은 상품명 자리에 가격을, 그 외(검색/스트림)는
+          상품명을 노출한다. */}
+      {priceBelow ? (
+        <Text style={styles.priceBelow} numberOfLines={1}>
+          {formatPrice(product.priceWon)}
+        </Text>
+      ) : (
+        <Text style={styles.name} numberOfLines={1}>
+          {product.name}
+        </Text>
+      )}
     </View>
   );
 }
@@ -222,6 +235,14 @@ const styles = StyleSheet.create({
   name: {
     ...IOSText.footnote,
     color: IOSColors.secondaryLabel,
+    marginTop: 2,
+    fontFamily: IOSFont.sans,
+  },
+  // 큐레이션 전용 — 브랜드명 아래 가격. 상품명(회색)보다 살짝 강조(라벨색·600).
+  priceBelow: {
+    ...IOSText.footnote,
+    fontWeight: '600',
+    color: IOSColors.label,
     marginTop: 2,
     fontFamily: IOSFont.sans,
   },

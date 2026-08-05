@@ -8,8 +8,9 @@
  * ProductCard 의 impression 트래킹에 source="curation" 을 태워 취향 신호
  * 로깅(클릭·노출)의 씨앗을 심는다 — 나중 취향 큐레이션 전환의 재료.
  */
+import { SymbolView } from 'expo-symbols';
 import { useMemo } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -116,6 +117,7 @@ function PressScaleCard({
           position={position}
           sectionId={sectionId}
           source="curation"
+          priceBelow
         />
       </Animated.View>
     </Pressable>
@@ -183,14 +185,33 @@ export function CurationSheet({
         };
         return (
         <View key={section.key} style={styles.rowSection}>
-          <View style={styles.rowHeader}>
-            <Text style={styles.sectionTitle}>{section.title}</Text>
-            {hasMore && (
-              <Pressable hitSlop={6} onPress={goMore}>
-                <Text style={styles.rowMoreText}>더보기</Text>
-              </Pressable>
-            )}
-          </View>
+          {/* 더보기 = 타이틀 바로 오른쪽 › 셰브런(brand-lab '최근 소식 ›' 문법).
+              타이틀+셰브런 전체가 탭 영역 → 전용 그리드 페이지로. */}
+          {hasMore ? (
+            <Pressable
+              hitSlop={6}
+              onPress={goMore}
+              accessibilityRole="button"
+              accessibilityLabel={`${section.title} 더보기`}
+              style={styles.rowHeader}
+            >
+              <Text style={styles.sectionTitle}>{section.title}</Text>
+              {Platform.OS === 'web' ? (
+                <Text style={styles.rowMoreChevron}>›</Text>
+              ) : (
+                <SymbolView
+                  name="chevron.right"
+                  size={17}
+                  tintColor={IOSColors.secondaryLabel}
+                  weight="semibold"
+                />
+              )}
+            </Pressable>
+          ) : (
+            <View style={styles.rowHeader}>
+              <Text style={styles.sectionTitle}>{section.title}</Text>
+            </View>
+          )}
           {section.subtitle != null && (
             <Text style={styles.sectionSubtitle}>{section.subtitle}</Text>
           )}
@@ -225,15 +246,22 @@ const styles = StyleSheet.create({
   rowSection: {
     marginBottom: Spacing.five,
   },
+  // 타이틀 + › 셰브런을 왼쪽에 붙여 배치(맨 오른쪽 '더보기' 대체). 콘텐츠
+  // 폭으로 줄여 타이틀 바로 오른쪽에 셰브런이 오게 한다.
   rowHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: Spacing.one,
+    alignSelf: 'flex-start',
   },
-  rowMoreText: {
-    ...IOSText.subhead,
+  // 웹 폴백 › — brand-lab '최근 소식 ›' 와 동일 문법(네이티브는 SF chevron).
+  rowMoreChevron: {
+    fontSize: 30,
+    lineHeight: 30,
+    fontWeight: '600',
     color: IOSColors.secondaryLabel,
     fontFamily: IOSFont.sans,
+    transform: [{ translateY: -2 }],
   },
   sectionTitle: {
     ...IOSText.title3,
