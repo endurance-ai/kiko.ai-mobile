@@ -1,0 +1,4 @@
+# TS/TSX 는 항상 텍스트로 취급 — 일부 파일이 content 휴리스틱에 binary 로
+# 오인돼 diff/cherry-pick 가 깨지던 문제 방지.
+*.ts  text diff
+*.tsx text diff
