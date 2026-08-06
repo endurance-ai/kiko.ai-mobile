@@ -220,11 +220,27 @@ export interface RecordViewRequest {
   session_id?: string;
   source_search_id?: string;
   dwell_ms?: number;
+  /** 발화 문맥 — 서버 taste 신호 attribution 용 (curation/search/pdp 등). */
+  source?: string;
+  /** 큐레이션 구좌 ID (source=curation 일 때). */
+  section_id?: string;
 }
 
 export interface RecordViewResponse {
   recorded: boolean;
   view_id: string | null;
+}
+
+/** POST /v1/products/{id}/outbound — 외부몰 이동(구매 클릭). popular 랭킹의
+ *  outbound 신호(ai.taste_signal_events, signal_type='outbound')로 적재된다. */
+export interface OutboundRequest {
+  /** 발화 문맥 — 서버 Literal(curation/search/pdp/wishlist/history). */
+  source?: 'curation' | 'search' | 'pdp' | 'wishlist' | 'history';
+  section_id?: string;
+}
+
+export interface OutboundResponse {
+  recorded: boolean;
 }
 
 export interface ViewedProduct {
