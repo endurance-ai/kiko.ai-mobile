@@ -215,7 +215,9 @@ export interface ProductDetail {
 }
 
 export interface RecordViewRequest {
-  session_id: string;
+  // optional — 큐레이션 발 열람은 세션이 없다. 인기순 집계용 조회 신호는
+  // 세션 유무와 무관하게 남겨야 하므로 서버가 session_id 없는 조회도 수용한다.
+  session_id?: string;
   source_search_id?: string;
   dwell_ms?: number;
 }
