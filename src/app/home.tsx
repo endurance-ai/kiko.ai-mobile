@@ -232,6 +232,17 @@ function takePendingChatSeed(): PendingChatSeed | null {
   return v;
 }
 
+// main_screen_viewed 세션당 1회 가드. 진입 경로(직접/seed/session 핸드오프)와
+// 무관하게 첫 홈 도달 1건만 집계하고, 핸드오프 remount 로 인한 과집계를 막는다.
+// 앱 실행(JS 런타임) 단위로 리셋 — 콜드 스타트마다 1회.
+let mainScreenViewedFired = false;
+/** 첫 호출이면 true(발화해야 함)를 돌려주고 플래그를 세운다. 이후엔 false. */
+function claimMainScreenViewed(): boolean {
+  if (mainScreenViewedFired) return false;
+  mainScreenViewedFired = true;
+  return true;
+}
+
 const AGENT_INTRO_DEFAULT = "이런 거 어때? · 콕집기로 골라봐";
 const AGENT_INTRO_NARROWING = "이런 거 찾았어 · 근데 좀 갈리네";
 const EMPTY_FALLBACK = "이 무드는 아직 딱 맞는 걸 못 찾았어. 이렇게 해볼까?";
@@ -469,19 +480,27 @@ export default function ChatEntryScreen() {
     [],
   );
 
-  // 메인 진입 이벤트 — 마운트당 1회 (기획 2026-07-23: 기존엔 온보딩 직후에만
-  // 발사돼 일반 진입이 전부 미기록 → 큐레이션 화면 로그 공백의 원인 1).
-  // entry_source 로 온보딩 퍼널(#9 최종 전환)은 계속 구분 가능 —
-  // 온보딩 분석은 entry_source='onboarding' 필터로 동일하게 조회된다.
-  // 단, seed/session 핸드오프로 뜬 새 홈 인스턴스는 제외 — /list·큐레이션
-  // 그리드·PDP 컴포저의 검색 이어가기(?seed=)와 히스토리 열기(?session=)도
-  // 홈을 새로 마운트하므로, 안 거르면 검색 1회마다 "메인 진입"이 1건씩
-  // 부풀어 큐레이션→디깅 전환율 분모가 오염된다.
-  // 빈 deps 로 마운트 시점 파라미터만 보므로 재발사 없음.
+  // 메인 진입 이벤트 — 세션(앱 실행)당 1회. 기획 2026-07-23: 기존엔 온보딩
+  // 직후에만 발사돼 일반 진입이 전부 미기록됐다.
+  //
+  // 과거엔 seed/session 핸드오프 마운트를 통째로 제외했는데, 그 경우 딥링크/
+  // 푸시→PDP→검색(?seed=)나 이전 채팅 열기(?session=)로 "첫 홈"이 뜬 유저가
+  // main_screen_viewed 없이 search_query 만 찍혀 저집계됐다(누수 ①). 이제
+  // 진입 경로 무관하게 claimMainScreenViewed() 로 세션당 1회만 발화 —
+  // 핸드오프 remount 과집계는 이 dedupe 가 막고, 핸드오프-첫진입 누락은 사라진다.
+  // chat 모드(드릴다운 채팅 표면)는 '메인 조회'가 아니며, 도달 전 반드시 실제
+  // Explore 홈을 거치므로 여기서만 제외한다.
+  // 빈 deps 로 마운트 시 1회 평가.
   useEffect(() => {
-    if (seedParam || sessionParam || chatMode) return;
+    if (chatMode) return;
+    if (!claimMainScreenViewed()) return;
     trackOnboarding("main_screen_viewed", {
-      entry_source: fromParam === "onboarding" ? "onboarding" : "direct",
+      entry_source:
+        fromParam === "onboarding"
+          ? "onboarding"
+          : seedParam || sessionParam
+            ? "handoff"
+            : "direct",
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
