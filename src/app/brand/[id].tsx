@@ -20,7 +20,6 @@ import {
   FlatList,
   Linking,
   Modal,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
