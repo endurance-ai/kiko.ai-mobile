@@ -33,15 +33,15 @@ import type { NotificationCategories } from '@/types/api';
 import { Glass, Haptic, IOSColors, IOSFont, IOSText, Opacity, Radius } from '@/theme';
 
 // 실 서버 카테고리는 3개(system·release_alerts·taste_push)뿐 — 이 화면의 6개
-// 토글 중 '알림 허용'=system, '마케팅, 이벤트'=release_alerts 만 GET/PATCH
-// /v1/me/notifications 로 실 배선한다(구 notifications.tsx 로직 승계). 나머지
-// (세일·재입고·브랜드 소식·데일리 브리핑)는 서버 카테고리 부재로 로컬 목업 —
-// 백엔드 신설 시 배선. 브랜드 팔로우 관리는 팔로우 API 부재로 보류(행 제거).
-function readEnabled(cat: NotificationCategories): boolean {
-  return cat.system !== false; // null/undefined → 기본 on
+// 토글 ↔ 서버 카테고리(GET/PATCH /v1/me/notifications) 1:1 실 배선:
+// 알림허용=system, 세일=price_drop, 재입고=restock, 브랜드소식=brand_new_product,
+// 데일리브리핑=daily_briefing, 마케팅=release_alerts (재관 백엔드 7키 완비).
+// 기본값: 대부분 null/undefined → on, 데일리브리핑만 옵트인(명시 true 만 on).
+function readOn(v: boolean | null | undefined): boolean {
+  return v !== false; // null/undefined → 기본 on
 }
-function readMarketing(cat: NotificationCategories): boolean {
-  return cat.release_alerts === true; // 명시적 true 일 때만 on
+function readOptIn(v: boolean | null | undefined): boolean {
+  return v === true; // 명시적 true 일 때만 on
 }
 
 const Spacing = { half: 2, one: 4, two: 8, three: 16, four: 24, five: 32, six: 64 } as const;
@@ -93,25 +93,28 @@ export default function NotificationSettingsScreen() {
   const topInset = Platform.OS === 'web' ? Math.max(insets.top, 59) : insets.top;
   const { width: windowWidth } = useWindowDimensions();
 
-  // 실 배선 토글(서버 저장) — 기본값은 서버 기본과 동일(system on, marketing off)
-  // 이라 로드 전에도 깜빡임 없이 맞다. 로드되면 실제 값으로 갱신.
+  // 전 토글 서버 저장(GET/PATCH /v1/me/notifications). 기본값은 서버 기본과
+  // 동일(대부분 on, 마케팅·브리핑 off)이라 로드 전에도 깜빡임 없이 맞다.
   const [masterEnabled, setMasterEnabled] = useState(true);
   const [marketing, setMarketing] = useState(false);
-  // 로컬 목업 토글(서버 카테고리 부재) — 백엔드 신설 시 배선.
-  const [saleAlert, setSaleAlert] = useState(true);
-  const [restockAlert, setRestockAlert] = useState(true);
-  const [brandNews, setBrandNews] = useState(true);
-  const [briefing, setBriefing] = useState(false); // 옵트인 — 기본 OFF, 뉴스 탭 온보딩에서 제안
+  const [saleAlert, setSaleAlert] = useState(true); // price_drop
+  const [restockAlert, setRestockAlert] = useState(true); // restock
+  const [brandNews, setBrandNews] = useState(true); // brand_new_product
+  const [briefing, setBriefing] = useState(false); // daily_briefing (옵트인, 기본 OFF)
 
-  // 서버 옵트인 로드 (GET /v1/me/notifications) — 실 2토글만 반영.
+  // 서버 옵트인 로드 (GET /v1/me/notifications).
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const res = await getNotifications();
+        const { categories: c } = await getNotifications();
         if (cancelled) return;
-        setMasterEnabled(readEnabled(res.categories));
-        setMarketing(readMarketing(res.categories));
+        setMasterEnabled(readOn(c.system));
+        setMarketing(readOptIn(c.release_alerts));
+        setSaleAlert(readOn(c.price_drop));
+        setRestockAlert(readOn(c.restock));
+        setBrandNews(readOn(c.brand_new_product));
+        setBriefing(readOptIn(c.daily_briefing));
       } catch {
         // 401/네트워크 — 기본값 유지, 토글은 계속 조작 가능.
       }
@@ -257,6 +260,7 @@ export default function NotificationSettingsScreen() {
               onValueChange={(v) => {
                 Haptic.light();
                 setSaleAlert(v);
+                void persist({ price_drop: v });
               }}
             />
             <ToggleRow
@@ -266,6 +270,7 @@ export default function NotificationSettingsScreen() {
               onValueChange={(v) => {
                 Haptic.light();
                 setRestockAlert(v);
+                void persist({ restock: v });
               }}
             />
           </View>
@@ -284,8 +289,30 @@ export default function NotificationSettingsScreen() {
               onValueChange={(v) => {
                 Haptic.light();
                 setBrandNews(v);
+                void persist({ brand_new_product: v });
               }}
             />
+            {/* 팔로우 브랜드 관리 → /followed-brands (GET /v1/me/follows) */}
+            <View style={styles.rowSeparator} />
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="팔로우 브랜드 관리"
+              disabled={dimmed}
+              onPress={() => {
+                Haptic.light();
+                router.push('/followed-brands' as never);
+              }}
+              style={({ pressed }) => [styles.listRow, pressed && styles.rowPressed]}
+            >
+              <Text style={styles.listRowTitle} numberOfLines={1}>
+                팔로우 브랜드 관리
+              </Text>
+              {Platform.OS === 'web' ? (
+                <Text style={styles.disclosureGlyph}>›</Text>
+              ) : (
+                <SymbolView name="chevron.right" size={14} tintColor={IOSColors.tertiaryLabel} weight="semibold" />
+              )}
+            </Pressable>
           </View>
           <Text style={styles.sectionFooter}>팔로우한 브랜드의 세일, 신상 소식이에요</Text>
         </View>
@@ -302,6 +329,7 @@ export default function NotificationSettingsScreen() {
               onValueChange={(v) => {
                 Haptic.light();
                 setBriefing(v);
+                void persist({ daily_briefing: v });
               }}
             />
           </View>
@@ -391,6 +419,16 @@ const styles = StyleSheet.create({
     backgroundColor: IOSColors.systemBackground,
     borderRadius: GROUP_CARD_RADIUS,
     overflow: 'hidden',
+  },
+  rowPressed: {
+    backgroundColor: IOSColors.systemGray5,
+  },
+  disclosureGlyph: {
+    fontSize: 20,
+    lineHeight: 20,
+    fontWeight: '600',
+    color: IOSColors.tertiaryLabel,
+    fontFamily: IOSFont.sans,
   },
   rowSeparator: {
     height: StyleSheet.hairlineWidth,

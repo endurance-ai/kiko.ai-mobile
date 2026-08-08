@@ -173,6 +173,59 @@ export interface BrandNode {
   brand_name_normalized: string | null;
 }
 
+// ── 브랜드 팔로우 (POST/DELETE /v1/brands/{id}/follow, GET /v1/me/follows) ──
+export interface FollowRequest {
+  /** 팔로우 + 알림 여부. POST 재호출로 notify on/off 토글(스펙: PATCH 없이 통합). */
+  notify: boolean;
+}
+
+export interface FollowResponse {
+  following: boolean;
+  notify_enabled: boolean;
+}
+
+export interface UnfollowResponse {
+  following: boolean;
+}
+
+export interface FollowItem {
+  brand_id: number;
+  brand_name: string;
+  notify_enabled: boolean;
+}
+
+export interface FollowListResponse {
+  items: FollowItem[];
+  next_cursor: string | null;
+}
+
+// ── 브랜드 홈 (GET /v1/brands/{id}, GET /v1/brands/{id}/products) ──
+export interface BrandHome {
+  id: number;
+  name: string;
+  description: string | null;
+  logo_url: string | null;
+  product_count: number;
+  following: boolean;
+  notify_enabled: boolean;
+}
+
+export interface BrandProduct {
+  id: number;
+  brand: string;
+  name: string;
+  price: number | null;
+  original_price: number | null;
+  sale_price: number | null;
+  image_url: string;
+  product_url: string;
+}
+
+export interface BrandProductsResponse {
+  items: BrandProduct[];
+  next_cursor: string | null;
+}
+
 /**
  * Lightweight reference returned in `ProductDetail.similar` — distinct from
  * the chat `ProductRef`. Server computes these via direct cosine distance
@@ -284,6 +337,44 @@ export interface NotificationCategories {
   release_alerts?: boolean | null;
   taste_push?: boolean | null;
   system?: boolean | null;
+  // v1.2 알림 카테고리 (재관 백엔드 추가) — 설정 화면 토글과 1:1.
+  restock?: boolean | null;
+  price_drop?: boolean | null;
+  brand_new_product?: boolean | null;
+  daily_briefing?: boolean | null;
+}
+
+// ── 알림함 (GET /v1/notifications, PATCH /v1/notifications/read) ──
+export interface NotificationItem {
+  id: string;
+  /** 원본 DB kind — restock | price_drop | brand_new_product | brand_sale */
+  type: string;
+  text: string;
+  sub: string;
+  brand: string | null;
+  product_id: number | null;
+  brand_id: number | null;
+  old_price: number | null;
+  new_price: number | null;
+  image_url: string | null;
+  created_at: string;
+  read: boolean;
+}
+
+export interface NotificationListResponse {
+  items: NotificationItem[];
+  next_cursor: string | null;
+  unread_count: number;
+}
+
+export interface MarkReadRequest {
+  ids?: string[];
+  all?: boolean;
+}
+
+export interface MarkReadResponse {
+  unread_count: number;
+  marked: number;
 }
 
 export interface UpdateNotificationsRequest {

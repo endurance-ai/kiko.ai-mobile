@@ -14,6 +14,9 @@ type Props = {
   /** 알림함(개인 소식함) 열기 — 히스토리 필을 대체(2026-08). 최근 대화는
    *  사이드바 '최근 항목'이 전담하므로 헤더는 알림 + 찜만 노출한다. */
   onOpenNotifications?: () => void;
+  /** 읽지 않은 알림 있음 — 벨의 빨간 점 노출. 알림함 진입 시 서버가 전체 읽음
+   *  처리하므로, 홈 포커스마다 unread_count 를 다시 읽어 이 값을 갱신한다. */
+  hasUnread?: boolean;
   onOpenWishlist?: () => void;
 };
 
@@ -22,6 +25,7 @@ export function TopBar({
   showCuration,
   onOpenCuration,
   onOpenNotifications,
+  hasUnread,
   onOpenWishlist,
 }: Props) {
   const tap = (cb?: () => void) => () => {
@@ -79,7 +83,7 @@ export function TopBar({
                 weight="medium"
               />
             </GlassSurface>
-            <View style={styles.bellDot} pointerEvents="none" />
+            {hasUnread && <View style={styles.bellDot} pointerEvents="none" />}
           </Pressable>
 
           <Pressable hitSlop={6} onPress={tap(onOpenWishlist)}>

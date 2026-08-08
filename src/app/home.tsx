@@ -1,8 +1,8 @@
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
-import { router, useLocalSearchParams } from "expo-router";
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { SymbolView } from "expo-symbols";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Keyboard,
@@ -42,6 +42,7 @@ import {
 import { ApiError } from "@/lib/api";
 import { parseAnchorPrefix } from "@/lib/anchor";
 import { getProduct } from "@/lib/products";
+import { listNotifications } from "@/lib/notifications";
 import {
   isCapExhausted,
   type CapMeta,
@@ -416,6 +417,26 @@ export default function ChatEntryScreen() {
   const { value: filter, setValue: setFilter } = useFilter();
   const { isSaved: isWishlisted, toggle: toggleWishlist } = useWishlist();
   const { status: authStatus } = useAuth();
+  // 헤더 벨 빨간 점 — 읽지 않은 알림 유무. 홈 포커스마다 unread_count 재조회
+  // (알림함 진입 시 서버가 전체 읽음 처리하므로 돌아오면 자동으로 꺼진다).
+  const [hasUnread, setHasUnread] = useState(false);
+  useFocusEffect(
+    useCallback(() => {
+      if (authStatus !== "authenticated") {
+        setHasUnread(false);
+        return;
+      }
+      let cancelled = false;
+      void listNotifications({ limit: 1 })
+        .then((r) => {
+          if (!cancelled) setHasUnread(r.unread_count > 0);
+        })
+        .catch(() => {});
+      return () => {
+        cancelled = true;
+      };
+    }, [authStatus]),
+  );
   const {
     active: activeBanner,
     show: showBanner,
@@ -2419,6 +2440,7 @@ export default function ChatEntryScreen() {
           showCuration={showJumpTop && !resumedFromHistory && !chatMode}
           onOpenCuration={scrollToCuration}
           onOpenNotifications={() => router.push("/notifications-inbox")}
+          hasUnread={hasUnread}
           onOpenWishlist={() => router.push("/wishlist")}
         />
       </View>

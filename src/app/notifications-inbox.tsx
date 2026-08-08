@@ -5,18 +5,20 @@
  * 영수증". 행 탭 → PDP/브랜드 홈. 뉴스(데일리 브리핑 방송 채널)와 혼류하지
  * 않음 — 브리핑은 모두 동일, 여긴 나만의 것.
  *
- * ⚠️ 현재 목업 데이터로 UI 프리뷰. 실서비스는 GET /v1/notifications (유저별,
- * 발송 배치 적재분) — 서버 엔드포인트 신설 후 INBOX 상수를 그 응답으로 교체.
+ * 데이터: GET /v1/notifications (keyset cursor + unread_count). 진입 시 전체
+ * 읽음 처리(PATCH /read {all}) — 헤더 벨 빨간 점이 여기 진입으로 꺼진다.
  *
  * IA: 동급 표면 (사이드바 [알림], 빨간 점은 여기에만) → ☰.
  * 기준: .claude/skills/apple-hig → docs/apple-blueprints.md → design-system.md
  */
 import { router } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
+import { useCallback, useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
+  FlatList,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   useWindowDimensions,
@@ -25,36 +27,110 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { GlassSurface } from '@/components/glass-surface';
+import { listNotifications, markNotificationsRead } from '@/lib/notifications';
 import { Glass, Haptic, IOSColors, IOSFont, IOSText, Radius } from '@/theme';
+import type { NotificationItem } from '@/types/api';
 
 const Spacing = { half: 2, one: 4, two: 8, three: 16, four: 24, five: 32, six: 64 } as const;
 const TOOLBAR_BTN = 36;
 const LIST_ROW_HEIGHT = 52; // iOS 27 리스트 행 실측
+const PAGE_SIZE = 30;
 
-// 목업 — 실서비스는 GET /v1/notifications (유저별, 발송 배치 적재분).
-// 가격 하락 문안: "찜하신 [브랜드명] 상품이 할인되었어요" + 기존가 → 현재가.
-const INBOX = [
-  { id: 'n1', text: '찜하신 slowand 상품이 할인되었어요', oldPrice: '89,000원', newPrice: '72,900원', sub: null, time: '2시간 전', unread: true },
-  { id: 'n2', text: '팔로우한 마지셔우드 세일 시작했어요', oldPrice: null, newPrice: null, sub: '최대 40% 싸요', time: '오전 11:40', unread: true },
-  { id: 'n3', text: '찜한 Y2K 탑이 재입고되었어요', oldPrice: null, newPrice: null, sub: null, time: '어제', unread: false },
-  { id: 'n4', text: '마뗑킴에 신상 12개가 들어왔어요', oldPrice: null, newPrice: null, sub: null, time: '어제', unread: false },
-  { id: 'n5', text: '찜하신 depound 상품이 할인되었어요', oldPrice: '54,000원', newPrice: '47,500원', sub: null, time: '3일 전', unread: false },
-  { id: 'n6', text: '팔로우한 OPEN YY 세일 시작했어요', oldPrice: null, newPrice: null, sub: '최대 30% 싸요', time: '1주 전', unread: false },
-] as const;
+const won = (n: number): string => `${n.toLocaleString('ko-KR')}원`;
+
+function relativeTime(iso: string): string {
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return '';
+  const min = Math.floor((Date.now() - t) / 60000);
+  if (min < 1) return '방금';
+  if (min < 60) return `${min}분 전`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}시간 전`;
+  const day = Math.floor(hr / 24);
+  if (day === 1) return '어제';
+  if (day < 7) return `${day}일 전`;
+  return `${Math.floor(day / 7)}주 전`;
+}
 
 export default function NotificationsInboxScreen() {
   const insets = useSafeAreaInsets();
   const topInset = Platform.OS === 'web' ? Math.max(insets.top, 59) : insets.top;
   const { width: windowWidth } = useWindowDimensions();
 
+  const [items, setItems] = useState<NotificationItem[] | null>(null);
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await listNotifications({ limit: PAGE_SIZE });
+        if (cancelled) return;
+        setItems(res.items);
+        setCursor(res.next_cursor);
+        // 진입 = 전체 읽음(헤더 벨 빨간 점 해제). 행의 read 표시는 이미 받은
+        // 값 그대로 두어 "이번에 새로 온 것"이 눈에 남게 한다. best-effort.
+        if (res.unread_count > 0) void markNotificationsRead({ all: true }).catch(() => {});
+      } catch {
+        if (!cancelled) setItems([]); // 401/네트워크 — 빈 상태
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const loadMore = useCallback(async () => {
+    if (!cursor || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const res = await listNotifications({ cursor, limit: PAGE_SIZE });
+      setItems((prev) => [...(prev ?? []), ...res.items]);
+      setCursor(res.next_cursor);
+    } catch {
+      // ignore — 다음 스크롤에서 재시도
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [cursor, loadingMore]);
+
   const handleOpenSidebar = () => {
     Haptic.light();
     router.push('/sidebar');
   };
 
-  const handleRowPress = () => {
-    Haptic.selection(); // 목업 — 실서비스는 소식 대상(PDP/브랜드 홈)으로 push.
+  const handleRowPress = (n: NotificationItem) => {
+    Haptic.selection();
+    if (n.product_id != null) router.push(`/product/${n.product_id}` as never);
+    else if (n.brand_id != null) router.push(`/brand/${n.brand_id}` as never);
   };
+
+  const renderRow = ({ item: n, index }: { item: NotificationItem; index: number }) => (
+    <View>
+      {index > 0 && <View style={styles.rowSeparator} />}
+      <Pressable
+        accessibilityRole="button"
+        onPress={() => handleRowPress(n)}
+        style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+      >
+        {/* 미확인 점 — 행 좌측 (iOS 메일 관례) */}
+        <View style={[styles.unreadDot, n.read && styles.unreadDotHidden]} />
+        <View style={styles.rowBody}>
+          <Text style={[styles.rowText, n.read && styles.rowTextRead]}>{n.text}</Text>
+          {n.old_price != null && n.new_price != null && (
+            <Text style={styles.rowPrice}>
+              <Text style={styles.rowPriceOld}>{won(n.old_price)}</Text>
+              {'  '}
+              {won(n.new_price)}
+            </Text>
+          )}
+          {n.sub.length > 0 && <Text style={styles.rowPrice}>{n.sub}</Text>}
+          <Text style={styles.rowTime}>{relativeTime(n.created_at)}</Text>
+        </View>
+      </Pressable>
+    </View>
+  );
 
   return (
     <View style={[styles.root, { width: windowWidth }]}>
@@ -78,44 +154,35 @@ export default function NotificationsInboxScreen() {
         </Pressable>
       </View>
 
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={[
-          styles.scrollContent,
-          {
-            paddingTop: topInset + TOOLBAR_BTN + Spacing.four,
-            paddingBottom: insets.bottom + Spacing.six,
-          },
-        ]}
-        showsVerticalScrollIndicator={false}
-      >
-        {INBOX.map((n, i) => (
-          <View key={n.id}>
-            {i > 0 && <View style={styles.rowSeparator} />}
-            <Pressable
-              accessibilityRole="button"
-              onPress={handleRowPress}
-              style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
-            >
-              {/* 미확인 점 — 행 좌측 (iOS 메일 관례), 확인 시 사라짐 */}
-              <View style={[styles.unreadDot, !n.unread && styles.unreadDotHidden]} />
-              <View style={styles.rowBody}>
-                <Text style={[styles.rowText, !n.unread && styles.rowTextRead]}>{n.text}</Text>
-                {/* 할인: 기존가 취소선 + 현재가 */}
-                {n.oldPrice != null && (
-                  <Text style={styles.rowPrice}>
-                    <Text style={styles.rowPriceOld}>{n.oldPrice}</Text>
-                    {'  '}
-                    {n.newPrice}
-                  </Text>
-                )}
-                {n.sub != null && <Text style={styles.rowPrice}>{n.sub}</Text>}
-                <Text style={styles.rowTime}>{n.time}</Text>
-              </View>
-            </Pressable>
-          </View>
-        ))}
-      </ScrollView>
+      {items === null ? (
+        <View style={styles.center}>
+          <ActivityIndicator />
+        </View>
+      ) : items.length === 0 ? (
+        <View style={styles.center}>
+          <Text style={styles.emptyText}>아직 받은 소식이 없어요</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={items}
+          keyExtractor={(n) => n.id}
+          renderItem={renderRow}
+          style={styles.scroll}
+          contentContainerStyle={[
+            styles.scrollContent,
+            {
+              paddingTop: topInset + TOOLBAR_BTN + Spacing.four,
+              paddingBottom: insets.bottom + Spacing.six,
+            },
+          ]}
+          showsVerticalScrollIndicator={false}
+          onEndReached={loadMore}
+          onEndReachedThreshold={0.5}
+          ListFooterComponent={
+            loadingMore ? <ActivityIndicator style={{ paddingVertical: Spacing.four }} /> : null
+          }
+        />
+      )}
     </View>
   );
 }
@@ -125,6 +192,16 @@ const styles = StyleSheet.create({
     flex: 1,
     overflow: 'hidden',
     backgroundColor: IOSColors.systemBackground,
+  },
+  center: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyText: {
+    ...IOSText.body,
+    color: IOSColors.secondaryLabel,
+    fontFamily: IOSFont.sans,
   },
   floatingBar: {
     position: 'absolute',
