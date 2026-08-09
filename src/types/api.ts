@@ -208,9 +208,10 @@ export interface BrandHome {
   product_count: number;
   following: boolean;
   notify_enabled: boolean;
-  /** 공식몰 URL — 설명 시트의 '공식 스토어 방문' 링크. 서버 미제공 시 링크 숨김
-   *  (재관 백엔드 BrandHome 에 필드 추가 요청 중). */
-  official_url?: string | null;
+  /** 공식몰 URL — 설명 시트의 '공식 스토어 방문' 링크 (brand_nodes.wiki.homepage_url). */
+  store_url: string | null;
+  /** 최근 소식 — admin 수동 관리 (brand_nodes.wiki.news). 단일 문자열. */
+  news: string | null;
 }
 
 export interface BrandProduct {

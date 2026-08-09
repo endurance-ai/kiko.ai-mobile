@@ -330,12 +330,12 @@ export default function BrandHomeScreen() {
             </Pressable>
             <Text style={styles.descSheetTitle}>{headerTitle}</Text>
             {brand?.description ? <Text style={styles.descSheetBody}>{brand.description}</Text> : null}
-            {brand?.official_url ? (
+            {brand?.store_url ? (
               <Pressable
                 hitSlop={8}
                 onPress={() => {
                   Haptic.light();
-                  void WebBrowser.openBrowserAsync(brand.official_url as string);
+                  void WebBrowser.openBrowserAsync(brand.store_url as string);
                 }}
                 style={styles.descSheetLink}
                 accessibilityRole="link"
