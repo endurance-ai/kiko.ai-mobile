@@ -335,7 +335,9 @@ export default function BrandHomeScreen() {
                 hitSlop={8}
                 onPress={() => {
                   Haptic.light();
-                  void WebBrowser.openBrowserAsync(brand.store_url as string);
+                  void WebBrowser.openBrowserAsync(brand.store_url as string, {
+                    presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
+                  });
                 }}
                 style={styles.descSheetLink}
                 accessibilityRole="link"
