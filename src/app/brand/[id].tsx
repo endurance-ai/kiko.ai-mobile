@@ -13,6 +13,7 @@ import { Image as ExpoImage } from 'expo-image';
 import * as Notifications from 'expo-notifications';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
+import * as WebBrowser from 'expo-web-browser';
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -70,6 +71,7 @@ export default function BrandHomeScreen() {
   const [following, setFollowing] = useState(false);
   const [notify, setNotify] = useState(false);
   const [sheetVisible, setSheetVisible] = useState(false);
+  const [descSheetVisible, setDescSheetVisible] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -162,9 +164,19 @@ export default function BrandHomeScreen() {
       ) : null}
       <Text style={styles.brandName}>{headerTitle}</Text>
       {brand?.description ? (
-        <Text style={styles.description} numberOfLines={3}>
-          {brand.description}
-        </Text>
+        // 탭 = 전문 바텀시트(말줄임 여부와 무관하게 항상 열림).
+        <Pressable
+          onPress={() => {
+            Haptic.light();
+            setDescSheetVisible(true);
+          }}
+          accessibilityRole="button"
+          accessibilityLabel="브랜드 설명 전체 보기"
+        >
+          <Text style={styles.description} numberOfLines={3}>
+            {brand.description}
+          </Text>
+        </Pressable>
       ) : null}
       {brand != null && (
         <Text style={styles.count}>상품 {brand.product_count.toLocaleString('ko-KR')}개</Text>
@@ -292,6 +304,47 @@ export default function BrandHomeScreen() {
             >
               <Text style={styles.sheetSecondaryText}>팔로우만 할게요</Text>
             </Pressable>
+          </View>
+        </View>
+      </Modal>
+
+      {/* 브랜드 설명 전문 시트 — ✕ 닫기 + 전문 + 공식 스토어 링크 */}
+      <Modal
+        visible={descSheetVisible}
+        transparent
+        statusBarTranslucent
+        animationType="slide"
+        onRequestClose={() => setDescSheetVisible(false)}
+      >
+        <View style={styles.sheetScrim}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setDescSheetVisible(false)} accessibilityLabel="닫기" />
+          <View style={[styles.sheetCard, styles.descSheetCard, { paddingBottom: insets.bottom + 24 }]}>
+            <Pressable
+              hitSlop={8}
+              onPress={() => setDescSheetVisible(false)}
+              style={styles.sheetCloseBtn}
+              accessibilityRole="button"
+              accessibilityLabel="닫기"
+            >
+              <SymbolView name="xmark" size={14} tintColor={IOSColors.secondaryLabel} weight="semibold" />
+            </Pressable>
+            <Text style={styles.descSheetTitle}>{headerTitle}</Text>
+            {brand?.description ? <Text style={styles.descSheetBody}>{brand.description}</Text> : null}
+            {brand?.official_url ? (
+              <Pressable
+                hitSlop={8}
+                onPress={() => {
+                  Haptic.light();
+                  void WebBrowser.openBrowserAsync(brand.official_url as string);
+                }}
+                style={styles.descSheetLink}
+                accessibilityRole="link"
+                accessibilityLabel="공식 스토어 방문"
+              >
+                <Text style={styles.descSheetLinkText}>공식 스토어 방문</Text>
+                <SymbolView name="arrow.up.right" size={13} tintColor={IOSColors.systemBlue} weight="semibold" />
+              </Pressable>
+            ) : null}
           </View>
         </View>
       </Modal>
@@ -466,6 +519,48 @@ const styles = StyleSheet.create({
   sheetSecondaryText: {
     ...IOSText.body,
     color: IOSColors.secondaryLabel,
+    fontFamily: IOSFont.sans,
+  },
+  // ── 브랜드 설명 시트 (좌측 정렬 + ✕ + 공식 스토어 링크) ──
+  descSheetCard: {
+    alignItems: 'stretch',
+    paddingTop: Spacing.four,
+  },
+  sheetCloseBtn: {
+    position: 'absolute',
+    top: Spacing.three,
+    right: Spacing.three,
+    width: 34,
+    height: 34,
+    borderRadius: Radius.pill,
+    backgroundColor: IOSColors.systemGray5,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  descSheetTitle: {
+    ...IOSText.title2,
+    fontWeight: '700',
+    color: IOSColors.label,
+    fontFamily: IOSFont.sans,
+    marginBottom: Spacing.three,
+  },
+  descSheetBody: {
+    ...IOSText.body,
+    color: IOSColors.label,
+    fontFamily: IOSFont.sans,
+    lineHeight: 24,
+  },
+  descSheetLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.one,
+    marginTop: Spacing.four,
+    alignSelf: 'flex-start',
+  },
+  descSheetLinkText: {
+    ...IOSText.body,
+    fontWeight: '600',
+    color: IOSColors.systemBlue,
     fontFamily: IOSFont.sans,
   },
 });
