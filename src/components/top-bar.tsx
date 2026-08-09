@@ -86,15 +86,19 @@ export function TopBar({
             {hasUnread && <View style={styles.bellDot} pointerEvents="none" />}
           </Pressable>
 
-          <Pressable hitSlop={6} onPress={tap(onOpenWishlist)}>
-            <GlassSurface variant="pill" isInteractive style={styles.textPill}>
+          <Pressable
+            hitSlop={6}
+            onPress={tap(onOpenWishlist)}
+            accessibilityRole="button"
+            accessibilityLabel="찜"
+          >
+            <GlassSurface variant="pill" isInteractive style={styles.iconPill}>
               <SymbolView
                 name="heart"
-                size={16}
+                size={18}
                 tintColor={IOSColors.label}
                 weight="medium"
               />
-              <Text style={styles.pillText}>찜</Text>
             </GlassSurface>
           </Pressable>
         </View>
