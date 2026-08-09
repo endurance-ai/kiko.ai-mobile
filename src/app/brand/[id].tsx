@@ -27,12 +27,13 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
+import Animated, { SlideInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FLOATING_HEADER_OFFSET, FloatingHeader } from '@/components/floating-header';
 import { followBrand, getBrandHome, getBrandProducts, unfollowBrand } from '@/lib/brands';
 import { useAuth } from '@/state/auth';
-import { Haptic, IOSColors, IOSFont, IOSText, Opacity, Radius, Scrim, withAlpha } from '@/theme';
+import { Haptic, IOSColors, IOSFont, IOSText, Motion, Opacity, Radius, Scrim, withAlpha } from '@/theme';
 import type { BrandHome, BrandProduct } from '@/types/api';
 
 const PAGE_SIZE = 21; // 3 배수
@@ -289,12 +290,17 @@ export default function BrandHomeScreen() {
         visible={sheetVisible}
         transparent
         statusBarTranslucent
-        animationType="slide"
+        animationType="fade"
         onRequestClose={() => setSheetVisible(false)}
       >
         <View style={styles.sheetScrim}>
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setSheetVisible(false)} accessibilityLabel="닫기" />
-          <View style={[styles.sheetCard, { paddingBottom: insets.bottom + 24 }]}>
+          <Animated.View
+            entering={SlideInDown.springify()
+              .dampingRatio(Motion.drawer.dampingRatio ?? 0.8)
+              .duration(Motion.drawer.duration ?? 300)}
+            style={[styles.sheetCard, { paddingBottom: insets.bottom + 24 }]}
+          >
             <Text style={styles.sheetTitle}>{'세일, 신상 소식도\n알려드릴까요?'}</Text>
             <Pressable
               style={({ pressed }) => [styles.sheetPrimaryBtn, pressed && styles.pressedDim]}
@@ -316,7 +322,7 @@ export default function BrandHomeScreen() {
             >
               <Text style={styles.sheetSecondaryText}>팔로우만 할게요</Text>
             </Pressable>
-          </View>
+          </Animated.View>
         </View>
       </Modal>
 
@@ -325,12 +331,17 @@ export default function BrandHomeScreen() {
         visible={descSheetVisible}
         transparent
         statusBarTranslucent
-        animationType="slide"
+        animationType="fade"
         onRequestClose={() => setDescSheetVisible(false)}
       >
         <View style={styles.sheetScrim}>
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setDescSheetVisible(false)} accessibilityLabel="닫기" />
-          <View style={[styles.sheetCard, styles.descSheetCard, { paddingBottom: insets.bottom + 24 }]}>
+          <Animated.View
+            entering={SlideInDown.springify()
+              .dampingRatio(Motion.drawer.dampingRatio ?? 0.8)
+              .duration(Motion.drawer.duration ?? 300)}
+            style={[styles.sheetCard, styles.descSheetCard, { paddingBottom: insets.bottom + 24 }]}
+          >
             <Pressable
               hitSlop={8}
               onPress={() => setDescSheetVisible(false)}
@@ -359,7 +370,7 @@ export default function BrandHomeScreen() {
                 <SymbolView name="arrow.up.right" size={13} tintColor={IOSColors.systemBlue} weight="semibold" />
               </Pressable>
             ) : null}
-          </View>
+          </Animated.View>
         </View>
       </Modal>
 
