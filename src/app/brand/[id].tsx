@@ -14,7 +14,7 @@ import * as Notifications from 'expo-notifications';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import * as WebBrowser from 'expo-web-browser';
-import { useCallback, useEffect, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -22,18 +22,20 @@ import {
   Linking,
   Modal,
   Pressable,
+  type StyleProp,
   StyleSheet,
   Text,
   useWindowDimensions,
   View,
+  type ViewStyle,
 } from 'react-native';
-import Animated, { SlideInDown } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeOut, runOnJS, SlideInDown, SlideOutDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FLOATING_HEADER_OFFSET, FloatingHeader } from '@/components/floating-header';
 import { followBrand, getBrandHome, getBrandProducts, unfollowBrand } from '@/lib/brands';
 import { useAuth } from '@/state/auth';
-import { Haptic, IOSColors, IOSFont, IOSText, Motion, Opacity, Radius, Scrim, withAlpha } from '@/theme';
+import { Duration, Haptic, IOSColors, IOSFont, IOSText, Motion, Opacity, Radius, Scrim, withAlpha } from '@/theme';
 import type { BrandHome, BrandProduct } from '@/types/api';
 
 const PAGE_SIZE = 21; // 3 배수
@@ -286,22 +288,8 @@ export default function BrandHomeScreen() {
       </View>
 
       {/* 팔로우 직후 소식 제안 — [팔로우만 할게요]여도 팔로우는 유지 */}
-      <Modal
-        visible={sheetVisible}
-        transparent
-        statusBarTranslucent
-        animationType="fade"
-        onRequestClose={() => setSheetVisible(false)}
-      >
-        <View style={styles.sheetScrim}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={() => setSheetVisible(false)} accessibilityLabel="닫기" />
-          <Animated.View
-            entering={SlideInDown.springify()
-              .dampingRatio(Motion.drawer.dampingRatio ?? 0.8)
-              .duration(Motion.drawer.duration ?? 300)}
-            style={[styles.sheetCard, { paddingBottom: insets.bottom + 24 }]}
-          >
-            <Text style={styles.sheetTitle}>{'세일, 신상 소식도\n알려드릴까요?'}</Text>
+      <AnimatedSheet visible={sheetVisible} onClose={() => setSheetVisible(false)}>
+        <Text style={styles.sheetTitle}>{'세일, 신상 소식도\n알려드릴까요?'}</Text>
             <Pressable
               style={({ pressed }) => [styles.sheetPrimaryBtn, pressed && styles.pressedDim]}
               onPress={() => {
@@ -322,26 +310,14 @@ export default function BrandHomeScreen() {
             >
               <Text style={styles.sheetSecondaryText}>팔로우만 할게요</Text>
             </Pressable>
-          </Animated.View>
-        </View>
-      </Modal>
+      </AnimatedSheet>
 
       {/* 브랜드 설명 전문 시트 — ✕ 닫기 + 전문 + 공식 스토어 링크 */}
-      <Modal
+      <AnimatedSheet
         visible={descSheetVisible}
-        transparent
-        statusBarTranslucent
-        animationType="fade"
-        onRequestClose={() => setDescSheetVisible(false)}
+        onClose={() => setDescSheetVisible(false)}
+        cardStyle={styles.descSheetCard}
       >
-        <View style={styles.sheetScrim}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={() => setDescSheetVisible(false)} accessibilityLabel="닫기" />
-          <Animated.View
-            entering={SlideInDown.springify()
-              .dampingRatio(Motion.drawer.dampingRatio ?? 0.8)
-              .duration(Motion.drawer.duration ?? 300)}
-            style={[styles.sheetCard, styles.descSheetCard, { paddingBottom: insets.bottom + 24 }]}
-          >
             <Pressable
               hitSlop={8}
               onPress={() => setDescSheetVisible(false)}
@@ -370,9 +346,7 @@ export default function BrandHomeScreen() {
                 <SymbolView name="arrow.up.right" size={13} tintColor={IOSColors.systemBlue} weight="semibold" />
               </Pressable>
             ) : null}
-          </Animated.View>
-        </View>
-      </Modal>
+      </AnimatedSheet>
 
       <FloatingHeader title={headerTitle} />
     </View>
@@ -380,6 +354,63 @@ export default function BrandHomeScreen() {
 }
 
 const Spacing = { one: 4, two: 8, three: 16, four: 24 } as const;
+
+/**
+ * 바텀시트 프리미티브 — 스크림은 제자리 페이드(FadeIn/FadeOut), 카드만
+ * 슬라이드 업/다운. RN Modal 은 visible=false 시 자식을 즉시 언마운트해
+ * 카드의 exit 모션이 사라지므로, 애니메이션이 끝난 뒤에야 Modal 을 내리도록
+ * `mounted` 게이트로 우회한다(닫힐 때도 SlideOutDown 재생).
+ */
+function AnimatedSheet({
+  visible,
+  onClose,
+  cardStyle,
+  children,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  cardStyle?: StyleProp<ViewStyle>;
+  children: ReactNode;
+}) {
+  const insets = useSafeAreaInsets();
+  const [mounted, setMounted] = useState(visible);
+
+  // 열릴 때는 렌더 단계에서 상태를 조정(React 공식 패턴) — 언마운트는 카드
+  // 슬라이드다운이 끝난 뒤 exit 콜백에서 처리하므로 effect 가 필요 없다.
+  if (visible && !mounted) setMounted(true);
+
+  if (!mounted) return null;
+
+  return (
+    <Modal visible transparent statusBarTranslucent animationType="none" onRequestClose={onClose}>
+      <View style={styles.sheetScrim}>
+        {visible ? (
+          <>
+            <Animated.View
+              entering={FadeIn.duration(Duration.base)}
+              exiting={FadeOut.duration(Duration.base)}
+              style={styles.sheetBackdrop}
+            >
+              <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="닫기" />
+            </Animated.View>
+            <Animated.View
+              entering={SlideInDown.springify()
+                .dampingRatio(Motion.drawer.dampingRatio ?? 0.8)
+                .duration(Motion.drawer.duration ?? 300)}
+              exiting={SlideOutDown.duration(Duration.base).withCallback((finished) => {
+                'worklet';
+                if (finished) runOnJS(setMounted)(false);
+              })}
+              style={[styles.sheetCard, cardStyle, { paddingBottom: insets.bottom + 24 }]}
+            >
+              {children}
+            </Animated.View>
+          </>
+        ) : null}
+      </View>
+    </Modal>
+  );
+}
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: IOSColors.secondarySystemBackground },
@@ -513,10 +544,18 @@ const styles = StyleSheet.create({
   },
   pressedDim: { opacity: Opacity.softened },
   // ── 팔로우 소식 시트 ──
+  // 컨테이너는 레이아웃만(투명) — 어둠은 sheetBackdrop 이 페이드로 담당.
   sheetScrim: {
     flex: 1,
-    backgroundColor: withAlpha('#000000', Scrim.heavy),
     justifyContent: 'flex-end',
+  },
+  sheetBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: withAlpha('#000000', Scrim.heavy),
   },
   sheetCard: {
     backgroundColor: IOSColors.systemBackground,
