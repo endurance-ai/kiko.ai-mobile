@@ -181,6 +181,18 @@ export default function BrandHomeScreen() {
       {brand != null && (
         <Text style={styles.count}>상품 {brand.product_count.toLocaleString('ko-KR')}개</Text>
       )}
+
+      {/* 최근 소식 — brand_nodes.wiki.news (admin 수동, 단일 문자열).
+          서버가 값 줄 때만 노출(백엔드 미적재 시 숨김). */}
+      {brand?.news ? (
+        <>
+          <Text style={styles.sectionHeader}>최근 소식</Text>
+          <View style={styles.newsCard}>
+            <Text style={styles.newsText}>{brand.news}</Text>
+          </View>
+        </>
+      ) : null}
+
       <Text style={styles.sectionHeader}>상품</Text>
     </View>
   );
@@ -390,6 +402,19 @@ const styles = StyleSheet.create({
     color: IOSColors.label,
     fontFamily: IOSFont.sans,
     marginTop: Spacing.four,
+  },
+  // 최근 소식 카드 — inset grouped 흰 카드 + 소식 텍스트.
+  newsCard: {
+    backgroundColor: IOSColors.systemBackground,
+    borderRadius: Radius.lg,
+    padding: Spacing.three,
+    marginTop: Spacing.two,
+  },
+  newsText: {
+    ...IOSText.subhead,
+    color: IOSColors.label,
+    fontFamily: IOSFont.sans,
+    lineHeight: 21,
   },
   // ── 상품 3열 엣지투엣지 그리드 (PDP 비슷한 제품 / brand-lab tile 문법) ──
   tile: {},
