@@ -211,8 +211,8 @@ export default function BrandHomeScreen() {
       >
         <ExpoImage source={{ uri: item.image_url }} style={styles.tileThumb} contentFit="cover" />
         <View style={styles.tileMeta}>
-          <Text style={styles.tileBrand} numberOfLines={1}>
-            {item.brand}
+          <Text style={styles.tileBrand} numberOfLines={2}>
+            {item.name}
           </Text>
           <View style={styles.tilePriceRow}>
             {price != null && (
@@ -459,12 +459,12 @@ const styles = StyleSheet.create({
     lineHeight: 21,
   },
   // ── 상품 3열 엣지투엣지 그리드 (PDP 비슷한 제품 / brand-lab tile 문법) ──
-  tile: {},
+  tile: { marginBottom: Spacing.three },
   tileThumb: {
     width: '100%',
     aspectRatio: 0.82,
     backgroundColor: IOSColors.tertiarySystemBackground,
-    marginBottom: 2,
+    marginBottom: Spacing.two,
   },
   tileMeta: {
     paddingHorizontal: Spacing.one,
