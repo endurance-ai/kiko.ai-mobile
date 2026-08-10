@@ -98,7 +98,8 @@
           },
           "height": 320
         }
-      ]
+      ],
+      "./plugins/withVisualIntelligence"
     ],
     "experiments": {
       "typedRoutes": true,
