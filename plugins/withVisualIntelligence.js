@@ -64,8 +64,13 @@ const withApiConfig = (config) =>
 // prebuild --clean 이 서명 설정을 리셋 → 매번 Xcode 에서 팀 재선택하는 문제 방지.
 // bundle id 가 있는 모든 타깃(앱 + 셰어 익스텐션)에 자동서명 + 팀을 박는다.
 // 팀은 env(KIKO_APPLE_TEAM_ID)로 덮을 수 있고, 기본값은 현재 프로젝트 팀.
-const withAutoSigning = (config) =>
-  withXcodeProject(config, (config) => {
+//
+// ⚠️ EAS Build 는 자체 관리형 배포 크레덴셜/프로파일로 서명하므로, 여기서
+// CODE_SIGN_STYLE=Automatic + 팀을 강제하면 충돌한다. EAS 환경(EAS_BUILD)에서는
+// 주입을 건너뛰고 EAS 서명에 맡긴다 — 로컬 Xcode prebuild 편의용으로만 주입.
+const withAutoSigning = (config) => {
+  if (process.env.EAS_BUILD) return config;
+  return withXcodeProject(config, (config) => {
     const teamId = process.env.KIKO_APPLE_TEAM_ID || 'T6WGA33SML';
     const proj = config.modResults;
     const buildConfigs = proj.pbxXCBuildConfigurationSection();
@@ -79,6 +84,7 @@ const withAutoSigning = (config) =>
     }
     return config;
   });
+};
 
 const withVisualIntelligence = (config) =>
   withAutoSigning(withApiConfig(withSwiftSource(config)));
