@@ -1,6 +1,7 @@
 import { api } from '@/lib/api';
 import type {
   BrandHome,
+  BrandNewsResponse,
   BrandProductsResponse,
   FollowListResponse,
   FollowResponse,
@@ -48,6 +49,17 @@ export function getBrandProducts(
 ): Promise<BrandProductsResponse> {
   return api.get<BrandProductsResponse>(
     `/v1/brands/${encodeURIComponent(String(brandId))}/products`,
+    { cursor: opts.cursor, limit: opts.limit },
+  );
+}
+
+/** 브랜드 소식 전체 (최신순, 키셋 커서) — 브랜드 홈 '최근 소식 ›' 더보기. 무인증. */
+export function getBrandNews(
+  brandId: number | string,
+  opts: { cursor?: string; limit?: number } = {},
+): Promise<BrandNewsResponse> {
+  return api.get<BrandNewsResponse>(
+    `/v1/brands/${encodeURIComponent(String(brandId))}/news`,
     { cursor: opts.cursor, limit: opts.limit },
   );
 }

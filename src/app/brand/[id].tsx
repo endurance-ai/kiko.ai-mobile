@@ -34,6 +34,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FLOATING_HEADER_OFFSET, FloatingHeader } from '@/components/floating-header';
 import { followBrand, getBrandHome, getBrandProducts, unfollowBrand } from '@/lib/brands';
+import { relativeTime } from '@/lib/relative-time';
 import { useAuth } from '@/state/auth';
 import { Duration, Haptic, IOSColors, IOSFont, IOSText, Motion, Opacity, Radius, Scrim, withAlpha } from '@/theme';
 import type { BrandHome, BrandProduct } from '@/types/api';
@@ -185,13 +186,37 @@ export default function BrandHomeScreen() {
         <Text style={styles.count}>상품 {brand.product_count.toLocaleString('ko-KR')}개</Text>
       )}
 
-      {/* 최근 소식 — brand_nodes.wiki.news (admin 수동, 단일 문자열).
-          서버가 값 줄 때만 노출(백엔드 미적재 시 숨김). */}
-      {brand?.news ? (
+      {/* 최근 소식 — ai.brand_news 정본(최신순 프리뷰). 헤더 탭 → 전체 리스트. */}
+      {brand?.news && brand.news.length > 0 ? (
         <>
-          <Text style={styles.sectionHeader}>최근 소식</Text>
+          <Pressable
+            style={styles.newsHeaderRow}
+            onPress={() => {
+              Haptic.light();
+              router.push(`/brand-news/${id}` as never);
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="최근 소식 더보기"
+          >
+            <Text style={styles.newsHeaderText}>최근 소식</Text>
+            <SymbolView
+              name="chevron.right"
+              size={15}
+              tintColor={IOSColors.tertiaryLabel}
+              weight="semibold"
+            />
+          </Pressable>
           <View style={styles.newsCard}>
-            <Text style={styles.newsText}>{brand.news}</Text>
+            {brand.news.map((n, i) => (
+              <View key={n.id}>
+                {i > 0 && <View style={styles.newsSeparator} />}
+                <View style={styles.newsRow}>
+                  <Text style={styles.newsText}>{n.text}</Text>
+                  {n.sub ? <Text style={styles.newsSub}>{n.sub}</Text> : null}
+                  <Text style={styles.newsTime}>{relativeTime(n.started_at)}</Text>
+                </View>
+              </View>
+            ))}
           </View>
         </>
       ) : null}
@@ -215,14 +240,14 @@ export default function BrandHomeScreen() {
             {item.name}
           </Text>
           <View style={styles.tilePriceRow}>
+            {showOld && price != null && item.original_price != null && (
+              <Text style={styles.tilePricePct} numberOfLines={1}>
+                {Math.round((1 - price / item.original_price) * 100)}%
+              </Text>
+            )}
             {price != null && (
               <Text style={styles.tilePrice} numberOfLines={1}>
                 {won(price)}
-              </Text>
-            )}
-            {showOld && (
-              <Text style={styles.tileOriginalPrice} numberOfLines={1}>
-                {won(item.original_price as number)}
               </Text>
             )}
           </View>
@@ -446,17 +471,50 @@ const styles = StyleSheet.create({
     marginTop: Spacing.four,
   },
   // 최근 소식 카드 — inset grouped 흰 카드 + 소식 텍스트.
+  newsHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: Spacing.four,
+  },
+  newsHeaderText: {
+    ...IOSText.title3,
+    fontWeight: '600',
+    color: IOSColors.label,
+    fontFamily: IOSFont.sans,
+  },
   newsCard: {
     backgroundColor: IOSColors.systemBackground,
     borderRadius: Radius.lg,
-    padding: Spacing.three,
+    overflow: 'hidden',
     marginTop: Spacing.two,
+  },
+  newsRow: {
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.three,
+  },
+  newsSeparator: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: IOSColors.separator,
+    marginLeft: Spacing.three,
   },
   newsText: {
     ...IOSText.subhead,
     color: IOSColors.label,
     fontFamily: IOSFont.sans,
     lineHeight: 21,
+  },
+  newsSub: {
+    ...IOSText.subhead,
+    color: IOSColors.secondaryLabel,
+    fontFamily: IOSFont.sans,
+    marginTop: 1,
+  },
+  newsTime: {
+    ...IOSText.footnote,
+    color: IOSColors.tertiaryLabel,
+    fontFamily: IOSFont.sans,
+    marginTop: 2,
   },
   // ── 상품 3열 엣지투엣지 그리드 (PDP 비슷한 제품 / brand-lab tile 문법) ──
   tile: { marginBottom: Spacing.three },
@@ -482,8 +540,14 @@ const styles = StyleSheet.create({
   },
   tilePrice: {
     ...IOSText.footnote,
-    fontWeight: '600',
+    fontWeight: '400',
     color: IOSColors.label,
+    fontFamily: IOSFont.sans,
+  },
+  tilePricePct: {
+    ...IOSText.footnote,
+    fontWeight: '400',
+    color: IOSColors.systemRed,
     fontFamily: IOSFont.sans,
   },
   tileOriginalPrice: {

@@ -9,7 +9,7 @@
  * 로깅(클릭·노출)의 씨앗을 심는다 — 나중 취향 큐레이션 전환의 재료.
  */
 import { SymbolView } from 'expo-symbols';
-import { useMemo } from 'react';
+import { Fragment, type ReactNode, useMemo } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   useAnimatedStyle,
@@ -62,14 +62,19 @@ type ViewSection = {
 // 서버 CurationProduct → 카드 Product. price 는 원화 float → 정수 절사.
 // colorHint 는 이미지 로드 전 플레이스홀더 배경 (imageUri 가 있으면 미노출).
 function toProducts(section: CurationSection): Product[] {
-  return section.products.map((p) => ({
-    id: String(p.product_id),
-    brand: p.brand,
-    name: p.name,
-    priceWon: p.price != null ? Math.round(p.price) : 0,
-    colorHint: IOSColors.systemGray5,
-    imageUri: p.image_url,
-  }));
+  return section.products.map((p) => {
+    const effective = p.sale_price ?? p.price;
+    const onSale = p.sale_price != null && p.original_price != null;
+    return {
+      id: String(p.product_id),
+      brand: p.brand,
+      name: p.name,
+      priceWon: effective != null ? Math.round(effective) : 0,
+      originalPriceWon: onSale ? Math.round(p.original_price as number) : undefined,
+      colorHint: IOSColors.systemGray5,
+      imageUri: p.image_url,
+    };
+  });
 }
 
 function PressScaleCard({
@@ -137,6 +142,8 @@ export function CurationSheet({
   onSaveProduct,
   onSeeMore,
   isSaved,
+  insertBeforeTitle,
+  insertBeforeSlot,
 }: {
   /** GET /v1/curation 응답 구좌 (useCuration) — 없으면 로딩/빈 상태. */
   sections?: CurationSection[] | null;
@@ -155,6 +162,9 @@ export function CurationSheet({
   onSeeMore?: (section: { key: string; title: string }) => void;
   /** 찜 여부 조회 (위시리스트). */
   isSaved: (productId: string) => boolean;
+  /** 이 제목의 섹션 바로 위에 렌더할 노드 ('찾는 게 없나요?' 칩 블록). */
+  insertBeforeTitle?: string;
+  insertBeforeSlot?: ReactNode;
 }) {
   const sections = useMemo<ViewSection[]>(() => {
     if (!serverSections || serverSections.length === 0) return [];
@@ -184,7 +194,9 @@ export function CurationSheet({
           onSeeMore?.({ key: section.key, title: section.title });
         };
         return (
-        <View key={section.key} style={styles.rowSection}>
+        <Fragment key={section.key}>
+          {section.title === insertBeforeTitle && insertBeforeSlot}
+          <View style={styles.rowSection}>
           {/* 더보기 = 타이틀 바로 오른쪽 › 셰브런(brand-lab '최근 소식 ›' 문법).
               타이틀+셰브런 전체가 탭 영역 → 전용 그리드 페이지로. */}
           {hasMore ? (
@@ -235,7 +247,8 @@ export function CurationSheet({
               />
             ))}
           </ScrollView>
-        </View>
+          </View>
+        </Fragment>
         );
       })}
     </View>
