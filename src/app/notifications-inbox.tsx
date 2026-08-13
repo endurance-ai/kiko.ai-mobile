@@ -95,9 +95,9 @@ export default function NotificationsInboxScreen() {
     }
   }, [cursor, loadingMore]);
 
-  const handleOpenSidebar = () => {
+  const handleBack = () => {
     Haptic.light();
-    router.push('/sidebar');
+    router.back();
   };
 
   const handleRowPress = (n: NotificationItem) => {
@@ -140,15 +140,15 @@ export default function NotificationsInboxScreen() {
         </View>
         <Pressable
           hitSlop={8}
-          onPress={handleOpenSidebar}
+          onPress={handleBack}
           accessibilityRole="button"
-          accessibilityLabel="메뉴"
+          accessibilityLabel="뒤로가기"
         >
           <GlassSurface {...Glass.chip} isInteractive style={styles.toolbarPill}>
             {Platform.OS === 'web' ? (
-              <Text style={styles.menuGlyph}>☰</Text>
+              <Text style={styles.menuGlyph}>‹</Text>
             ) : (
-              <SymbolView name="line.3.horizontal" size={18} tintColor={IOSColors.label} weight="medium" />
+              <SymbolView name="chevron.left" size={17} tintColor={IOSColors.label} weight="medium" />
             )}
           </GlassSurface>
         </Pressable>

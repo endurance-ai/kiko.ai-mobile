@@ -1745,6 +1745,48 @@ export default function ChatEntryScreen() {
                 router.push(`/curation/${section.key}?${q.join("&")}`);
               }}
               isSaved={(id) => isWishlisted(id)}
+              insertBeforeTitle="브랜드 픽"
+              insertBeforeSlot={
+                suggestionChips.length > 0 ? (
+                  <View style={styles.findMoreBlock}>
+                    <Text style={styles.findMoreTitle}>찾는 게 없나요?</Text>
+                    <View style={styles.findMoreChips}>
+                      {suggestionChips.map((chip: SuggestionChip) => (
+                        <Pressable
+                          key={chip.id}
+                          disabled={isBusy}
+                          onPress={() => {
+                            Haptic.selection();
+                            trackEvent("chip_tap", {
+                              chip_id: chip.id,
+                              label_ko: chip.label,
+                              query_en: chip.query,
+                              session_id: sessionIdRef.current,
+                            });
+                            runStreamingTurn(
+                              chip.label,
+                              undefined,
+                              undefined,
+                              chip.query,
+                              "chip",
+                            );
+                          }}
+                        >
+                          <GlassSurface
+                            variant="pill"
+                            isInteractive
+                            style={styles.critiqueChip}
+                          >
+                            <Text style={styles.critiqueChipText}>
+                              {chip.label}
+                            </Text>
+                          </GlassSurface>
+                        </Pressable>
+                      ))}
+                    </View>
+                  </View>
+                ) : null
+              }
             />
           </View>
         )}
@@ -2325,41 +2367,7 @@ export default function ChatEntryScreen() {
                     </GlassSurface>
                   </Pressable>
                 ))}
-              {/* 골든셋 유도 칩 — 첫 턴 이전(빈 상태)에만. 버블엔 한국어
-                  label, 서버엔 검증된 영어 query (serverQueryOverride). */}
-              {!hasResults &&
-                suggestionChips.map((chip: SuggestionChip) => (
-                  <Pressable
-                    key={chip.id}
-                    disabled={isBusy}
-                    onPress={() => {
-                      Haptic.selection();
-                      // 기획 7/23: 칩 탭 자체를 기록 — search_query 와는
-                      // entry_point='chip' 으로 페어 (이중 카운트 아님).
-                      trackEvent("chip_tap", {
-                        chip_id: chip.id,
-                        label_ko: chip.label,
-                        query_en: chip.query,
-                        session_id: sessionIdRef.current,
-                      });
-                      runStreamingTurn(
-                        chip.label,
-                        undefined,
-                        undefined,
-                        chip.query,
-                        "chip",
-                      );
-                    }}
-                  >
-                    <GlassSurface
-                      variant="pill"
-                      isInteractive
-                      style={styles.critiqueChip}
-                    >
-                      <Text style={styles.critiqueChipText}>{chip.label}</Text>
-                    </GlassSurface>
-                  </Pressable>
-                ))}
+              {/* 골든셋 유도 칩은 메인 큐레이션('찾는 게 없나요?' 블록)으로 이동. */}
             </ScrollView>
           )}
 
@@ -2775,6 +2783,21 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     color: IOSColors.label,
     fontFamily: IOSFont.sans,
+  },
+  findMoreBlock: {
+    marginBottom: 32,
+  },
+  findMoreTitle: {
+    ...IOSText.title3,
+    fontWeight: "700",
+    color: IOSColors.label,
+    fontFamily: IOSFont.sans,
+    marginBottom: 12,
+  },
+  findMoreChips: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
   },
   critiqueChip: {
     paddingHorizontal: 16,

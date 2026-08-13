@@ -200,6 +200,20 @@ export interface FollowListResponse {
 }
 
 // ── 브랜드 홈 (GET /v1/brands/{id}, GET /v1/brands/{id}/products) ──
+/** 브랜드 소식 한 건 (ai.brand_news 정본 1행). 알림 이벤트와 동일 소스·문안. */
+export interface BrandNewsItem {
+  id: number;
+  /** 소식 종류 (sale/restock 등) — 서버 알림 배치가 부여. */
+  kind: string;
+  /** 본문 (예: "제이디드 런던 세일 시작했어요"). */
+  text: string;
+  /** 보조 문구 (예: "최대 40% 싸요"). 없으면 빈 문자열. */
+  sub: string;
+  started_at: string;
+  /** 세일 종료 시각. null 이면 진행 중 (프론트 '진행 중' 배지 근거). */
+  ended_at: string | null;
+}
+
 export interface BrandHome {
   id: number;
   name: string;
@@ -210,8 +224,14 @@ export interface BrandHome {
   notify_enabled: boolean;
   /** 공식몰 URL — 설명 시트의 '공식 스토어 방문' 링크 (brand_nodes.wiki.homepage_url). */
   store_url: string | null;
-  /** 최근 소식 — admin 수동 관리 (brand_nodes.wiki.news). 단일 문자열. */
-  news: string | null;
+  /** 최근 소식 (최신순 프리뷰). 전체는 GET /v1/brands/{id}/news 로 페이지네이션. */
+  news: BrandNewsItem[];
+}
+
+/** GET /v1/brands/{id}/news — 브랜드 소식 전체 (키셋 커서, 최신순). 무인증. */
+export interface BrandNewsResponse {
+  items: BrandNewsItem[];
+  next_cursor: string | null;
 }
 
 export interface BrandProduct {
@@ -513,6 +533,8 @@ export interface CurationProduct {
   brand: string;
   name: string;
   price: number | null;
+  original_price: number | null;
+  sale_price: number | null;
   image_url: string;
   product_url: string;
 }
