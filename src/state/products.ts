@@ -6,7 +6,10 @@ export type Product = {
   id: string;
   brand: string;
   name: string;
+  /** 표시 가격(세일 중이면 세일가). */
   priceWon: number;
+  /** 세일 전 원가 — 세일 중일 때만. 있으면 카드가 취소선 + 할인율(%)을 붙인다. */
+  originalPriceWon?: number;
   /** Solid hex placeholder until real image URL is available from backend. */
   colorHint: string;
   imageUri?: string;

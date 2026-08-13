@@ -1,8 +1,8 @@
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
-import { router, useLocalSearchParams } from "expo-router";
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { SymbolView } from "expo-symbols";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Keyboard,
@@ -42,6 +42,7 @@ import {
 import { ApiError } from "@/lib/api";
 import { parseAnchorPrefix } from "@/lib/anchor";
 import { getProduct } from "@/lib/products";
+import { listNotifications } from "@/lib/notifications";
 import {
   isCapExhausted,
   type CapMeta,
@@ -416,6 +417,26 @@ export default function ChatEntryScreen() {
   const { value: filter, setValue: setFilter } = useFilter();
   const { isSaved: isWishlisted, toggle: toggleWishlist } = useWishlist();
   const { status: authStatus } = useAuth();
+  // 헤더 벨 빨간 점 — 읽지 않은 알림 유무. 홈 포커스마다 unread_count 재조회
+  // (알림함 진입 시 서버가 전체 읽음 처리하므로 돌아오면 자동으로 꺼진다).
+  const [hasUnread, setHasUnread] = useState(false);
+  useFocusEffect(
+    useCallback(() => {
+      if (authStatus !== "authenticated") {
+        setHasUnread(false);
+        return;
+      }
+      let cancelled = false;
+      void listNotifications({ limit: 1 })
+        .then((r) => {
+          if (!cancelled) setHasUnread(r.unread_count > 0);
+        })
+        .catch(() => {});
+      return () => {
+        cancelled = true;
+      };
+    }, [authStatus]),
+  );
   const {
     active: activeBanner,
     show: showBanner,
@@ -1724,6 +1745,48 @@ export default function ChatEntryScreen() {
                 router.push(`/curation/${section.key}?${q.join("&")}`);
               }}
               isSaved={(id) => isWishlisted(id)}
+              insertBeforeTitle="브랜드 픽"
+              insertBeforeSlot={
+                suggestionChips.length > 0 ? (
+                  <View style={styles.findMoreBlock}>
+                    <Text style={styles.findMoreTitle}>찾는 게 없나요?</Text>
+                    <View style={styles.findMoreChips}>
+                      {suggestionChips.map((chip: SuggestionChip) => (
+                        <Pressable
+                          key={chip.id}
+                          disabled={isBusy}
+                          onPress={() => {
+                            Haptic.selection();
+                            trackEvent("chip_tap", {
+                              chip_id: chip.id,
+                              label_ko: chip.label,
+                              query_en: chip.query,
+                              session_id: sessionIdRef.current,
+                            });
+                            runStreamingTurn(
+                              chip.label,
+                              undefined,
+                              undefined,
+                              chip.query,
+                              "chip",
+                            );
+                          }}
+                        >
+                          <GlassSurface
+                            variant="pill"
+                            isInteractive
+                            style={styles.critiqueChip}
+                          >
+                            <Text style={styles.critiqueChipText}>
+                              {chip.label}
+                            </Text>
+                          </GlassSurface>
+                        </Pressable>
+                      ))}
+                    </View>
+                  </View>
+                ) : null
+              }
             />
           </View>
         )}
@@ -2304,41 +2367,7 @@ export default function ChatEntryScreen() {
                     </GlassSurface>
                   </Pressable>
                 ))}
-              {/* 골든셋 유도 칩 — 첫 턴 이전(빈 상태)에만. 버블엔 한국어
-                  label, 서버엔 검증된 영어 query (serverQueryOverride). */}
-              {!hasResults &&
-                suggestionChips.map((chip: SuggestionChip) => (
-                  <Pressable
-                    key={chip.id}
-                    disabled={isBusy}
-                    onPress={() => {
-                      Haptic.selection();
-                      // 기획 7/23: 칩 탭 자체를 기록 — search_query 와는
-                      // entry_point='chip' 으로 페어 (이중 카운트 아님).
-                      trackEvent("chip_tap", {
-                        chip_id: chip.id,
-                        label_ko: chip.label,
-                        query_en: chip.query,
-                        session_id: sessionIdRef.current,
-                      });
-                      runStreamingTurn(
-                        chip.label,
-                        undefined,
-                        undefined,
-                        chip.query,
-                        "chip",
-                      );
-                    }}
-                  >
-                    <GlassSurface
-                      variant="pill"
-                      isInteractive
-                      style={styles.critiqueChip}
-                    >
-                      <Text style={styles.critiqueChipText}>{chip.label}</Text>
-                    </GlassSurface>
-                  </Pressable>
-                ))}
+              {/* 골든셋 유도 칩은 메인 큐레이션('찾는 게 없나요?' 블록)으로 이동. */}
             </ScrollView>
           )}
 
@@ -2419,6 +2448,7 @@ export default function ChatEntryScreen() {
           showCuration={showJumpTop && !resumedFromHistory && !chatMode}
           onOpenCuration={scrollToCuration}
           onOpenNotifications={() => router.push("/notifications-inbox")}
+          hasUnread={hasUnread}
           onOpenWishlist={() => router.push("/wishlist")}
         />
       </View>
@@ -2753,6 +2783,21 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     color: IOSColors.label,
     fontFamily: IOSFont.sans,
+  },
+  findMoreBlock: {
+    marginBottom: 32,
+  },
+  findMoreTitle: {
+    ...IOSText.title3,
+    fontWeight: "700",
+    color: IOSColors.label,
+    fontFamily: IOSFont.sans,
+    marginBottom: 12,
+  },
+  findMoreChips: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
   },
   critiqueChip: {
     paddingHorizontal: 16,

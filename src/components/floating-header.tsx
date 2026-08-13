@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { SymbolView } from 'expo-symbols';
+import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -9,6 +9,8 @@ import { Haptic, IOSColors, IOSFont, IOSText } from '@/theme';
 
 type Props = {
   title?: string;
+  /** 타이틀 텍스트 대신 중앙에 SF Symbol 아이콘(예: 찜 화면 = 'heart.fill'). */
+  titleIcon?: SymbolViewProps['name'];
   onBack?: () => void;
   backLabel?: string;
   rightSlot?: ReactNode;
@@ -20,7 +22,7 @@ const PILL = 40;
 // Screens use this as `paddingTop` so first content row clears the floating bar.
 export const FLOATING_HEADER_OFFSET = 52;
 
-export function FloatingHeader({ title, onBack, backLabel, rightSlot }: Props) {
+export function FloatingHeader({ title, titleIcon, onBack, backLabel, rightSlot }: Props) {
   return (
     <View style={styles.float} pointerEvents="box-none">
       <SafeAreaView edges={['top']} style={styles.safe}>
@@ -50,7 +52,11 @@ export function FloatingHeader({ title, onBack, backLabel, rightSlot }: Props) {
             </GlassSurface>
           </Pressable>
 
-          {title ? (
+          {titleIcon ? (
+            <View style={styles.titleIconWrap}>
+              <SymbolView name={titleIcon} size={20} tintColor={IOSColors.label} weight="semibold" />
+            </View>
+          ) : title ? (
             <Text style={styles.title} numberOfLines={1}>
               {title}
             </Text>
@@ -111,6 +117,10 @@ const styles = StyleSheet.create({
   },
   titleSpacer: {
     flex: 1,
+  },
+  titleIconWrap: {
+    flex: 1,
+    alignItems: 'center',
   },
   right: {
     width: PILL,

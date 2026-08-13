@@ -99,7 +99,7 @@ export default function WishlistScreen() {
         )}
       </ScrollView>
 
-      <FloatingHeader title="찜" />
+      <FloatingHeader titleIcon="heart.fill" />
     </View>
   );
 }

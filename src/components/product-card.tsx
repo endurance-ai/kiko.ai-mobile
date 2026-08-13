@@ -162,9 +162,17 @@ export function ProductCard({
       {/* 큐레이션(priceBelow)은 상품명 자리에 가격을, 그 외(검색/스트림)는
           상품명을 노출한다. */}
       {priceBelow ? (
-        <Text style={styles.priceBelow} numberOfLines={1}>
-          {formatPrice(product.priceWon)}
-        </Text>
+        <View style={styles.priceBelowRow}>
+          {product.originalPriceWon != null &&
+            product.originalPriceWon > product.priceWon && (
+              <Text style={styles.priceBelowPct} numberOfLines={1}>
+                {Math.round((1 - product.priceWon / product.originalPriceWon) * 100)}%
+              </Text>
+            )}
+          <Text style={styles.priceBelow} numberOfLines={1}>
+            {formatPrice(product.priceWon)}
+          </Text>
+        </View>
       ) : (
         <Text style={styles.name} numberOfLines={1}>
           {product.name}
@@ -239,11 +247,28 @@ const styles = StyleSheet.create({
     fontFamily: IOSFont.sans,
   },
   // 큐레이션 전용 — 브랜드명 아래 가격. 상품명(회색)보다 살짝 강조(라벨색·600).
+  priceBelowRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 4,
+    marginTop: 2,
+  },
   priceBelow: {
     ...IOSText.footnote,
-    fontWeight: '600',
+    fontWeight: '400',
     color: IOSColors.label,
-    marginTop: 2,
+    fontFamily: IOSFont.sans,
+  },
+  priceBelowStrike: {
+    ...IOSText.caption1,
+    color: IOSColors.tertiaryLabel,
+    textDecorationLine: 'line-through',
+    fontFamily: IOSFont.sans,
+  },
+  priceBelowPct: {
+    ...IOSText.footnote,
+    fontWeight: '400',
+    color: IOSColors.systemRed,
     fontFamily: IOSFont.sans,
   },
 });
