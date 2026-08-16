@@ -30,6 +30,12 @@ type Props = {
   position?: number | null;
   /** 노출 경로. 기본 "search". 향후 큐레이션 등 확장. */
   source?: string;
+  /** 큐레이션 카드 변형 — 이미지 위 가격 태그를 없애고, 브랜드명 아래
+   *  (기존 상품명 자리)에 가격을 노출한다. 기본 false(가격 태그 + 상품명). */
+  priceBelow?: boolean;
+  /** 카드 폭 오버라이드 — 미지정 시 고정 156. 2열 그리드 등 반응형 폭에서
+   *  전달하면 이미지 높이도 같은 비율로 스케일한다. */
+  width?: number;
 };
 
 export function ProductCard({
@@ -44,7 +50,12 @@ export function ProductCard({
   sectionId,
   position,
   source,
+  priceBelow = false,
+  width,
 }: Props) {
+  // 반응형 폭 — 지정 시 이미지 높이를 원본 비율(196/156)로 스케일.
+  const cardW = width ?? CARD_WIDTH;
+  const cardH = Math.round((cardW * CARD_HEIGHT) / CARD_WIDTH);
   useEffect(() => {
     trackProductImpression({
       productId: String(product.id),
@@ -69,10 +80,14 @@ export function ProductCard({
   };
 
   return (
-    <View style={styles.root}>
+    <View style={[styles.root, width != null && { width: cardW }]}>
       {/* 로딩 중엔 colorHint 가 배경으로 보여 회색 빈칸 대신 자리를 채운다. */}
       <Pressable
-        style={[styles.imageWrap, { backgroundColor: product.colorHint }]}
+        style={[
+          styles.imageWrap,
+          { backgroundColor: product.colorHint },
+          width != null && { width: cardW, height: cardH },
+        ]}
         onPress={handlePress}
       >
         {product.imageUri ? (
@@ -130,8 +145,9 @@ export function ProductCard({
           </View>
         )}
 
-        {/* Price tag — bottom left. 가격 있을 때만(스트림 결과 등 가격 없는 소스는 생략). */}
-        {product.priceWon > 0 && (
+        {/* Price tag — bottom left. 가격 있을 때만(스트림 결과 등 가격 없는 소스는
+            생략). 큐레이션(priceBelow)에선 카드 밖 브랜드명 아래로 내려 생략. */}
+        {!priceBelow && product.priceWon > 0 && (
           <View style={styles.priceTag}>
             <Text style={styles.priceText}>{formatPrice(product.priceWon)}</Text>
           </View>
@@ -154,9 +170,25 @@ export function ProductCard({
           {product.brand}
         </Text>
       )}
-      <Text style={styles.name} numberOfLines={1}>
-        {product.name}
-      </Text>
+      {/* 큐레이션(priceBelow)은 상품명 자리에 가격을, 그 외(검색/스트림)는
+          상품명을 노출한다. */}
+      {priceBelow ? (
+        <View style={styles.priceBelowRow}>
+          {product.originalPriceWon != null &&
+            product.originalPriceWon > product.priceWon && (
+              <Text style={styles.priceBelowPct} numberOfLines={1}>
+                {Math.round((1 - product.priceWon / product.originalPriceWon) * 100)}%
+              </Text>
+            )}
+          <Text style={styles.priceBelow} numberOfLines={1}>
+            {formatPrice(product.priceWon)}
+          </Text>
+        </View>
+      ) : (
+        <Text style={styles.name} numberOfLines={1}>
+          {product.name}
+        </Text>
+      )}
     </View>
   );
 }
@@ -223,6 +255,31 @@ const styles = StyleSheet.create({
     ...IOSText.footnote,
     color: IOSColors.secondaryLabel,
     marginTop: 2,
+    fontFamily: IOSFont.sans,
+  },
+  // 큐레이션 전용 — 브랜드명 아래 가격. 상품명(회색)보다 살짝 강조(라벨색·600).
+  priceBelowRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 4,
+    marginTop: 2,
+  },
+  priceBelow: {
+    ...IOSText.footnote,
+    fontWeight: '400',
+    color: IOSColors.label,
+    fontFamily: IOSFont.sans,
+  },
+  priceBelowStrike: {
+    ...IOSText.caption1,
+    color: IOSColors.tertiaryLabel,
+    textDecorationLine: 'line-through',
+    fontFamily: IOSFont.sans,
+  },
+  priceBelowPct: {
+    ...IOSText.footnote,
+    fontWeight: '400',
+    color: IOSColors.systemRed,
     fontFamily: IOSFont.sans,
   },
 });

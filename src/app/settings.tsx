@@ -88,7 +88,7 @@ export default function SettingsScreen() {
         id: "notifications",
         icon: "bell",
         title: "알림",
-        onPress: () => router.push("/notifications"),
+        onPress: () => router.push("/notification-settings"),
       },
       {
         id: "privacy",

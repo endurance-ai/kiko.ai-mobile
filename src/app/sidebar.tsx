@@ -18,6 +18,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import Constants from "expo-constants";
 
 import { GlassSurface } from "@/components/glass-surface";
 import { Haptic, IOSColors, IOSFont, IOSText, Opacity , Radius , withAlpha , Scrim } from "@/theme";
@@ -121,7 +122,17 @@ export default function SidebarScreen() {
     Haptic.medium();
     animateClose(() => {
       router.back();
-      // Reset home into the empty 'new chat' surface.
+      // 새 채팅 = 빈 챗 화면(인트로 인사말) 으로. Explore(큐레이션)와 구분.
+      setTimeout(() => router.replace("/home?chat=1" as never), 30);
+    });
+  };
+
+  // Explore — 앱 첫 진입에서 보는 큐레이션(메인 /home). 최근 대화(세션)와
+  // 구분되는 상시 메뉴 항목. 홈으로 replace 해 큐레이션 표면으로 되돌린다.
+  const goExplore = () => {
+    Haptic.light();
+    animateClose(() => {
+      router.back();
       setTimeout(() => router.replace("/home" as never), 30);
     });
   };
@@ -324,17 +335,23 @@ export default function SidebarScreen() {
         style={[
           styles.panel,
           {
-            // 가로는 라이브 window 값으로 잠그되, 세로는 top/bottom:0 로
-            // 부모 컨테이너(트랜스페어런트 모달) 를 그대로 채우도록 한다.
-            // 첫 마운트 때 window.height 가 상태바 등을 포함한 잘못된 값
-            // 을 뱉으면서 패널이 세로로 확장되던 문제를 원천 차단.
+            // 가로·세로 모두 라이브 window 값으로 명시 고정 — top/bottom:0 만으론
+            // (트랜스페어런트 모달 첫 측정 이슈로) 내부 flex 체인이 높이를 못 받아
+            // ScrollView 가 안 잡히고 리스트가 넘치던 문제. 높이를 못 박아 자식
+            // flex:1(panelInner→body→ScrollView)이 확실히 바운드되게 한다.
             width: PANEL_W,
+            height: window.height,
             transform: [{ translateX: slide }],
           },
         ]}
       >
-        <SafeAreaView edges={["top"]} style={styles.panelInner}>
-          <View style={styles.body}>
+        {/* transparentModal 안에선 SafeAreaView 상단 인셋이 첫 열림 0 / 재열림
+            ~59 로 들쭉날쭉해 이중 패딩(마진 튐)이 생긴다 → 상단 edge 는 끄고,
+            상태바 여백은 expo-constants 로 일관되게 하나만 준다. */}
+        <SafeAreaView edges={[]} style={styles.panelInner}>
+          <View
+            style={[styles.body, { paddingTop: Constants.statusBarHeight + 8 }]}
+          >
             <ExpoImage
               source={WORDMARK_SOURCE}
               style={[styles.brand, { tintColor: wordmarkTint }]}
@@ -342,6 +359,20 @@ export default function SidebarScreen() {
               cachePolicy="memory-disk"
               transition={0}
             />
+
+            {/* Explore — 큐레이션(메인) 진입. 최근 대화 목록 위에 상시 노출되는
+                동급 메뉴로, '최근 항목' 섹션과 구분한다. */}
+            <Pressable
+              style={({ pressed }) => [
+                styles.menuRow,
+                pressed && styles.historyRowActive,
+              ]}
+              onPress={goExplore}
+              accessibilityRole="button"
+              accessibilityLabel="Explore"
+            >
+              <Text style={styles.menuRowText}>Explore</Text>
+            </Pressable>
 
             <Text style={styles.sectionLabel}>최근 항목</Text>
 
@@ -371,6 +402,7 @@ export default function SidebarScreen() {
               )
             ) : (
               <ScrollView
+                style={styles.historyScroll}
                 contentContainerStyle={styles.historyList}
                 showsVerticalScrollIndicator={false}
               >
@@ -494,6 +526,22 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
 
+  // Explore 메뉴 행 — historyRow 와 같은 리듬(12/12, Radius.lg)이되, 최근
+  // 대화보다 상위 동급 항목이라 살짝 강조(Semibold). 아래 '최근 항목'
+  // 섹션 라벨과 여백으로 구분된다.
+  menuRow: {
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderRadius: Radius.lg,
+    marginBottom: 12,
+  },
+  menuRowText: {
+    ...IOSText.body,
+    fontWeight: "600",
+    color: IOSColors.label,
+    fontFamily: IOSFont.sans,
+  },
+
   sectionLabel: {
     ...IOSText.subhead,
     color: IOSColors.secondaryLabel,
@@ -514,6 +562,9 @@ const styles = StyleSheet.create({
     fontFamily: IOSFont.sans,
   },
 
+  // ScrollView 자체는 flex:1 로 남은 높이를 잡아야 스크롤된다. (없으면 콘텐츠
+  // 크기대로 늘어나 세션이 많을 때 화면 밖으로 넘치고 하단 버튼과 겹침.)
+  historyScroll: { flex: 1 },
   historyList: {
     // 하단 버튼이 절대 위치로 얹혀 있으므로, 리스트 끝이 버튼에 안 가리도록
     // 버튼 클러스터 높이 (∼ 50 + safeArea + row padding) 만큼 여유 확보.

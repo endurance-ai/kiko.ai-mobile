@@ -291,7 +291,7 @@ export default function BrandLabScreen() {
           }}
           style={({ pressed }) => [styles.sectionHeaderRow, pressed && styles.sheetPressed]}
         >
-          <Text style={styles.sectionHeader}>최근 소식</Text>
+          <Text style={[styles.sectionHeader, styles.sectionHeaderInRow]}>최근 소식</Text>
           {Platform.OS === 'web' ? (
             <Text style={styles.sectionChevron}>›</Text>
           ) : (
@@ -783,6 +783,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.one,
     alignSelf: 'flex-start',
+    // 세로 마진을 행으로 올린다 — 자식(타이틀/셰브런)에 비대칭 마진이 있으면
+    // alignItems:center 가 셰브런을 타이틀의 마진박스 중앙(=글자보다 위)에
+    // 맞춰 수직 정렬이 어긋난다. 행이 마진을 갖고 자식은 마진 0으로 둔다.
+    marginTop: Spacing.five,
+    marginBottom: Spacing.two,
+  },
+  // 행 안의 타이틀은 세로 마진 제거(행이 대신 가짐). 단독 '상품' 헤더는
+  // sectionHeader 단독 사용이라 기존 마진 유지.
+  sectionHeaderInRow: {
+    marginTop: 0,
+    marginBottom: 0,
   },
   // 셰브런 광학 보정 — › 글리프는 폰트 크기 대비 작게 그려져서, 타이틀
   // 20pt와 눈높이가 같아 보이려면 글리프를 키워야 함 (애플뮤직 관찰 기준).
@@ -794,8 +805,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: IOSColors.secondaryLabel,
     fontFamily: IOSFont.sans,
-    marginTop: Spacing.five,
-    marginBottom: Spacing.two,
     transform: [{ translateY: -2 }],
   },
   groupCard: {

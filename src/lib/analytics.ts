@@ -68,6 +68,18 @@ export async function initAnalytics(): Promise<void> {
       }
     }
     initialized = true;
+    // 복원 유저: identifyUser 가 init 전 호출되면 SDK setUserId 를 못 부르고
+    // early-return 한다(아래 identifyUser 가드). init 완료 시점에 캐시된
+    // userId 를 SDK 에 반영해, 재발사되는 큐 이벤트(main_screen_viewed 등)와
+    // 이후 이벤트가 익명 deviceId 대신 user_id 로 귀속되게 한다(누수 ③ —
+    // 유니크 유저 파편화 방지). 큐 재발사 전에 세팅해야 재발사분도 귀속된다.
+    if (cachedUserId) {
+      try {
+        setUserId(cachedUserId);
+      } catch {
+        // silent
+      }
+    }
     // init 전에 큐잉된 이벤트 재발사 — ts 는 큐잉 시점 값을 보존한다.
     const queued = pendingEvents;
     pendingEvents = [];
@@ -107,7 +119,11 @@ export function identifyUser(
 export function resetAnalytics(): void {
   cachedUserId = null;
   cachedSessionId = null;
-  pendingEvents = [];
+  // pendingEvents 는 비우지 않는다 — resetAnalytics 는 명시적 로그아웃뿐 아니라
+  // 부팅 중 토큰 refresh 실패(auth clearSession)에서도 불린다. init 전에 큐잉된
+  // 익명 퍼널 이벤트(홈 마운트 main_screen_viewed 등)를 여기서 지우면 재발사
+  // 전에 선택적으로 유실된다(누수 ②). init 이후엔 큐가 비어 있어 no-op 이고,
+  // 로그아웃은 항상 init 이후라 큐 잔여물 문제도 없다.
   impressionSeen.clear();
   if (!initialized) return;
   try {

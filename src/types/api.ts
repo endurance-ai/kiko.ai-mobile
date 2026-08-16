@@ -173,6 +173,83 @@ export interface BrandNode {
   brand_name_normalized: string | null;
 }
 
+// ── 브랜드 팔로우 (POST/DELETE /v1/brands/{id}/follow, GET /v1/me/follows) ──
+export interface FollowRequest {
+  /** 팔로우 + 알림 여부. POST 재호출로 notify on/off 토글(스펙: PATCH 없이 통합). */
+  notify: boolean;
+}
+
+export interface FollowResponse {
+  following: boolean;
+  notify_enabled: boolean;
+}
+
+export interface UnfollowResponse {
+  following: boolean;
+}
+
+export interface FollowItem {
+  brand_id: number;
+  brand_name: string;
+  notify_enabled: boolean;
+}
+
+export interface FollowListResponse {
+  items: FollowItem[];
+  next_cursor: string | null;
+}
+
+// ── 브랜드 홈 (GET /v1/brands/{id}, GET /v1/brands/{id}/products) ──
+/** 브랜드 소식 한 건 (ai.brand_news 정본 1행). 알림 이벤트와 동일 소스·문안. */
+export interface BrandNewsItem {
+  id: number;
+  /** 소식 종류 (sale/restock 등) — 서버 알림 배치가 부여. */
+  kind: string;
+  /** 본문 (예: "제이디드 런던 세일 시작했어요"). */
+  text: string;
+  /** 보조 문구 (예: "최대 40% 싸요"). 없으면 빈 문자열. */
+  sub: string;
+  started_at: string;
+  /** 세일 종료 시각. null 이면 진행 중 (프론트 '진행 중' 배지 근거). */
+  ended_at: string | null;
+}
+
+export interface BrandHome {
+  id: number;
+  name: string;
+  description: string | null;
+  logo_url: string | null;
+  product_count: number;
+  following: boolean;
+  notify_enabled: boolean;
+  /** 공식몰 URL — 설명 시트의 '공식 스토어 방문' 링크 (brand_nodes.wiki.homepage_url). */
+  store_url: string | null;
+  /** 최근 소식 (최신순 프리뷰). 전체는 GET /v1/brands/{id}/news 로 페이지네이션. */
+  news: BrandNewsItem[];
+}
+
+/** GET /v1/brands/{id}/news — 브랜드 소식 전체 (키셋 커서, 최신순). 무인증. */
+export interface BrandNewsResponse {
+  items: BrandNewsItem[];
+  next_cursor: string | null;
+}
+
+export interface BrandProduct {
+  id: number;
+  brand: string;
+  name: string;
+  price: number | null;
+  original_price: number | null;
+  sale_price: number | null;
+  image_url: string;
+  product_url: string;
+}
+
+export interface BrandProductsResponse {
+  items: BrandProduct[];
+  next_cursor: string | null;
+}
+
 /**
  * Lightweight reference returned in `ProductDetail.similar` — distinct from
  * the chat `ProductRef`. Server computes these via direct cosine distance
@@ -284,6 +361,44 @@ export interface NotificationCategories {
   release_alerts?: boolean | null;
   taste_push?: boolean | null;
   system?: boolean | null;
+  // v1.2 알림 카테고리 (재관 백엔드 추가) — 설정 화면 토글과 1:1.
+  restock?: boolean | null;
+  price_drop?: boolean | null;
+  brand_new_product?: boolean | null;
+  daily_briefing?: boolean | null;
+}
+
+// ── 알림함 (GET /v1/notifications, PATCH /v1/notifications/read) ──
+export interface NotificationItem {
+  id: string;
+  /** 원본 DB kind — restock | price_drop | brand_new_product | brand_sale */
+  type: string;
+  text: string;
+  sub: string;
+  brand: string | null;
+  product_id: number | null;
+  brand_id: number | null;
+  old_price: number | null;
+  new_price: number | null;
+  image_url: string | null;
+  created_at: string;
+  read: boolean;
+}
+
+export interface NotificationListResponse {
+  items: NotificationItem[];
+  next_cursor: string | null;
+  unread_count: number;
+}
+
+export interface MarkReadRequest {
+  ids?: string[];
+  all?: boolean;
+}
+
+export interface MarkReadResponse {
+  unread_count: number;
+  marked: number;
 }
 
 export interface UpdateNotificationsRequest {
@@ -418,6 +533,8 @@ export interface CurationProduct {
   brand: string;
   name: string;
   price: number | null;
+  original_price: number | null;
+  sale_price: number | null;
   image_url: string;
   product_url: string;
 }
@@ -425,6 +542,9 @@ export interface CurationProduct {
 export interface CurationSection {
   id: string;
   slot_type: 'auto' | 'editorial';
+  /** 렌더 힌트 — 'trending' 은 상단 히어로 레일(큰 그라디언트 카드)로 승격,
+   * 'default'(기본)는 기존 가로 상품 행. 서버가 필드를 안 내리면 'default' 취급. */
+  display_type?: 'default' | 'trending';
   title: string;
   subtitle: string | null;
   products: CurationProduct[];
@@ -543,4 +663,29 @@ export interface AppPlatformConfig {
 
 export interface AppConfig {
   ios: AppPlatformConfig;
+}
+
+/** POST /v1/image/analyze — 업로드 이미지에서 착용 상품을 검출한 결과의 한 항목.
+ * ai-server 의 VisionItem(app/channels/vision.py) 을 앱이 쓰는 필드만 미러.
+ * 아직 계약 확정 전이라 전부 optional — 서버가 일부만 줘도 안전하게 렌더. */
+export interface VisionAnalyzeItem {
+  /** 표시 라벨(한국어 우선). name/searchQueryKo/subcategory 순으로 폴백. */
+  name?: string | null;
+  searchQueryKo?: string | null;
+  /** 이 항목만으로 비슷한 상품을 찾는 검색 쿼리(버튼 탭 시 사용). */
+  searchQuery?: string | null;
+  category?: string | null;
+  subcategory?: string | null;
+  fit?: string | null;
+  color?: string | null;
+  /** 이미지 위 상대 위치·크기(0~100 %). top/left=중심, width/height=바운딩 박스.
+   *  버튼 배치는 top/left, 썸네일 정확 크롭은 width/height 사용. */
+  position?: { top: number; left: number; width?: number; height?: number } | null;
+}
+
+/** POST /v1/image/analyze 응답 — 항목 + 무드(스타일 칩) + 스타일 노드. */
+export interface VisionAnalyzeResponse {
+  items: VisionAnalyzeItem[];
+  mood_tags?: string[] | null;
+  style_node?: string | null;
 }

@@ -90,10 +90,28 @@ function buildUrl(path: string, query?: RequestOptions['query']): string {
   return url.toString();
 }
 
+/** FastAPI 422 는 detail 이 [{type, loc, msg, input}, ...] 배열이라 문자열이 아니다.
+ *  어떤 형태가 와도 렌더 가능한 문자열로 강제 변환한다(객체가 React child 로
+ *  새어나가 크래시하는 것 방지). */
+export function normalizeErrorDetail(detail: unknown): string | undefined {
+  if (detail == null) return undefined;
+  if (typeof detail === 'string') return detail;
+  const pick = (d: unknown): string =>
+    d != null && typeof d === 'object' && 'msg' in d
+      ? String((d as { msg: unknown }).msg)
+      : String(d);
+  if (Array.isArray(detail)) {
+    const msgs = detail.map(pick).filter(Boolean);
+    return msgs.length ? msgs.join(', ') : undefined;
+  }
+  if (typeof detail === 'object') return pick(detail);
+  return String(detail);
+}
+
 async function parseError(res: Response): Promise<string> {
   try {
     const data = (await res.json()) as ApiErrorBody;
-    return data.detail ?? res.statusText;
+    return normalizeErrorDetail(data.detail) ?? res.statusText;
   } catch {
     return res.statusText || `HTTP ${res.status}`;
   }

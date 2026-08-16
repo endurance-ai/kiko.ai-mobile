@@ -1,4 +1,5 @@
-# TS/TSX 는 항상 텍스트로 취급 — 일부 파일이 content 휴리스틱에 binary 로
-# 오인돼 diff/cherry-pick 가 깨지던 문제 방지.
+# TS/TSX 는 항상 텍스트로 취급 — 일부 파일(예: src/app/product/[id].tsx)이
+# 특정 바이트 때문에 git content 휴리스틱에 binary 로 오인돼 diff 가 안 보이던
+# 문제 방지(PR 리뷰 가능하게).
 *.ts  text diff
 *.tsx text diff
