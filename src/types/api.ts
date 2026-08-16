@@ -542,6 +542,9 @@ export interface CurationProduct {
 export interface CurationSection {
   id: string;
   slot_type: 'auto' | 'editorial';
+  /** 렌더 힌트 — 'trending' 은 상단 히어로 레일(큰 그라디언트 카드)로 승격,
+   * 'default'(기본)는 기존 가로 상품 행. 서버가 필드를 안 내리면 'default' 취급. */
+  display_type?: 'default' | 'trending';
   title: string;
   subtitle: string | null;
   products: CurationProduct[];
@@ -660,4 +663,28 @@ export interface AppPlatformConfig {
 
 export interface AppConfig {
   ios: AppPlatformConfig;
+}
+
+/** POST /v1/image/analyze — 업로드 이미지에서 착용 상품을 검출한 결과의 한 항목.
+ * ai-server 의 VisionItem(app/channels/vision.py) 을 앱이 쓰는 필드만 미러.
+ * 아직 계약 확정 전이라 전부 optional — 서버가 일부만 줘도 안전하게 렌더. */
+export interface VisionAnalyzeItem {
+  /** 표시 라벨(한국어 우선). name/searchQueryKo/subcategory 순으로 폴백. */
+  name?: string | null;
+  searchQueryKo?: string | null;
+  /** 이 항목만으로 비슷한 상품을 찾는 검색 쿼리(버튼 탭 시 사용). */
+  searchQuery?: string | null;
+  category?: string | null;
+  subcategory?: string | null;
+  fit?: string | null;
+  color?: string | null;
+  /** 이미지 위 상대 위치(0~1). 있으면 글래스 버튼을 실제 좌표에 배치. */
+  position?: { top: number; left: number } | null;
+}
+
+/** POST /v1/image/analyze 응답 — 항목 + 무드(스타일 칩) + 스타일 노드. */
+export interface VisionAnalyzeResponse {
+  items: VisionAnalyzeItem[];
+  mood_tags?: string[] | null;
+  style_node?: string | null;
 }
