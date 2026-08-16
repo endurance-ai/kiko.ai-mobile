@@ -1,11 +1,23 @@
 import Constants from 'expo-constants';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
+import { router } from 'expo-router';
 import { useEffect, useRef } from 'react';
 import { Platform } from 'react-native';
 
 import { registerDevice } from '@/lib/devices';
 import { useAuth } from '@/state/auth';
+
+// 포그라운드 알림 표시 정책 — 이게 없으면 앱이 켜져 있을 때 도착한 푸시가
+// 배너/사운드 없이 조용히 삼켜진다(iOS 기본). 목록/배지에도 반영.
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowBanner: true,
+    shouldShowList: true,
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+  }),
+});
 
 /**
  * Requests notification permission and registers the device's APNs token
@@ -53,4 +65,15 @@ export function useRegisterDevice(): void {
       }
     })();
   }, [status]);
+
+  // 알림 탭 → 알림함으로 이동. 리스너는 앱 실행 시(_layout) 일찍 등록되므로
+  // 포그라운드·백그라운드는 물론 콜드스타트 탭 응답도 받는다.
+  // (getLastNotificationResponseAsync 는 마지막 응답을 계속 보관해 매 실행마다
+  //  재이동하는 함정이 있어 사용하지 않는다.)
+  useEffect(() => {
+    const sub = Notifications.addNotificationResponseReceivedListener(() => {
+      router.push('/notifications-inbox');
+    });
+    return () => sub.remove();
+  }, []);
 }
