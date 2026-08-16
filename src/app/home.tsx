@@ -163,6 +163,9 @@ type Turn = {
 
 const SEARCH_HINT = "인디 · 빈티지 2,900+ 브랜드에서 찾는 중…";
 const ANALYZE_HINT = "사진 분석 중… 아이템 추출하고 있어";
+// 새 채팅 빈 화면 인트로 인사말 (봇 버블).
+const INTRO_GREETING =
+  "안녕하세요! 찾고 있는 스타일을 말해주거나 사진을 올려주세요. 딱 맞는 상품을 찾아드릴게요.";
 
 // Composer placeholder pools. Rotated by a ticker so the hint refreshes
 // while the user is reading. Sources of truth for all states below.
@@ -697,11 +700,18 @@ export default function ChatEntryScreen() {
   // 통과하지 않고(재-push 없음) 인라인 실행 → createSessionStream 으로 새 세션
   // 생성. seed 효과와 동일하게 살짝 defer 해 마운트 안정 후 착수.
   const consumedPendingRef = useRef(false);
+  // 새 채팅(빈 챗)으로 진입했을 때 인트로 인사말 노출 여부. 검색 seed 로 들어온
+  // 경우(pending 존재)엔 바로 검색이 돌아가므로 인트로를 띄우지 않는다.
+  const [showIntro, setShowIntro] = useState(false);
   useEffect(() => {
     if (!chatMode || consumedPendingRef.current) return;
-    const pending = takePendingChatSeed();
-    if (!pending) return;
     consumedPendingRef.current = true;
+    const pending = takePendingChatSeed();
+    if (!pending) {
+      // 세션 복원(?session=)도 아니고 seed 도 없는 순수 새 채팅 → 인트로.
+      if (!resumedFromHistory) setShowIntro(true);
+      return;
+    }
     setTimeout(
       () =>
         runStreamingTurn(
@@ -1893,6 +1903,17 @@ export default function ChatEntryScreen() {
                 ) : null
               }
             />
+          </View>
+        )}
+
+        {/* 새 채팅 인트로 — 빈 챗 화면에서 봇 인사말 버블. 대화 시작하면 사라짐. */}
+        {showIntro && !hasConversation && (
+          <View style={styles.conversationBlock}>
+            <View style={styles.botBubbleRow}>
+              <View style={styles.botBubble}>
+                <Text style={styles.botBubbleText}>{INTRO_GREETING}</Text>
+              </View>
+            </View>
           </View>
         )}
 
