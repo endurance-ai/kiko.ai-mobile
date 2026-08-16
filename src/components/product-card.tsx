@@ -33,6 +33,9 @@ type Props = {
   /** 큐레이션 카드 변형 — 이미지 위 가격 태그를 없애고, 브랜드명 아래
    *  (기존 상품명 자리)에 가격을 노출한다. 기본 false(가격 태그 + 상품명). */
   priceBelow?: boolean;
+  /** 카드 폭 오버라이드 — 미지정 시 고정 156. 2열 그리드 등 반응형 폭에서
+   *  전달하면 이미지 높이도 같은 비율로 스케일한다. */
+  width?: number;
 };
 
 export function ProductCard({
@@ -48,7 +51,11 @@ export function ProductCard({
   position,
   source,
   priceBelow = false,
+  width,
 }: Props) {
+  // 반응형 폭 — 지정 시 이미지 높이를 원본 비율(196/156)로 스케일.
+  const cardW = width ?? CARD_WIDTH;
+  const cardH = Math.round((cardW * CARD_HEIGHT) / CARD_WIDTH);
   useEffect(() => {
     trackProductImpression({
       productId: String(product.id),
@@ -73,10 +80,14 @@ export function ProductCard({
   };
 
   return (
-    <View style={styles.root}>
+    <View style={[styles.root, width != null && { width: cardW }]}>
       {/* 로딩 중엔 colorHint 가 배경으로 보여 회색 빈칸 대신 자리를 채운다. */}
       <Pressable
-        style={[styles.imageWrap, { backgroundColor: product.colorHint }]}
+        style={[
+          styles.imageWrap,
+          { backgroundColor: product.colorHint },
+          width != null && { width: cardW, height: cardH },
+        ]}
         onPress={handlePress}
       >
         {product.imageUri ? (

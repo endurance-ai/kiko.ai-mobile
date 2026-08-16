@@ -7,6 +7,10 @@ import { GlassSurface } from '@/components/glass-surface';
 import { Haptic, IOSColors, IOSFont, IOSText, Radius } from '@/theme';
 
 type Props = {
+  /** 헤더 중앙 타이틀 (예: 'Explore' / 'Chat'). */
+  title?: string;
+  /** 지정 시 좌측 버튼이 햄버거(메뉴) 대신 뒤로가기(chevron)로 바뀐다. */
+  onBack?: () => void;
   onOpenMenu?: () => void;
   /** 스크롤을 충분히 내렸을 때만 헤더에 노출되는 '큐레이션'(최상단 복귀) 버튼. */
   showCuration?: boolean;
@@ -21,6 +25,8 @@ type Props = {
 };
 
 export function TopBar({
+  title,
+  onBack,
   onOpenMenu,
   showCuration,
   onOpenCuration,
@@ -36,13 +42,24 @@ export function TopBar({
   return (
     <SafeAreaView edges={['top']} style={styles.safe}>
       <View style={styles.row}>
-        <Pressable hitSlop={6} onPress={tap(onOpenMenu)}>
+        {/* 좌우 필 폭이 달라도 바 전체 기준 정중앙에 오도록 절대 배치. */}
+        {title != null && (
+          <View style={styles.titleWrap} pointerEvents="none">
+            <Text style={styles.title}>{title}</Text>
+          </View>
+        )}
+        <Pressable
+          hitSlop={6}
+          onPress={tap(onBack ?? onOpenMenu)}
+          accessibilityRole="button"
+          accessibilityLabel={onBack ? '뒤로가기' : '메뉴'}
+        >
           <GlassSurface variant="pill" isInteractive style={styles.iconPill}>
             <SymbolView
-              name="line.3.horizontal"
+              name={onBack ? 'chevron.left' : 'line.3.horizontal'}
               size={20}
               tintColor={IOSColors.label}
-              weight="medium"
+              weight={onBack ? 'semibold' : 'medium'}
             />
           </GlassSurface>
         </Pressable>
@@ -116,6 +133,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingTop: 4,
+  },
+  titleWrap: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  title: {
+    ...IOSText.headline,
+    color: IOSColors.label,
+    fontFamily: IOSFont.sans,
   },
   rightGroup: { flexDirection: 'row', gap: 8 },
   iconPill: {

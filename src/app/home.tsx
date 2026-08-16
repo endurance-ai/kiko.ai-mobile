@@ -13,6 +13,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -51,6 +52,9 @@ import {
 } from "@/lib/sse";
 import { uploadImage } from "@/lib/uploads";
 import { CurationSheet } from "@/components/curation-sheet";
+import { ImageStagingView, type StagingItem } from "@/components/image-staging";
+import { analyzeImage } from "@/lib/vision";
+import type { VisionAnalyzeItem } from "@/types/api";
 import { useAuth } from "@/state/auth";
 import { useBanner } from "@/state/banner";
 import { useCuration } from "@/state/curation";
@@ -80,6 +84,40 @@ const MOCK_VISION_ITEMS: VisionItem[] = [
   { id: "shoes", label: "레더 스니커즈", emoji: "👟" },
   { id: "watch", label: "미니멀 시계", emoji: "⌚" },
 ];
+
+// 스테이징 하단 스타일 칩 — 서버 mood_tags(이미지 무드) 그대로. 미도착 시 폴백.
+const STYLE_CHIPS = ["비즈니스 캐주얼", "미니멀", "테일러드 핏", "데일리"];
+
+// 카테고리 → 버튼 아이콘 이모지(크롭 썸네일 없을 때 폴백).
+const CATEGORY_EMOJI: Record<string, string> = {
+  top: "👕",
+  bottom: "👖",
+  shoes: "👟",
+  outerwear: "🧥",
+  dress: "👗",
+  accessories: "👜",
+  bag: "👜",
+  hat: "🧢",
+};
+
+// /v1/image/analyze 항목 → 스테이징 글래스 버튼(StagingItem).
+// 백엔드가 항목 크롭 URL 을 안 주므로, 업로드한 원본(cropUri=localUri)을 각
+// 항목의 position 좌표로 초점 맞춰(줌) 썸네일에 쓴다. 이모지는 최후 폴백.
+function mapVisionItems(items: VisionAnalyzeItem[], cropUri?: string): StagingItem[] {
+  return items.map((it, i) => {
+    const label = it.name || it.searchQueryKo || it.subcategory || it.category || "아이템";
+    const emoji = CATEGORY_EMOJI[(it.category || "").toLowerCase()] ?? "🏷️";
+    return {
+      id: `v${i}`,
+      label,
+      emoji,
+      cropUri,
+      // 한국어 앱 — 표시 버블·검색 모두 한국어 쿼리 우선(영문은 폴백).
+      searchQuery: it.searchQueryKo || it.searchQuery || it.name || label,
+      position: it.position ?? undefined,
+    };
+  });
+}
 
 type UserMessage = {
   text?: string;
@@ -156,15 +194,6 @@ const PICK_PROMPT = (n: number) =>
   `이 사진에서 ${n}개 아이템 찾았어. 어떤 거 찾아줄까?`;
 // 빈 상태 히어로 카피 — 큐레이션 시트 위에 얹는 메인 표제. 핵심가치를
 // 하나씩 말하는 3종을 마운트마다 랜덤 로테이션 (7/16 재이식 — 7/14 정리 때
-// curation-lab.tsx HERO_GREETINGS 로 보존했던 자산 복원, 카피 원본 동일).
-// ① 발견: 인디 브랜드 풀·신선함 ② 취향: 발견·취향 매칭 ③ 목적: v1.0 시그니처.
-// 로그인 시 ②의 이름 치환("OO님이 몰랐던")은 display_name fetch 와 함께 추후.
-const HERO_GREETINGS = [
-  "몰랐던 브랜드가\n매일 새로 도착해요",
-  "당신이 몰랐던\n취향저격 브랜드",
-  "머릿속 그 옷,\n마법처럼 찾아드릴게요",
-];
-
 // SSE 결과 카드의 caption(HTML-ish)을 ProductCard 의 brand/name/price 로 분해.
 // 서버 caption 순서(send_results.py): 브랜드[ · 서브카테고리] / "💰 ₩가격" /
 // 상품명 / "🏬 플랫폼". 가격 줄에서 숫자만 뽑아 priceWon 으로(큐레이션 카드와
@@ -390,6 +419,9 @@ function looksLikeFashionQuery(text: string): boolean {
 
 export default function ChatEntryScreen() {
   const insets = useSafeAreaInsets();
+  // 결과 2열 그리드 셀 폭 — 대화블록 좌우 패딩(20) + 열 간격(12) 제한.
+  const { width: winW } = useWindowDimensions();
+  const gridCardW = Math.floor((winW - 40 - 12) / 2);
   const {
     session: sessionParam,
     from: fromParam,
@@ -450,6 +482,15 @@ export default function ChatEntryScreen() {
   // reads the file itself to derive size_bytes (avoids the iOS fileSize gap).
   const pickedAssetRef = useRef<{ filename: string } | null>(null);
   const [uploading, setUploading] = useState(false);
+  // 이미지 스테이징(전송 전 풀블리드 분석 화면) 상태.
+  // stagingAnalyzing: 블러→선명(+업로드·비전분석 대기). stagingItem: '이 제품
+  // 기준' 선택 항목. stagingItems/Chips: /v1/image/analyze 결과(미도착 시 목업).
+  const [stagingAnalyzing, setStagingAnalyzing] = useState(false);
+  const [stagingItem, setStagingItem] = useState<StagingItem | null>(null);
+  const [stagingItems, setStagingItems] = useState<StagingItem[]>(MOCK_VISION_ITEMS);
+  const [stagingChips, setStagingChips] = useState<string[]>(STYLE_CHIPS);
+  // 스테이징에서 업로드해둔 서버 image_url — 전송 시 재업로드 없이 재사용.
+  const stagingUrlRef = useRef<string | null>(null);
   const [messages, setMessages] = useState<Turn[]>([]);
   const [pinnedId, setPinnedId] = useState<string | null>(null);
   // 빈 상태(큐레이션 구좌)에서 + 핀한 상품 — 결과 리스트의 pinnedId 모델은
@@ -689,6 +730,9 @@ export default function ChatEntryScreen() {
   const isEmpty = lastStatus === "empty";
   const canSend =
     !isBusy && !capLocked && (text.trim().length > 0 || pickedImage !== null);
+  // 스테이징 전송 활성 — 반드시 상품 버튼('이 제품 기준')을 선택해야 활성.
+  // 텍스트는 그 위에 얹는 선택적 보강이지, 텍스트만으론 전송 불가.
+  const stagingCanSend = !isBusy && !capLocked && stagingItem !== null;
   // Unified pinned attachment: works for both mock products and SSE products.
   // SSE pins use a composite id "<turnId>:<index>" so we look up by parsing it.
   const pinnedAttachment: {
@@ -760,12 +804,6 @@ export default function ChatEntryScreen() {
     loading: curationLoading,
   } = useCuration(curationGender);
   const suggestionChips = curationChips ?? chipsForGender(onboardGender);
-
-  // 빈 상태 히어로 표제 — 마운트당 1회 랜덤 (curation-lab Hero3 관례 동일).
-  const heroGreeting = useMemo(
-    () => HERO_GREETINGS[Math.floor(Math.random() * HERO_GREETINGS.length)],
-    [],
-  );
 
   // Composer placeholder — one random pick per state context. Recomputes
   // only when the relevant state combo changes (busy ↔ idle, results ↔ empty),
@@ -911,6 +949,29 @@ export default function ChatEntryScreen() {
         asset.uri.split("/").pop()?.split("?")[0] ||
         `image-${Date.now()}.jpg`;
       pickedAssetRef.current = { filename };
+      // 스테이징 진입 — 블러 화면 띄우고, 업로드 → 비전 분석으로 실제 항목/무드
+      // 를 채운다. 엔드포인트 미구현/실패 시 목업 유지(catch). 업로드해둔 URL 은
+      // 전송 시 재사용(재업로드 방지).
+      setStagingItem(null);
+      setStagingItems(MOCK_VISION_ITEMS);
+      setStagingChips(STYLE_CHIPS);
+      stagingUrlRef.current = null;
+      setStagingAnalyzing(true);
+      void (async () => {
+        try {
+          const url = await uploadImage(asset.uri, filename);
+          stagingUrlRef.current = url;
+          const res = await analyzeImage(url);
+          // 항목 썸네일 = 업로드한 원본을 좌표로 초점(백엔드 크롭 URL 부재).
+          const mapped = mapVisionItems(res.items ?? [], asset.uri);
+          if (mapped.length) setStagingItems(mapped);
+          if (res.mood_tags && res.mood_tags.length) setStagingChips(res.mood_tags);
+        } catch {
+          // 목업 유지 — /v1/image/analyze 실패/미구현.
+        } finally {
+          setStagingAnalyzing(false);
+        }
+      })();
     }
   };
 
@@ -975,6 +1036,9 @@ export default function ChatEntryScreen() {
       setText("");
       setPickedImage(null);
       pickedAssetRef.current = null;
+      setStagingItem(null);
+      setStagingAnalyzing(false);
+      stagingUrlRef.current = null;
       // 기획 7/23: 게이트 노출 이벤트 — 퍼널이 어디서 끊기는지 관측.
       trackEvent("login_gate_shown", {
         trigger: "composer",
@@ -985,6 +1049,13 @@ export default function ChatEntryScreen() {
     }
     const trimmed = text.trim();
     const hasImage = pickedImage !== null;
+    // 스테이징에서 '이 제품 기준'으로 고른 항목이 있으면 그 항목의 검색쿼리를
+    // 쿼리 앞에 얹는다. (개별항목만 / 개별항목+텍스트 / 전체이미지+텍스트) 세
+    // 분기가 자연히 처리됨. searchQuery(비전 분석 결과) 없으면 라벨로 폴백.
+    const pickedQuery = stagingItem
+      ? stagingItem.searchQuery || stagingItem.label
+      : undefined;
+    const query = [pickedQuery, trimmed].filter(Boolean).join(" ").trim();
     Haptic.medium();
     lastSendFromCritiqueRef.current = false;
     // search_query 트래킹은 runStreamingTurn(모든 검색 경로의 합류점)에서
@@ -994,9 +1065,10 @@ export default function ChatEntryScreen() {
     // If the user attached a photo, materialize it via POST /v1/uploads
     // before opening the SSE turn so the server can anchor on a stable
     // image_url instead of a transient local URI.
-    let serverImageUrl: string | undefined;
+    // 스테이징에서 이미 업로드해둔 URL 이 있으면 재사용(재업로드 방지).
+    let serverImageUrl: string | undefined = stagingUrlRef.current ?? undefined;
     const localUri = pickedImage;
-    if (hasImage && localUri && pickedAssetRef.current) {
+    if (hasImage && !serverImageUrl && localUri && pickedAssetRef.current) {
       setUploading(true);
       try {
         serverImageUrl = await uploadImage(
@@ -1024,13 +1096,46 @@ export default function ChatEntryScreen() {
       setUploading(false);
     }
 
+    // 스테이징에서 항목을 이미 골랐으면(=vision 분석 완료) 이미지를 다시 채팅
+    // 파이프라인에 넣지 않는다. 그 항목의 searchQuery(완성된 검색 문장)를 텍스트
+    // 검색으로 보내 vision 재실행·객관식 재선택을 건너뛴다. 그 외(순수 텍스트)만
+    // 기존 이미지 첨부 경로 유지.
+    const isStagingSend = stagingItem !== null;
+    // 버블 표시 쿼리 — 항목 버튼의 이름(label)을 그대로 쓴다(영문 상품명이
+    // 한국어 서술보다 자연스러움). 텍스트를 덧붙였으면 뒤에 붙인다. 서버 전송은
+    // 정밀 쿼리(query = searchQueryKo + 텍스트) 유지.
+    const displayQuery =
+      isStagingSend && stagingItem
+        ? trimmed
+          ? `${stagingItem.label} ${trimmed}`
+          : `${stagingItem.label} 찾아줘`
+        : query;
     setText("");
-    setPickedImage(null);
-    pickedAssetRef.current = null;
-    runStreamingTurn(trimmed, undefined, {
-      localImageUri: localUri ?? undefined,
-      serverImageUrl,
-    });
+    setStagingItem(null);
+    setStagingAnalyzing(false);
+    // 스테이징 전송이면 이미지·분석항목을 남겨둔다 → 채팅에서 백버튼으로 돌아
+    // 오면 이 홈(스택 하단)의 스테이징 화면이 그대로 복원된다(선택만 초기화).
+    // 순수 텍스트/일반 전송은 기존대로 첨부 정리.
+    if (!isStagingSend) {
+      setPickedImage(null);
+      pickedAssetRef.current = null;
+      stagingUrlRef.current = null;
+    }
+    // 스테이징 검색은 '항목 선택 대기(AWAITING_ITEM_PICK)'로 갇힌 세션을 이어가면
+    // 텍스트도 pick_item(1,2,3,4)으로 라우팅된다. 세션을 비워 새 세션을 강제 →
+    // 깨끗한 상태에서 agent 검색으로 직행.
+    if (isStagingSend) sessionIdRef.current = null;
+    // 버블=displayQuery(자연문), 서버 전송=query(정밀). serverQueryOverride 로 분리.
+    runStreamingTurn(
+      displayQuery,
+      undefined,
+      isStagingSend
+        ? // 버블엔 썸네일(localImageUri)만 — serverImageUrl 은 빼서 서버로 이미지가
+          // 안 가게(vision 재발동 방지). 검색은 serverQueryOverride(정밀 쿼리).
+          { localImageUri: localUri ?? undefined }
+        : { localImageUri: localUri ?? undefined, serverImageUrl },
+      isStagingSend ? query : undefined,
+    );
   };
 
   const runStreamingTurn = (
@@ -1695,6 +1800,9 @@ export default function ChatEntryScreen() {
     Haptic.light();
     setPickedImage(null);
     pickedAssetRef.current = null;
+    setStagingItem(null);
+    setStagingAnalyzing(false);
+    stagingUrlRef.current = null;
   };
 
   const topPad = insets.top + 52;
@@ -1727,9 +1835,6 @@ export default function ChatEntryScreen() {
               curationLayoutRef.current = { y, height };
             }}
           >
-            <Text style={styles.emptyHeroTitle} numberOfLines={2}>
-              {heroGreeting}
-            </Text>
             <CurationSheet
               sections={curationSections}
               loading={curationLoading}
@@ -1990,11 +2095,7 @@ export default function ChatEntryScreen() {
                         </View>
                       )}
                     {turn.streamProducts && turn.streamProducts.length > 0 && (
-                      <ScrollView
-                        horizontal
-                        showsHorizontalScrollIndicator={false}
-                        contentContainerStyle={styles.cardRow}
-                      >
+                      <View style={styles.resultsGrid}>
                         {turn.streamProducts.map((p, i) => {
                           const key = `${turn.id}:${i}`;
                           const pinned = pinnedId === key;
@@ -2022,6 +2123,8 @@ export default function ChatEntryScreen() {
                           return (
                             <ProductCard
                               key={key}
+                              width={gridCardW}
+                              priceBelow
                               product={{
                                 id: key,
                                 brand,
@@ -2066,46 +2169,11 @@ export default function ChatEntryScreen() {
                             />
                           );
                         })}
-                      </ScrollView>
+                      </View>
                     )}
-                    {/* "더보기" CTA — opens the full ranked result-set grid.
-                        Rendered only when:
-                          1. search_id 도착 (라우팅 가능)
-                          2. 현재 뜬 카드보다 실제 결과가 더 있음
-                        서버가 total 을 안 주거나 total ≤ 카드 수면 숨김 —
-                        모두 이미 보이는데 CTA 만 노출되는 걸 방지. */}
-                    {turn.streamProducts &&
-                      turn.streamProducts.length > 0 &&
-                      turn.streamSearchId &&
-                      typeof turn.streamSearchTotal === "number" &&
-                      turn.streamSearchTotal > turn.streamProducts.length && (
-                        <Pressable
-                          style={styles.seeMoreCta}
-                          onPress={() => {
-                            Haptic.light();
-                            const sid = sessionIdRef.current;
-                            const qs = [
-                              `search=${encodeURIComponent(
-                                turn.streamSearchId as string,
-                              )}`,
-                              sid ? `session=${encodeURIComponent(sid)}` : "",
-                            ]
-                              .filter(Boolean)
-                              .join("&");
-                            router.push(`/list?${qs}` as never);
-                          }}
-                        >
-                          <Text style={styles.seeMoreText}>
-                            {`더보기 (${turn.streamSearchTotal})`}
-                          </Text>
-                          <SymbolView
-                            name="chevron.right"
-                            size={13}
-                            tintColor={IOSColors.secondaryLabel}
-                            weight="semibold"
-                          />
-                        </Pressable>
-                      )}
+                    {/* 채팅 결과는 2열 그리드로 전부 노출 — '더보기' CTA 제거.
+                        (더보기는 메인 Explore 큐레이션에서만.) 정확도 기반 동적
+                        노출수·무한스크롤은 백엔드 페이지네이션 후속. */}
                     {/* Inline-keyboard prompt (pick_item / gender / ...).
                         Server sent SSE `clarify`; render as tappable pills.
                         After a pick, buttons freeze — the picked one is
@@ -2190,16 +2258,12 @@ export default function ChatEntryScreen() {
                   turn.results.length > 0 && (
                     <View style={styles.resultsBlock}>
                       <Text style={styles.agentText}>{agentText}</Text>
-                      <ScrollView
-                        horizontal
-                        showsHorizontalScrollIndicator={false}
-                        contentContainerStyle={styles.cardRow}
-                        snapToInterval={PRODUCT_CARD_WIDTH + 12}
-                        decelerationRate="fast"
-                      >
-                        {turn.results.slice(0, 5).map((p, idx) => (
+                      <View style={styles.resultsGrid}>
+                        {turn.results.map((p, idx) => (
                           <ProductCard
                             key={p.id}
+                            width={gridCardW}
+                            priceBelow
                             product={p}
                             pinned={isLast && pinnedId === p.id}
                             onPress={() => router.push(`/product/${p.id}`)}
@@ -2211,24 +2275,7 @@ export default function ChatEntryScreen() {
                             source="search"
                           />
                         ))}
-                      </ScrollView>
-                      <Pressable
-                        style={styles.moreLink}
-                        onPress={() => {
-                          Haptic.light();
-                          router.push("/list");
-                        }}
-                      >
-                        <Text style={styles.moreLinkText}>
-                          더보기 (이 세트 {turn.results.length}개)
-                        </Text>
-                        <SymbolView
-                          name="chevron.right"
-                          size={12}
-                          tintColor={IOSColors.label}
-                          weight="semibold"
-                        />
-                      </Pressable>
+                      </View>
 
                       <View style={styles.feedbackTriggerRow}>
                         <FeedbackTrigger turnKey={`search:${turn.id}`} />
@@ -2441,6 +2488,16 @@ export default function ChatEntryScreen() {
           have the solid root color behind them and look opaque. */}
       <View style={styles.topBarFloat} pointerEvents="box-none">
         <TopBar
+          title={chatMode || resumedFromHistory ? "Chat" : "Explore"}
+          onBack={
+            chatMode || resumedFromHistory
+              ? () => {
+                  // 되돌아갈 스택이 없으면(딥링크·초기 진입) Explore 로 리셋.
+                  if (router.canGoBack()) router.back();
+                  else router.replace("/home");
+                }
+              : undefined
+          }
           onOpenMenu={() => {
             const sid = sessionIdRef.current;
             router.push(sid ? `/sidebar?current=${sid}` : "/sidebar");
@@ -2452,6 +2509,30 @@ export default function ChatEntryScreen() {
           onOpenWishlist={() => router.push("/wishlist")}
         />
       </View>
+
+      {/* 이미지 스테이징 — 사진 선택 시 전송 전 풀블리드 분석 화면(블러→선명 +
+          항목 글래스 버튼 + 스타일 칩 + 컴포저). 전송/닫기로 해제. */}
+      {pickedImage && (
+        <ImageStagingView
+          imageUri={pickedImage}
+          analyzing={stagingAnalyzing}
+          items={stagingItems}
+          styleChips={stagingChips}
+          pickedItemId={stagingItem?.id ?? null}
+          text={text}
+          canSend={stagingCanSend}
+          busy={isBusy || uploading}
+          onChangeText={setText}
+          onPickItem={(it) =>
+            setStagingItem((cur) => (cur?.id === it.id ? null : it))
+          }
+          onTapChip={(chip) =>
+            setText((cur) => (cur.trim() ? `${cur.trim()} ${chip}` : chip))
+          }
+          onSend={handleSend}
+          onClose={handleRemovePreview}
+        />
+      )}
     </View>
   );
 }
@@ -2493,21 +2574,6 @@ const styles = StyleSheet.create({
     paddingTop: 24,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: IOSColors.separator,
-  },
-  // 히어로 표제 — curation-lab heroTitleManifesto 확정 튜닝값 그대로
-  // (title1 기반, 아이폰 14 과대·과볼드 피드백 반영 semibold + 넉넉한 행간).
-  // 좌측 paddingHorizontal 은 emptyScrollContent 의 16 을 물려받아 구좌
-  // 섹션 타이틀과 같은 기준선 공유. 아래 여백은 hero3 의 paddingBottom(32).
-  emptyHeroTitle: {
-    ...IOSText.title1,
-    fontSize: 27,
-    lineHeight: 38,
-    fontWeight: "600",
-    letterSpacing: -0.2,
-    color: IOSColors.label,
-    fontFamily: IOSFont.sans,
-    textAlign: "left",
-    paddingBottom: 32,
   },
   // Conversation
   turn: {
@@ -2693,6 +2759,13 @@ const styles = StyleSheet.create({
   cardRow: {
     paddingRight: 20,
     gap: 12,
+  },
+  // 결과 2열 그리드 — 세로로 흐르는 무한 스크롤(부모 대화 ScrollView 안).
+  resultsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    columnGap: 12,
+    rowGap: 20,
   },
   moreLink: {
     flexDirection: "row",
