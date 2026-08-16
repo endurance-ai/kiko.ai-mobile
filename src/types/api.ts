@@ -678,8 +678,9 @@ export interface VisionAnalyzeItem {
   subcategory?: string | null;
   fit?: string | null;
   color?: string | null;
-  /** 이미지 위 상대 위치(0~1). 있으면 글래스 버튼을 실제 좌표에 배치. */
-  position?: { top: number; left: number } | null;
+  /** 이미지 위 상대 위치·크기(0~100 %). top/left=중심, width/height=바운딩 박스.
+   *  버튼 배치는 top/left, 썸네일 정확 크롭은 width/height 사용. */
+  position?: { top: number; left: number; width?: number; height?: number } | null;
 }
 
 /** POST /v1/image/analyze 응답 — 항목 + 무드(스타일 칩) + 스타일 노드. */
