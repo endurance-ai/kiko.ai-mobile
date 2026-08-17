@@ -84,7 +84,9 @@ export default function ListScreen() {
           )}`,
         );
     }
-    router.push(`/home?${qs.join('&')}` as never);
+    // seed 핸드오프도 무조건 새 채팅 화면으로(chat=1) — Explore/그리드 위 인라인
+    // 확장이 아니라 별도 채팅에서 진행.
+    router.push(`/home?chat=1&${qs.join('&')}` as never);
   };
 
   const togglePinnedProduct = (productId: string) => {

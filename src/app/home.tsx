@@ -708,8 +708,8 @@ export default function ChatEntryScreen() {
     consumedPendingRef.current = true;
     const pending = takePendingChatSeed();
     if (!pending) {
-      // 세션 복원(?session=)도 아니고 seed 도 없는 순수 새 채팅 → 인트로.
-      if (!resumedFromHistory) setShowIntro(true);
+      // 세션 복원(?session=)·seed 핸드오프(?seed=)가 아닌 순수 새 채팅 → 인트로.
+      if (!resumedFromHistory && !seedParam) setShowIntro(true);
       return;
     }
     setTimeout(
