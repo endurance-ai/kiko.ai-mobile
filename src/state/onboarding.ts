@@ -87,20 +87,6 @@ export async function saveOnboarding(payload: {
 }
 
 /**
- * 로컬 온보딩 상태 전체 초기화 (dev 전용). done/gender/brands/promoted 키를
- * 모두 지워, 다음 스플래시 게이트(index.tsx)가 비로그인 유저를 온보딩으로
- * 다시 보낸다. 로그인 유저는 게이트가 서버 프로필 gender 로 폴백하므로 이것만으론
- * 게이트가 다시 안 뜬다 — dev 버튼은 온보딩 라우트로 직접 이동해 미리보기한다.
- */
-export async function clearOnboarding(): Promise<void> {
-  try {
-    await AsyncStorage.multiRemove([DONE_KEY, GENDER_KEY, BRANDS_KEY, PROMOTED_KEY]);
-  } catch {
-    // 초기화 실패는 치명적이지 않음 — dev 편의 기능일 뿐
-  }
-}
-
-/**
  * 로컬 온보딩값 → 서버 프로필 승격 (POST /v1/onboarding, auth 필수).
  *
  * 로그인 성공 직후 fire-and-forget 으로 호출한다. 멱등: 성공하면 promoted
