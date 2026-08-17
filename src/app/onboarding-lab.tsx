@@ -42,7 +42,6 @@ import {
 } from '@/state/onboarding-moods';
 import {
   BrandColors,
-  BrandRole,
   Duration,
   Elevation,
   Haptic,
@@ -286,7 +285,10 @@ export default function OnboardingLabScreen() {
       {/* 취향 CTA — HIG 셋업 플로우 정석: primary 필 버튼 + 아래 텍스트형
           보조 버튼(건너뛰기). 비활성 라벨은 남은 개수를 말하는 동적 지시문. */}
       {step === 'taste' && (
-        <View style={[styles.ctaArea, { paddingBottom: insets.bottom + Spacing.two }]}>
+        <View
+          pointerEvents="box-none"
+          style={[styles.ctaFloating, { paddingBottom: insets.bottom + Spacing.two }]}
+        >
           <PrimaryButton
             label={selectedMoods.size >= MOOD_MIN ? '다음' : '무드를 1개 이상 골라주세요'}
             disabled={selectedMoods.size < MOOD_MIN}
@@ -578,17 +580,11 @@ function TasteStep({
   onToggleMood: (id: string) => void;
 }) {
   const moods = useMemo(() => (gender ? moodsForGender(gender) : []), [gender]);
-  // 선택 순서 → 배지 숫자(1·2·3). Set 은 삽입 순서를 보존한다.
-  const order = useMemo(() => {
-    const m = new Map<string, number>();
-    [...selectedMoods].forEach((id, i) => m.set(id, i + 1));
-    return m;
-  }, [selectedMoods]);
 
   return (
     <View style={styles.stepBody}>
       <Text style={styles.stepTitle}>어떤 무드가 끌리세요?</Text>
-      <Text style={styles.stepSubtitle}>사진을 보고 1~3개 골라주세요 · 취향은 여기서부터 맞춰갈게요</Text>
+      <Text style={styles.stepSubtitle}>취향에 맞는 무드를 골라주세요</Text>
 
       <ScrollView
         style={styles.moodScroll}
@@ -605,7 +601,6 @@ function TasteStep({
               selected={selected}
               // 상한 도달 & 미선택 타일은 흐리게 — 더는 못 고른다는 신호.
               dimmed={!selected && selectedMoods.size >= MOOD_MAX}
-              order={order.get(mood.id)}
               onPress={() => onToggleMood(mood.id)}
             />
           );
@@ -636,14 +631,12 @@ function MoodTileCard({
   tint,
   selected,
   dimmed,
-  order,
   onPress,
 }: {
   mood: MoodTile;
   tint: string;
   selected: boolean;
   dimmed: boolean;
-  order: number | undefined;
   onPress: () => void;
 }) {
   const reduceMotion = useReducedMotion();
@@ -691,7 +684,11 @@ function MoodTileCard({
         </View>
         {selected && (
           <View style={styles.moodBadge}>
-            <Text style={styles.moodBadgeText}>{order}</Text>
+            {Platform.OS === 'web' ? (
+              <Text style={styles.moodBadgeCheck}>✓</Text>
+            ) : (
+              <SymbolView name="checkmark" size={13} tintColor="#1C1C1E" weight="bold" />
+            )}
           </View>
         )}
       </Animated.View>
@@ -801,7 +798,7 @@ const styles = StyleSheet.create({
     // 옵티컬 정렬이 맞는다 (7/14 피드백).
     paddingLeft: Spacing.four,
     paddingRight: Spacing.three,
-    paddingTop: Spacing.five,
+    paddingTop: 0,
   },
   stepTitle: {
     ...IOSText.title2,
@@ -817,6 +814,15 @@ const styles = StyleSheet.create({
 
   // 하단 고정 CTA
   ctaArea: {
+    paddingHorizontal: Spacing.three,
+  },
+  // 취향 스텝 전용 — 배경 패널 없이 무드 그리드 위에 떠 있는 CTA.
+  // box-none 으로 버튼/건너뛰기 외 빈 영역은 스크롤이 통과한다.
+  ctaFloating: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
     paddingHorizontal: Spacing.three,
   },
   // UIButton large 구성과 동일한 50pt — 텍스트는 headline(17 semibold).
@@ -968,7 +974,8 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     justifyContent: 'space-between',
     rowGap: Spacing.three,
-    paddingBottom: Spacing.six,
+    // 플로팅 CTA(버튼+건너뛰기+세이프에어리어) 아래로 마지막 행이 가리지 않게.
+    paddingBottom: 150,
   },
   moodTileSlot: {
     width: '48%',
@@ -983,7 +990,7 @@ const styles = StyleSheet.create({
   },
   moodTileSelected: {
     borderWidth: 3,
-    borderColor: BrandRole.primary,
+    borderColor: '#FFFFFF',
     ...Elevation.raised,
   },
   moodTileDimmed: {
@@ -1012,16 +1019,18 @@ const styles = StyleSheet.create({
     width: 26,
     height: 26,
     borderRadius: 13,
-    backgroundColor: BrandRole.primary,
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
     ...Elevation.raised,
   },
-  moodBadgeText: {
+  // 웹 폴백 체크 글리프 (네이티브는 SF Symbol checkmark).
+  moodBadgeCheck: {
     ...IOSText.footnote,
-    color: BrandColors.peach[900],
+    color: '#1C1C1E',
     fontFamily: IOSFont.sans,
     fontWeight: '800',
+    lineHeight: 16,
   },
 
   // ── done 스텝 ──
