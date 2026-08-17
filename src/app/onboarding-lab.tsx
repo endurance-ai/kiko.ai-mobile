@@ -21,7 +21,7 @@ import { router } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { memo, useEffect, useMemo, useState } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, useColorScheme, View } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useReducedMotion,
@@ -578,31 +578,51 @@ function TasteStep({
 }) {
   const moods = useMemo(() => (gender ? moodsForGender(gender) : []), [gender]);
 
+  // 스크롤 상·하 경계 페이드 — 타일이 서브카피 아래/CTA 위에서 하드 클립되지
+  // 않고 배경색으로 자연스럽게 녹아들게. 웹은 IOSColors 폴백이 고정 라이트라
+  // 항상 라이트 페이드, 네이티브만 스킴을 따른다(브랜드그리드와 동일 관례).
+  const scheme = useColorScheme();
+  const isDarkBg = Platform.OS !== 'web' && scheme === 'dark';
+  const fadeEdge = isDarkBg ? '#000000' : '#FFFFFF';
+  const fadeClear = isDarkBg ? 'rgba(0,0,0,0)' : 'rgba(255,255,255,0)';
+
   return (
     <View style={styles.stepBody}>
       <Text style={styles.stepTitle}>어떤 무드가 끌리세요?</Text>
       <Text style={styles.stepSubtitle}>취향에 맞는 무드를 골라주세요</Text>
 
-      <ScrollView
-        style={styles.moodScroll}
-        contentContainerStyle={styles.moodGrid}
-        showsVerticalScrollIndicator={false}
-      >
-        {moods.map((mood, i) => {
-          const selected = selectedMoods.has(mood.id);
-          return (
-            <MoodTileCard
-              key={mood.id}
-              mood={mood}
-              tint={MOOD_TILE_TINTS[i % MOOD_TILE_TINTS.length]}
-              selected={selected}
-              // 상한 도달 & 미선택 타일은 흐리게 — 더는 못 고른다는 신호.
-              dimmed={!selected && selectedMoods.size >= MOOD_MAX}
-              onPress={() => onToggleMood(mood.id)}
-            />
-          );
-        })}
-      </ScrollView>
+      <View style={styles.moodScrollFrame}>
+        <ScrollView
+          style={styles.moodScroll}
+          contentContainerStyle={styles.moodGrid}
+          showsVerticalScrollIndicator={false}
+        >
+          {moods.map((mood, i) => {
+            const selected = selectedMoods.has(mood.id);
+            return (
+              <MoodTileCard
+                key={mood.id}
+                mood={mood}
+                tint={MOOD_TILE_TINTS[i % MOOD_TILE_TINTS.length]}
+                selected={selected}
+                // 상한 도달 & 미선택 타일은 흐리게 — 더는 못 고른다는 신호.
+                dimmed={!selected && selectedMoods.size >= MOOD_MAX}
+                onPress={() => onToggleMood(mood.id)}
+              />
+            );
+          })}
+        </ScrollView>
+        <LinearGradient
+          pointerEvents="none"
+          colors={[fadeEdge, fadeClear]}
+          style={[styles.moodFade, styles.moodFadeTop]}
+        />
+        <LinearGradient
+          pointerEvents="none"
+          colors={[fadeClear, fadeEdge]}
+          style={[styles.moodFade, styles.moodFadeBottom]}
+        />
+      </View>
     </View>
   );
 }
@@ -952,9 +972,26 @@ const styles = StyleSheet.create({
     opacity: Opacity.muted,
   },
   // ── 무드 스텝 ──
-  moodScroll: {
+  // 스크롤 프레임 — 상·하 페이드 오버레이의 absolute 기준.
+  moodScrollFrame: {
     flex: 1,
     marginTop: Spacing.four,
+  },
+  moodScroll: {
+    flex: 1,
+  },
+  moodFade: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    height: 32,
+    zIndex: 1,
+  },
+  moodFadeTop: {
+    top: 0,
+  },
+  moodFadeBottom: {
+    bottom: 0,
   },
   // 2열 그리드 — 슬롯 폭 48%, 행 간격만 gap 으로(열 간격은 space-between).
   moodGrid: {
