@@ -285,10 +285,7 @@ export default function OnboardingLabScreen() {
       {/* 취향 CTA — HIG 셋업 플로우 정석: primary 필 버튼 + 아래 텍스트형
           보조 버튼(건너뛰기). 비활성 라벨은 남은 개수를 말하는 동적 지시문. */}
       {step === 'taste' && (
-        <View
-          pointerEvents="box-none"
-          style={[styles.ctaFloating, { paddingBottom: insets.bottom + Spacing.two }]}
-        >
+        <View style={[styles.ctaArea, { paddingBottom: insets.bottom + Spacing.two }]}>
           <PrimaryButton
             label={selectedMoods.size >= MOOD_MIN ? '다음' : '무드를 1개 이상 골라주세요'}
             disabled={selectedMoods.size < MOOD_MIN}
@@ -816,15 +813,6 @@ const styles = StyleSheet.create({
   ctaArea: {
     paddingHorizontal: Spacing.three,
   },
-  // 취향 스텝 전용 — 배경 패널 없이 무드 그리드 위에 떠 있는 CTA.
-  // box-none 으로 버튼/건너뛰기 외 빈 영역은 스크롤이 통과한다.
-  ctaFloating: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    paddingHorizontal: Spacing.three,
-  },
   // UIButton large 구성과 동일한 50pt — 텍스트는 headline(17 semibold).
   ctaButton: {
     width: '100%',
@@ -974,8 +962,7 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     justifyContent: 'space-between',
     rowGap: Spacing.three,
-    // 플로팅 CTA(버튼+건너뛰기+세이프에어리어) 아래로 마지막 행이 가리지 않게.
-    paddingBottom: 150,
+    paddingBottom: Spacing.six,
   },
   moodTileSlot: {
     width: '48%',
