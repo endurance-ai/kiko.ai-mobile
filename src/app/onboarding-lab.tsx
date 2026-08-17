@@ -989,8 +989,7 @@ const styles = StyleSheet.create({
   },
   moodFadeTop: {
     top: 0,
-    // 상단은 아주 짧게 — 얇은 경계 페이드만.
-    height: 16,
+    height: 28,
   },
   moodFadeBottom: {
     bottom: 0,
