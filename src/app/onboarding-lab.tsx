@@ -989,8 +989,8 @@ const styles = StyleSheet.create({
   },
   moodFadeTop: {
     top: 0,
-    // 상단은 좀 더 길게 — 타일이 서브카피 아래에서 더 일찍부터 녹기 시작.
-    height: 56,
+    // 상단은 아주 짧게 — 얇은 경계 페이드만.
+    height: 16,
   },
   moodFadeBottom: {
     bottom: 0,
