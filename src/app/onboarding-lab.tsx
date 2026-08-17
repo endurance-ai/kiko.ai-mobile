@@ -1001,6 +1001,8 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     justifyContent: 'space-between',
     rowGap: Spacing.three,
+    // 첫 타일 행이 서브카피/상단 페이드에 붙지 않게 스크롤 시작부에 여백.
+    paddingTop: Spacing.three,
     paddingBottom: Spacing.six,
   },
   moodTileSlot: {
