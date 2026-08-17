@@ -18,6 +18,7 @@ import {
 import { Haptic, IOSColors, IOSFont, IOSText , Radius } from "@/theme";
 import { getMe } from "@/lib/me";
 import { useAuth } from "@/state/auth";
+import { clearOnboarding } from "@/state/onboarding";
 import type { UserProfile } from "@/types/api";
 // useSubscription import paused with the billing row — restore when IAP returns.
 // import { useSubscription } from "@/state/subscription";
@@ -107,6 +108,23 @@ export default function SettingsScreen() {
       },
     ],
   ];
+
+  // dev 전용 — 온보딩 로컬 상태를 지우고 온보딩 화면을 바로 미리보기.
+  // __DEV__ 가드라 프로덕션 빌드에는 포함되지 않는다.
+  if (__DEV__) {
+    sections.push([
+      {
+        id: "dev-onboarding",
+        icon: "arrow.counterclockwise",
+        title: "온보딩 다시 보기 (dev)",
+        subtitle: "로컬 온보딩 초기화 후 온보딩 화면으로",
+        onPress: async () => {
+          await clearOnboarding();
+          router.replace("/onboarding-lab");
+        },
+      },
+    ]);
+  }
 
   return (
     <View style={styles.root}>
