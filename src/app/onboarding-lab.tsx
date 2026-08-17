@@ -21,16 +21,7 @@ import { router } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { memo, useEffect, useMemo, useState } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
-import {
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  useColorScheme,
-  View,
-} from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useReducedMotion,
@@ -40,18 +31,20 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets, type EdgeInsets } from 'react-native-safe-area-context';
 
-import { GlassSurface } from '@/components/glass-surface';
 import { trackOnboarding, type OnboardingEvent } from '@/lib/analytics';
-import { api } from '@/lib/api';
 import { saveOnboarding } from '@/state/onboarding';
-import { REP_BRAND_IDS, STYLE_NODES } from '@/state/style-nodes';
-import type { BrandSearchResponse } from '@/types/api';
+import {
+  MOOD_MAX,
+  MOOD_MIN,
+  moodsForGender,
+  moodsToBrandPicks,
+  type MoodTile,
+} from '@/state/onboarding-moods';
 import {
   BrandColors,
   BrandRole,
   Duration,
   Elevation,
-  Glass,
   Haptic,
   IOSColors,
   IOSFont,
@@ -60,7 +53,6 @@ import {
   Opacity,
   Radius,
   RadiusRole,
-  withAlpha,
 } from '@/theme';
 
 // 구 Spacing 토큰 값 (main Phase 2 dead-code 제거로 theme에서 삭제됨) —
@@ -82,74 +74,18 @@ const STEP_VIEWED_EVENT: Partial<Record<Step, OnboardingEvent>> = {
 
 // ── 레이아웃 상수 (구조적 수치 — 하드코딩 예외 대상) ───────────────────────
 // 컴포넌트 높이 — 애플 UIKit 표준 수치에 정렬 (2026-07-14):
-// 내비 바 터치 타깃 44 / 대형 선택 버튼 56(Sign in with Apple 급) /
-// 콘텐츠 칩 48(≥44 최소 타깃) / 보조 칩 44(최소 타깃 하한).
+// 내비 바 터치 타깃 44 / 대형 선택 버튼 56(Sign in with Apple 급).
 const HEADER_SIDE_SLOT = 44;
 const GENDER_CARD_HEIGHT = 56;
-const BRAND_CHIP_HEIGHT = 48;
-const SEARCH_CHIP_HEIGHT = 44;
-const MAX_SEARCH_RESULTS = 8;
-const SEARCH_DEBOUNCE_MS = 250;
-// 성별 카드 선택 → 다음 스텝 자동 진입까지의 유예(스펙 300ms) — 선택 표시가
-// 눈에 보일 최소한의 시간만 주고 바로 넘어간다.
-const MIN_TASTE_PICKS = 3;
-
-// ── STYLE_NODES 파생 헬퍼 ────────────────────────────────────────────────
-// 브랜드 그리드/검색/노드 매핑 모두 STYLE_NODES 21종에서 성별 필드만
-// 갈아끼워 파생한다 — 노드명(code/nameKo/nameEn)은 화면에 절대 노출하지
-// 않고 브랜드명만 노출한다.
-
-// women: repBrandWomen 21개 전부. men: repBrandMen 이 null 이 아닌 19개
-// (Q·R 코드는 men 풀에 앵커 브랜드가 없어 그리드에서 제외 — style-nodes.ts 주석 참고).
-function getRepBrands(gender: 'women' | 'men'): string[] {
-  const brands: string[] = [];
-  for (const node of STYLE_NODES) {
-    const rep = gender === 'women' ? node.repBrandWomen : node.repBrandMen;
-    if (rep) brands.push(rep);
-  }
-  return brands;
-}
-
-// 검색 결과 1건 — 서버 BrandSearchItem 의 화면용 축약. 로컬 스냅샷 폴백
-// 결과는 REP_BRAND_IDS 에 없으면 id: null (승격 시 제외되고 로컬에만 남음).
-type SearchHit = { id: number | null; name: string };
-
-// 검색 스냅샷 풀 — repBrand + sampleBrands 전체를 성별 기준으로 flatten·dedup.
-// 기본 경로는 GET /v1/brands/search — 이 로컬 스냅샷은 오프라인/서버 오류 폴백.
-function getSearchPool(gender: 'women' | 'men'): string[] {
-  const pool = new Set<string>();
-  for (const node of STYLE_NODES) {
-    const rep = gender === 'women' ? node.repBrandWomen : node.repBrandMen;
-    const samples = gender === 'women' ? node.sampleBrandsWomen : node.sampleBrandsMen;
-    if (rep) pool.add(rep);
-    for (const sample of samples) pool.add(sample);
-  }
-  return Array.from(pool);
-}
-
-// 선택된 브랜드명 → STYLE_NODES 역매핑으로 노드 id 유도 (done 화면 확인용).
-// repBrand 또는 sampleBrands 어느 쪽에 매칭돼도 해당 노드를 채택한다.
-function mapBrandsToNodeIds(selectedBrands: Map<string, number | null>, gender: Gender): number[] {
-  if (!gender || selectedBrands.size === 0) return [];
-  const ids: number[] = [];
-  for (const node of STYLE_NODES) {
-    const rep = gender === 'women' ? node.repBrandWomen : node.repBrandMen;
-    const samples = gender === 'women' ? node.sampleBrandsWomen : node.sampleBrandsMen;
-    const candidates: string[] = rep ? [rep, ...samples] : [...samples];
-    if (candidates.some((brand) => selectedBrands.has(brand))) {
-      ids.push(node.id);
-    }
-  }
-  return ids;
-}
 
 export default function OnboardingLabScreen() {
   const insets = useSafeAreaInsets();
   const [step, setStep] = useState<Step>('welcome');
   const [gender, setGender] = useState<Gender>(null);
-  // 픽 = 브랜드명 → brand_nodes.id (그리드는 REP_BRAND_IDS, 검색은 API 응답).
-  const [selectedBrands, setSelectedBrands] = useState<Map<string, number | null>>(new Map());
-  const [searchQuery, setSearchQuery] = useState('');
+  // 선택 무드 id 집합 (삽입 순서 = 선택 순서). 무드 → 멤버 노드 → (성별별)
+  // 대표 brand_id 로 펼쳐 저장한다(state/onboarding-moods.ts). 성별을 바꾸면
+  // 무드 세트가 갈리므로 초기화한다.
+  const [selectedMoods, setSelectedMoods] = useState<Set<string>>(new Set());
 
   // 콜라주(스텝2) 이미지 미리 데우기 — welcome(스텝1)에 머무는 동안 캐시에
   // 올려, value 스텝 진입 시 네트워크 팝 없이 13장이 한 번에 뜨게 한다.
@@ -197,17 +133,29 @@ export default function OnboardingLabScreen() {
   };
 
   // 자동 진행 대신 선택만 반영 — 진행은 하단 [다음] 버튼으로 (명시적 확인).
+  // 성별이 바뀌면 무드 세트가 달라지므로 이전 무드 선택은 버린다.
   const handleSelectGender = (next: 'women' | 'men') => {
     Haptic.selection();
-    setGender(next);
+    setGender((prev) => {
+      if (prev !== next) setSelectedMoods(new Set());
+      return next;
+    });
   };
 
-  const toggleBrand = (brand: string, id: number | null) => {
-    Haptic.selection();
-    setSelectedBrands((prev) => {
-      const next = new Map(prev);
-      if (next.has(brand)) next.delete(brand);
-      else next.set(brand, id);
+  // 무드 토글 — 최대 MOOD_MAX 개. 상한 도달 시 신규 선택은 무시(라벨·디밍이
+  // 이미 상한을 알림), 해제는 언제나 허용.
+  const toggleMood = (id: string) => {
+    setSelectedMoods((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+        Haptic.selection();
+      } else if (next.size < MOOD_MAX) {
+        next.add(id);
+        Haptic.selection();
+      } else {
+        Haptic.light();
+      }
       return next;
     });
   };
@@ -216,8 +164,7 @@ export default function OnboardingLabScreen() {
     Haptic.light();
     setStep('welcome');
     setGender(null);
-    setSelectedBrands(new Map());
-    setSearchQuery('');
+    setSelectedMoods(new Set());
   };
 
   // 완료(시작하기/건너뛰기) → gender·selectedBrands 를 로컬 저장(AsyncStorage,
@@ -229,7 +176,7 @@ export default function OnboardingLabScreen() {
     Haptic.medium();
     void saveOnboarding({
       gender,
-      brands: [...selectedBrands].map(([name, id]) => ({ id, name })),
+      brands: gender ? moodsToBrandPicks(selectedMoods, gender) : [],
     });
     // from=onboarding 마커 — 홈이 이 진입만 "온보딩 최종 전환"으로 보고
     // main_screen_viewed 를 1회 발사한다(재방문/PDP 왕복 재진입은 제외).
@@ -241,8 +188,11 @@ export default function OnboardingLabScreen() {
   // 완료 처리. 건너뛰기는 "다음 버튼 클릭"이 아니므로 이 이벤트를 발사하지
   // 않고 handleFinish 만 태운다(스펙 8번 = 다음 버튼 클릭 시).
   const handleTasteNext = () => {
-    const brands = [...selectedBrands.keys()];
+    const moods = [...selectedMoods];
+    const brands = gender ? moodsToBrandPicks(selectedMoods, gender).map((b) => b.name) : [];
     trackOnboarding('onboarding_preference_completed', {
+      selected_moods: moods,
+      selected_moods_count: moods.length,
       selected_brands: brands,
       selected_brands_count: brands.length,
     });
@@ -283,18 +233,12 @@ export default function OnboardingLabScreen() {
         {step === 'value' && <ValueStep />}
         {step === 'gender' && <GenderStep gender={gender} onSelect={handleSelectGender} />}
         {step === 'taste' && (
-          <TasteStep
-            gender={gender}
-            selectedBrands={selectedBrands}
-            onToggleBrand={toggleBrand}
-            searchQuery={searchQuery}
-            onChangeSearch={setSearchQuery}
-          />
+          <TasteStep gender={gender} selectedMoods={selectedMoods} onToggleMood={toggleMood} />
         )}
         {step === 'done' && (
           <DoneStep
             gender={gender}
-            selectedBrands={selectedBrands}
+            selectedMoods={selectedMoods}
             insets={insets}
             onReset={handleReset}
           />
@@ -344,14 +288,8 @@ export default function OnboardingLabScreen() {
       {step === 'taste' && (
         <View style={[styles.ctaArea, { paddingBottom: insets.bottom + Spacing.two }]}>
           <PrimaryButton
-            label={
-              selectedBrands.size >= MIN_TASTE_PICKS
-                ? '다음'
-                : selectedBrands.size === 0
-                  ? '3개만 골라주세요'
-                  : `${MIN_TASTE_PICKS - selectedBrands.size}개 더 골라주세요`
-            }
-            disabled={selectedBrands.size < MIN_TASTE_PICKS}
+            label={selectedMoods.size >= MOOD_MIN ? '다음' : '무드를 1개 이상 골라주세요'}
+            disabled={selectedMoods.size < MOOD_MIN}
             onPress={handleTasteNext}
           />
           <Pressable
@@ -632,254 +570,131 @@ function GenderCard({
 // ── TasteStep ────────────────────────────────────────────────────────────
 function TasteStep({
   gender,
-  selectedBrands,
-  onToggleBrand,
-  searchQuery,
-  onChangeSearch,
+  selectedMoods,
+  onToggleMood,
 }: {
   gender: Gender;
-  selectedBrands: Map<string, number | null>;
-  onToggleBrand: (brand: string, id: number | null) => void;
-  searchQuery: string;
-  onChangeSearch: (q: string) => void;
+  selectedMoods: Set<string>;
+  onToggleMood: (id: string) => void;
 }) {
-  const gridBrands = useMemo(() => (gender ? getRepBrands(gender) : []), [gender]);
-  const searchPool = useMemo(() => (gender ? getSearchPool(gender) : []), [gender]);
-
-  // 검색으로 골랐지만 대표 그리드엔 없는 브랜드 — 그리드 맨 앞에 고정 노출.
-  // 이게 없으면 검색어를 지우는 순간 선택한 칩이 사라져 "내가 뭘 골랐는지"가
-  // 증발한다(선택 유지 = 온보딩 신뢰의 기본). 선택 해제하면 자연히 목록에서
-  // 빠진다(대표 브랜드가 아니므로). 순서는 선택(삽입) 순서 유지.
-  const extraSelected = useMemo(
-    () => [...selectedBrands.keys()].filter((name) => !gridBrands.includes(name)),
-    [selectedBrands, gridBrands],
-  );
-
-  // 브랜드 → 칩 tint 매핑. 그리드 칩이 실제로 그리는 색과 정확히 같은 값을
-  // 담아, 검색 결과 칩도 같은 브랜드면 같은 색으로 선택되게 한다(선택색 =
-  // 상단 추가 칩색 일치). extraSelected/gridBrands 는 겹치지 않으므로 충돌 없음.
-  const tintOf = useMemo(() => {
-    const m = new Map<string, string>();
-    gridBrands.forEach((b, i) => m.set(b, NODE_CHIP_TINTS[i % NODE_CHIP_TINTS.length]));
-    extraSelected.forEach((b, i) => m.set(b, NODE_CHIP_TINTS[i % NODE_CHIP_TINTS.length]));
+  const moods = useMemo(() => (gender ? moodsForGender(gender) : []), [gender]);
+  // 선택 순서 → 배지 숫자(1·2·3). Set 은 삽입 순서를 보존한다.
+  const order = useMemo(() => {
+    const m = new Map<string, number>();
+    [...selectedMoods].forEach((id, i) => m.set(id, i + 1));
     return m;
-  }, [gridBrands, extraSelected]);
-
-  // 브랜드 검색 — GET /v1/brands/search (no auth, 서버 정규화 prefix 매치).
-  // 타이핑 디바운스 250ms, 응답 역전 방지는 cancelled 플래그로. 서버 실패
-  // 시에만 로컬 스냅샷 부분일치 폴백 (오프라인에서도 그리드+검색이 살아있게).
-  const [searchResults, setSearchResults] = useState<SearchHit[]>([]);
-  useEffect(() => {
-    const q = searchQuery.trim();
-    if (!q) {
-      setSearchResults([]);
-      return;
-    }
-    let cancelled = false;
-    const timer = setTimeout(() => {
-      api
-        .get<BrandSearchResponse>('/v1/brands/search', { q }, false)
-        .then((res) => {
-          if (!cancelled) setSearchResults(res.brands.map(({ id, name }) => ({ id, name })));
-        })
-        .catch(() => {
-          if (cancelled) return;
-          const lq = q.toLowerCase();
-          setSearchResults(
-            searchPool
-              .filter((brand) => brand.toLowerCase().includes(lq))
-              .slice(0, MAX_SEARCH_RESULTS)
-              .map((name) => ({ id: REP_BRAND_IDS[name] ?? null, name })),
-          );
-        });
-    }, SEARCH_DEBOUNCE_MS);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [searchQuery, searchPool]);
-
-  // 스크롤 하단 경계 페이드 — 칩이 하드 클립되지 않고 배경으로 녹아들게.
-  // 주의: 웹 프리뷰는 IOSColors 폴백이 고정 라이트라서 OS 스킴과 무관하게
-  // 항상 라이트 페이드를 쓴다. 네이티브에서만 스킴을 따른다.
-  const scheme = useColorScheme();
-  const isDarkBg = Platform.OS !== 'web' && scheme === 'dark';
-  const fadeEdge = isDarkBg ? '#000000' : '#FFFFFF';
-  const fadeClear = isDarkBg ? 'rgba(0,0,0,0)' : 'rgba(255,255,255,0)';
+  }, [selectedMoods]);
 
   return (
     <View style={styles.stepBody}>
-      {/* HIG 정합 — 카운터·상단 Skip 없음. 진행 상태는 칩 선택 표시와
-          CTA 라벨 전환("N개 더 골라주세요" → "다음")로만 전달. */}
-      <Text style={styles.stepTitle}>어떤 브랜드를 좋아하세요?</Text>
-      <Text style={styles.stepSubtitle}>여기서부터 취향을 맞춰갈게요</Text>
+      <Text style={styles.stepTitle}>어떤 무드가 끌리세요?</Text>
+      <Text style={styles.stepSubtitle}>사진을 보고 1~3개 골라주세요 · 취향은 여기서부터 맞춰갈게요</Text>
 
-      {/* 검색창은 스크롤 밖 고정 — 그리드를 아무리 내려도 항상 그 자리.
-          iOS 26 리퀴드 글래스 서치바(Glass.composer) + 돋보기 + 네이티브
-          클리어(✕). GET /v1/brands/search 디바운스, 실패 시 로컬 스냅샷 매치. */}
-      <GlassSurface {...Glass.composer} style={styles.searchField}>
-        {Platform.OS !== 'web' && (
-          <SymbolView name="magnifyingglass" size={19} tintColor={IOSColors.secondaryLabel} weight="regular" />
-        )}
-        <TextInput
-          value={searchQuery}
-          onChangeText={onChangeSearch}
-          placeholder="좋아하는 브랜드를 검색해보세요"
-          placeholderTextColor={IOSColors.placeholderText}
-          style={styles.searchInput}
-          // 애플 서치바 네이티브 클리어(✕) 버튼 — 입력 중 우측에 표시(iOS).
-          clearButtonMode="while-editing"
-          autoCorrect={false}
-          autoCapitalize="none"
-          returnKeyType="search"
-        />
-      </GlassSurface>
-
-      {searchResults.length > 0 && (
-        <View style={styles.searchResultsRow}>
-          {searchResults.map((hit) => (
-            <SearchResultChip
-              key={hit.id ?? hit.name}
-              label={hit.name}
-              tint={tintOf.get(hit.name) ?? BrandRole.primary}
-              selected={selectedBrands.has(hit.name)}
-              onPress={() => onToggleBrand(hit.name, hit.id)}
-            />
-          ))}
-        </View>
-      )}
-
-      <View style={styles.tasteScrollFrame}>
       <ScrollView
-        style={styles.tasteScroll}
-        contentContainerStyle={styles.tasteScrollContent}
+        style={styles.moodScroll}
+        contentContainerStyle={styles.moodGrid}
         showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
       >
-        <View style={styles.brandGrid}>
-          {/* 검색으로 추가된 선택 브랜드 — 항상 선택 상태로 그리드 앞에.
-              id 는 선택 시 저장한 값(검색 API 응답)을 그대로 재사용. */}
-          {extraSelected.map((brand, i) => (
-            <BrandChip
-              key={brand}
-              label={brand}
-              tint={NODE_CHIP_TINTS[i % NODE_CHIP_TINTS.length]}
-              selected
-              onPress={() => onToggleBrand(brand, selectedBrands.get(brand) ?? null)}
+        {moods.map((mood, i) => {
+          const selected = selectedMoods.has(mood.id);
+          return (
+            <MoodTileCard
+              key={mood.id}
+              mood={mood}
+              tint={MOOD_TILE_TINTS[i % MOOD_TILE_TINTS.length]}
+              selected={selected}
+              // 상한 도달 & 미선택 타일은 흐리게 — 더는 못 고른다는 신호.
+              dimmed={!selected && selectedMoods.size >= MOOD_MAX}
+              order={order.get(mood.id)}
+              onPress={() => onToggleMood(mood.id)}
             />
-          ))}
-          {gridBrands.map((brand, i) => (
-            <BrandChip
-              key={brand}
-              label={brand}
-              tint={NODE_CHIP_TINTS[i % NODE_CHIP_TINTS.length]}
-              selected={selectedBrands.has(brand)}
-              onPress={() => onToggleBrand(brand, REP_BRAND_IDS[brand] ?? null)}
-            />
-          ))}
-        </View>
+          );
+        })}
       </ScrollView>
-      {/* 상(검색창 아래)·하(CTA 위) 경계 페이드 오버레이 — 터치는 통과 */}
-      <LinearGradient
-        pointerEvents="none"
-        colors={[fadeEdge, fadeClear]}
-        style={[styles.scrollFade, styles.scrollFadeTop]}
-      />
-      <LinearGradient
-        pointerEvents="none"
-        colors={[fadeClear, fadeEdge]}
-        style={[styles.scrollFade, styles.scrollFadeBottom]}
-      />
-      </View>
     </View>
   );
 }
 
-// [시안용 로컬 팔레트 — 확정 시 theme/brand.ts 토큰으로 승격할 것]
-// 선택 필 컬러를 노드(그리드 순서)별로 로테이션 — 여러 개 고르면 파스텔
-// 스티커들이 구름 사이에 박히는 그림. 피치(브랜드)를 1번으로 두고 나머지는
-// 피치와 톤이 맞는 파스텔 계열만.
-const NODE_CHIP_TINTS = [
-  BrandColors.peach[300], // 피치 (브랜드)
+// [시안용 로컬 팔레트 — 사진 도착 전 플레이스홀더 배경. 확정 시 각 무드 사진으로
+// 대체되며, 사진 위 하단 스크림이 텍스트 가독성을 보장한다.]
+const MOOD_TILE_TINTS = [
+  BrandColors.peach[300], // 피치
   '#F5D98F', // 버터 옐로
   '#BFDCB6', // 세이지 그린
   '#AFCBEA', // 페일 블루
   '#DBC5EC', // 라일락
   '#F4C2D2', // 로즈 핑크
   '#B9E0D4', // 민트
+  '#E7D3B8', // 샌드
 ] as const;
 
-function BrandChip({
-  label,
+// ── MoodTileCard — 사진 배경 + 브랜드 텍스트 오버레이 타일 ──────────────────
+// 제스처 구동(선택 press) 이므로 스케일은 스프링(Motion.snappy). 사진이 오면
+// mood.image 가 채워져 배경으로 깔리고, 없으면 tint 플레이스홀더가 배경.
+function MoodTileCard({
+  mood,
   tint,
   selected,
+  dimmed,
+  order,
   onPress,
 }: {
-  label: string;
-  tint?: string;
-  selected: boolean;
-  onPress: () => void;
-}) {
-  // 태그 클라우드 필 — 글래스가 아니라 플랫 스티커 무드(레퍼런스: 아웃라인 필,
-  // 선택 시 컬러 필). 선택 칩에만 얕은 그림자를 줘 "붙인 스티커" 질감을 낸다.
-  // 상태 표현이 필 자체라 체크마크는 두지 않는다.
-  // 기본 상태부터 연한 파스텔 필이 깔리고, 선택하면 같은 색이 진해지며
-  // 그림자가 붙는다 — 색 = 정체성, 진하기 = 선택 상태.
-  const chipTint = tint ?? BrandRole.primary;
-  return (
-    <Pressable onPress={onPress}>
-      {({ pressed }) => (
-        <View
-          style={[
-            styles.brandChip,
-            { backgroundColor: withAlpha(chipTint, Opacity.faint) },
-            selected && styles.brandChipSelected,
-            selected && { backgroundColor: chipTint },
-            pressed && styles.brandChipPressed,
-          ]}
-        >
-          <Text style={[styles.brandChipText, selected && styles.brandChipTextSelected]} numberOfLines={1}>
-            {label}
-          </Text>
-        </View>
-      )}
-    </Pressable>
-  );
-}
-
-// 검색 결과 칩 — 그리드 칩보다 한 단계 작은 서브 칩. 탭 시 그리드와 동일한
-// selectedBrands 상태로 합류(toggleBrand 재사용)한다. 선택 시 tint 는 그리드
-// 트윈 칩과 같은 값(tintOf)을 받아 "선택색 = 상단 추가 칩색"을 맞춘다.
-function SearchResultChip({
-  label,
-  tint,
-  selected,
-  onPress,
-}: {
-  label: string;
+  mood: MoodTile;
   tint: string;
   selected: boolean;
+  dimmed: boolean;
+  order: number | undefined;
   onPress: () => void;
 }) {
+  const reduceMotion = useReducedMotion();
+  const scale = useSharedValue(1);
+  const scaleStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  const springTo = (v: number) => {
+    scale.value = reduceMotion ? v : withSpring(v, Motion.snappy);
+  };
   return (
-    <Pressable onPress={onPress}>
-      {({ pressed }) => (
-        <View
-          style={[
-            styles.searchResultChip,
-            selected && styles.brandChipSelected,
-            selected && { backgroundColor: tint },
-            pressed && styles.brandChipPressed,
-          ]}
-        >
-          <Text
-            style={[styles.searchResultChipText, selected && styles.brandChipTextSelected]}
-            numberOfLines={1}
-          >
-            {label}
+    <Pressable
+      unstable_pressDelay={0}
+      onPressIn={() => springTo(0.96)}
+      onPressOut={() => springTo(1)}
+      onPress={onPress}
+      style={styles.moodTileSlot}
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
+      accessibilityLabel={`${mood.name} 무드`}
+    >
+      <Animated.View
+        style={[
+          styles.moodTile,
+          { backgroundColor: tint },
+          selected && styles.moodTileSelected,
+          dimmed && styles.moodTileDimmed,
+          scaleStyle,
+        ]}
+      >
+        {mood.image != null && (
+          <ExpoImage source={mood.image} style={StyleSheet.absoluteFill} contentFit="cover" />
+        )}
+        {/* 하단 가독성 스크림 — 사진/플레이스홀더 위 텍스트 대비 확보 */}
+        <LinearGradient
+          pointerEvents="none"
+          colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.05)', 'rgba(0,0,0,0.5)']}
+          style={StyleSheet.absoluteFill}
+        />
+        <View style={styles.moodTileText}>
+          <Text style={styles.moodName} numberOfLines={1}>
+            {mood.name}
+          </Text>
+          <Text style={styles.moodBrands} numberOfLines={2}>
+            {mood.brandLabels.join(' · ')}
           </Text>
         </View>
-      )}
+        {selected && (
+          <View style={styles.moodBadge}>
+            <Text style={styles.moodBadgeText}>{order}</Text>
+          </View>
+        )}
+      </Animated.View>
     </Pressable>
   );
 }
@@ -891,17 +706,24 @@ function SearchResultChip({
 // 진입점을 별도로 제공할 예정 — 지금은 mock 요약만 보여준다.
 function DoneStep({
   gender,
-  selectedBrands,
+  selectedMoods,
   insets,
   onReset,
 }: {
   gender: Gender;
-  selectedBrands: Map<string, number | null>;
+  selectedMoods: Set<string>;
   insets: EdgeInsets;
   onReset: () => void;
 }) {
-  const brandList = useMemo(() => Array.from(selectedBrands.keys()), [selectedBrands]);
-  const nodeIds = useMemo(() => mapBrandsToNodeIds(selectedBrands, gender), [selectedBrands, gender]);
+  const moodNames = useMemo(() => {
+    if (!gender) return [];
+    const byId = new Map(moodsForGender(gender).map((m) => [m.id, m.name]));
+    return [...selectedMoods].map((id) => byId.get(id) ?? id);
+  }, [selectedMoods, gender]);
+  const brandPicks = useMemo(
+    () => (gender ? moodsToBrandPicks(selectedMoods, gender) : []),
+    [selectedMoods, gender],
+  );
   const genderLabel = gender === 'women' ? '여성복' : gender === 'men' ? '남성복' : '미선택';
 
   return (
@@ -913,12 +735,14 @@ function DoneStep({
         <Text style={styles.doneValue}>{genderLabel}</Text>
       </View>
       <View style={styles.doneRow}>
-        <Text style={styles.doneLabel}>선택 브랜드 ({brandList.length})</Text>
-        <Text style={styles.doneValue}>{brandList.length > 0 ? brandList.join(', ') : '없음'}</Text>
+        <Text style={styles.doneLabel}>선택 무드 ({moodNames.length})</Text>
+        <Text style={styles.doneValue}>{moodNames.length > 0 ? moodNames.join(', ') : '없음'}</Text>
       </View>
       <View style={styles.doneRow}>
-        <Text style={styles.doneLabel}>매핑된 노드 id</Text>
-        <Text style={styles.doneValue}>{nodeIds.length > 0 ? nodeIds.join(', ') : '없음'}</Text>
+        <Text style={styles.doneLabel}>펼친 brand_id ({brandPicks.length})</Text>
+        <Text style={styles.doneValue}>
+          {brandPicks.length > 0 ? brandPicks.map((b) => b.id).join(', ') : '없음'}
+        </Text>
       </View>
 
       <Pressable onPress={onReset} style={styles.doneResetBtn}>
@@ -1133,109 +957,71 @@ const styles = StyleSheet.create({
   ctaButtonDisabled: {
     opacity: Opacity.muted,
   },
-  // 스크롤 프레임 — 페이드 오버레이의 absolute 기준.
-  tasteScrollFrame: {
+  // ── 무드 스텝 ──
+  moodScroll: {
     flex: 1,
     marginTop: Spacing.four,
   },
-  scrollFade: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    height: 40,
-    zIndex: 1,
-  },
-  scrollFadeTop: {
-    top: 0,
-  },
-  scrollFadeBottom: {
-    bottom: 0,
-  },
-  tasteScroll: {
-    flex: 1,
-  },
-  tasteScrollContent: {
-    // 상단 여백은 frame(marginTop)이 아니라 스크롤 컨텐츠 패딩으로 —
-    // 칩이 쉬는 위치는 내려가되, 스크롤하면 상단 화이트 페이드 아래로
-    // 자연스럽게 흘러 들어간다 (7/14 피드백: 그라데이션 유지).
-    paddingTop: Spacing.four,
+  // 2열 그리드 — 슬롯 폭 48%, 행 간격만 gap 으로(열 간격은 space-between).
+  moodGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    rowGap: Spacing.three,
     paddingBottom: Spacing.six,
   },
-  // 태그 클라우드 — 좌측 정렬 (히어로·타이틀과 같은 좌측 레일에 맞춘다).
-  brandGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'flex-start',
-    gap: Spacing.two + Spacing.half,
+  moodTileSlot: {
+    width: '48%',
   },
-  // 기본 = 아웃라인 필(투명 배경 + 헤어라인), 선택 = 피치 필 + 얕은 그림자.
-  // 완전 캡슐이 되도록 radius 는 높이 절반보다 크게.
-  // 필 컬러는 렌더에서 노드별 tint 로 주입 — 여기는 형태만.
-  brandChip: {
-    minHeight: BRAND_CHIP_HEIGHT,
-    justifyContent: 'center',
-    paddingHorizontal: Spacing.four - Spacing.half,
-    borderRadius: BRAND_CHIP_HEIGHT,
+  // 세로 사진 비율(3:4). 사진이 오면 mood.image 가 absoluteFill 로 배경에 깔린다.
+  moodTile: {
+    width: '100%',
+    aspectRatio: 3 / 4,
+    borderRadius: Radius.xl,
+    overflow: 'hidden',
+    justifyContent: 'flex-end',
   },
-  brandChipSelected: {
-    borderColor: 'transparent',
-    backgroundColor: BrandRole.primary,
+  moodTileSelected: {
+    borderWidth: 3,
+    borderColor: BrandRole.primary,
     ...Elevation.raised,
   },
-  brandChipPressed: {
-    opacity: Opacity.softened,
+  moodTileDimmed: {
+    opacity: Opacity.muted,
   },
-  brandChipText: {
+  moodTileText: {
+    padding: Spacing.three,
+    gap: 2,
+  },
+  moodName: {
     ...IOSText.headline,
-    color: IOSColors.label,
+    color: '#FFFFFF',
     fontFamily: IOSFont.sans,
-  },
-  brandChipTextSelected: {
-    // 파스텔 필 위에서 항상 대비가 서는 딥 브라운 (피치 스케일 최심부).
-    color: BrandColors.peach[900],
     fontWeight: '700',
   },
-
-  // iOS 26 리퀴드 글래스 서치바 — 배경 채움은 GlassSurface(글래스 소재)가
-  // 담당하므로 여기선 형태만. 넉넉한 높이(56) + 완전 캡슐(pill) 라운드로
-  // iOS 26 서치바 룩(각진 사각형 X). 성별 카드/칩과 같은 캡슐 문법.
-  searchField: {
-    flexDirection: 'row',
+  moodBrands: {
+    ...IOSText.caption1,
+    color: 'rgba(255,255,255,0.82)',
+    fontFamily: IOSFont.sans,
+  },
+  // 선택 순서 배지 — 우상단 원형, 브랜드 피치 필.
+  moodBadge: {
+    position: 'absolute',
+    top: Spacing.two,
+    right: Spacing.two,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: BrandRole.primary,
     alignItems: 'center',
-    gap: Spacing.two + Spacing.half,
-    minHeight: 56,
-    borderRadius: Radius.pill,
-    paddingHorizontal: Spacing.four,
-    marginTop: Spacing.four,
-    overflow: 'hidden',
-  },
-  searchInput: {
-    // 애플 서치 입력 텍스트는 regular(body) — semibold 는 과함.
-    ...IOSText.body,
-    flex: 1,
-    color: IOSColors.label,
-    fontFamily: IOSFont.sans,
-  },
-  searchResultsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Spacing.two,
-    marginTop: Spacing.three,
-  },
-  // 보더 없는 회색 채움 — 성별 카드 미선택과 같은 secondary filled 문법으로
-  // 통일 (아웃라인 칩은 흰 배경에서 약하고 결이 튀어서 폐기).
-  searchResultChip: {
-    minHeight: SEARCH_CHIP_HEIGHT,
     justifyContent: 'center',
-    paddingHorizontal: Spacing.three,
-    borderRadius: SEARCH_CHIP_HEIGHT,
-    backgroundColor: IOSColors.secondarySystemFill,
+    ...Elevation.raised,
   },
-  // 그리드 칩(headline)의 한 단계 아래 — 보조 칩은 subhead 로 통일.
-  searchResultChipText: {
-    ...IOSText.subhead,
-    color: IOSColors.label,
+  moodBadgeText: {
+    ...IOSText.footnote,
+    color: BrandColors.peach[900],
     fontFamily: IOSFont.sans,
+    fontWeight: '800',
   },
 
   // ── done 스텝 ──
