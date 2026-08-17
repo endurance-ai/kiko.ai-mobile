@@ -14,9 +14,9 @@
  * `brandLabels` 는 타일 위에 얹는 전시용 텍스트(확정 무드표의 "대표 브랜드" 칸)일
  * 뿐, 저장에는 쓰이지 않는다 — 저장은 오직 `nodeCodes` → 대표 brand_id 경로.
  *
- * 매핑 확정: 2026-08-18 (강현규/최윤영). 여성은 E·F·G·H·M 제외(16/21) —
- * 센슈얼은 R 단독, P(럭셔리 맥시멀리스트)는 키치 유니크에 편입. 남성은 Q·R 이
- * 애초에 repBrandMen 없음이라 19노드 전부 커버.
+ * 매핑 확정: 2026-08-18 (강현규/최윤영). 여성은 F 만 제외(20/21) — 센슈얼=R 단독,
+ * P·M 은 키치 유니크, H·E 는 올드머니, G 는 스트릿에 편입(결 맞는 것만). 남성은
+ * Q·R 이 애초에 repBrandMen 없음이라 19노드 전부 커버.
  */
 import type { OnboardingBrandPick } from '@/state/onboarding';
 import { REP_BRAND_IDS, STYLE_NODES } from '@/state/style-nodes';
@@ -38,12 +38,12 @@ export type MoodTile = {
 
 export const WOMEN_MOODS: MoodTile[] = [
   { id: 'minimal', name: '미니멀', nodeCodes: ['C', 'B'], brandLabels: ['LOW CLASSIC', 'Jil Sander', 'Helmut Lang'], image: require('../../assets/onboarding/moods/women/minimal.jpg') },
-  { id: 'oldmoney', name: '올드머니', nodeCodes: ['D'], brandLabels: ['Toteme', 'Massimo Dutti'], image: require('../../assets/onboarding/moods/women/oldmoney.jpg') },
+  { id: 'oldmoney', name: '올드머니', nodeCodes: ['D', 'H', 'E'], brandLabels: ['Toteme', 'Massimo Dutti'], image: require('../../assets/onboarding/moods/women/oldmoney.jpg') },
   { id: 'daily', name: '데일리 캐주얼', nodeCodes: ['A'], brandLabels: ['A.P.C.', '마리떼 프랑소와 저버'], image: require('../../assets/onboarding/moods/women/daily.jpg') },
   { id: 'lovely', name: '러블리', nodeCodes: ['Q'], brandLabels: ['illigo', '크랭크'], image: require('../../assets/onboarding/moods/women/lovely.jpg') },
   { id: 'sensual', name: '센슈얼', nodeCodes: ['R'], brandLabels: ['SKIMS', 'Justhaus', 'NiiHai'], image: require('../../assets/onboarding/moods/women/sensual.jpg') },
-  { id: 'street', name: '스트릿', nodeCodes: ['I', 'J', 'L'], brandLabels: ['MSCHF', 'OJOS'], image: require('../../assets/onboarding/moods/women/street.jpg') },
-  { id: 'kitsch', name: '키치 유니크', nodeCodes: ['K', 'N', 'O', 'U', 'P'], brandLabels: ['코이세이오', '오헤시오', 'misekiseoul'], image: require('../../assets/onboarding/moods/women/kitsch.jpg') },
+  { id: 'street', name: '스트릿', nodeCodes: ['I', 'J', 'L', 'G'], brandLabels: ['MSCHF', 'OJOS'], image: require('../../assets/onboarding/moods/women/street.jpg') },
+  { id: 'kitsch', name: '키치 유니크', nodeCodes: ['K', 'N', 'O', 'U', 'P', 'M'], brandLabels: ['코이세이오', '오헤시오', 'misekiseoul'], image: require('../../assets/onboarding/moods/women/kitsch.jpg') },
   { id: 'gorpcore', name: '고프코어', nodeCodes: ['S', 'T'], brandLabels: ["Arc'teryx", 'Moncler'], image: require('../../assets/onboarding/moods/women/gorpcore.jpg') },
 ];
 
