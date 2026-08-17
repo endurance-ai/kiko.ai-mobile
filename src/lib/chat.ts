@@ -33,6 +33,8 @@ export interface ChatSendOpts {
   priceMaxKrw?: number;
   /** Final CloudFront image_url from POST /v1/uploads. */
   attachedImageUrl?: string;
+  /** 스테이징에서 이미 항목 선택 후 검색 — 이미지 첨부해도 pick_item 스킵. */
+  skipItemPick?: boolean;
 }
 
 function buildRequest(message: string, opts?: ChatSendOpts): ChatRequest {
@@ -41,6 +43,7 @@ function buildRequest(message: string, opts?: ChatSendOpts): ChatRequest {
     gender: opts?.gender ?? null,
     price_max: opts?.priceMaxKrw && opts.priceMaxKrw > 0 ? opts.priceMaxKrw : null,
     attached_image_url: opts?.attachedImageUrl || null,
+    skip_item_pick: opts?.skipItemPick ? true : undefined,
   };
 }
 

@@ -708,8 +708,8 @@ export default function ChatEntryScreen() {
     consumedPendingRef.current = true;
     const pending = takePendingChatSeed();
     if (!pending) {
-      // 세션 복원(?session=)도 아니고 seed 도 없는 순수 새 채팅 → 인트로.
-      if (!resumedFromHistory) setShowIntro(true);
+      // 세션 복원(?session=)·seed 핸드오프(?seed=)가 아닌 순수 새 채팅 → 인트로.
+      if (!resumedFromHistory && !seedParam) setShowIntro(true);
       return;
     }
     setTimeout(
@@ -1135,14 +1135,18 @@ export default function ChatEntryScreen() {
     // 텍스트도 pick_item(1,2,3,4)으로 라우팅된다. 세션을 비워 새 세션을 강제 →
     // 깨끗한 상태에서 agent 검색으로 직행.
     if (isStagingSend) sessionIdRef.current = null;
-    // 버블=displayQuery(자연문), 서버 전송=query(정밀). serverQueryOverride 로 분리.
+    // 버블=displayQuery(항목명+"찾아줘")·썸네일(localImageUri), 서버=query(정밀
+    // searchQueryKo). 스테이징은 이미지(serverImageUrl)도 보내되 skipItemPick 로
+    // pick_item(1,2,3,4)만 스킵 → 이미지 임베딩 블렌드 검색 + 크리틱 이미지 기반.
     runStreamingTurn(
       displayQuery,
       undefined,
       isStagingSend
-        ? // 버블엔 썸네일(localImageUri)만 — serverImageUrl 은 빼서 서버로 이미지가
-          // 안 가게(vision 재발동 방지). 검색은 serverQueryOverride(정밀 쿼리).
-          { localImageUri: localUri ?? undefined }
+        ? {
+            localImageUri: localUri ?? undefined,
+            serverImageUrl,
+            skipItemPick: true,
+          }
         : { localImageUri: localUri ?? undefined, serverImageUrl },
       isStagingSend ? query : undefined,
     );
@@ -1163,6 +1167,8 @@ export default function ChatEntryScreen() {
       localImageUri?: string;
       /** Final CloudFront URL from /v1/uploads — sent to chat as attached_image_url. */
       serverImageUrl?: string;
+      /** 스테이징(이미 항목 선택)發 — 이미지 첨부해도 pick_item 스킵. */
+      skipItemPick?: boolean;
     },
     /**
      * 골든셋 유도 칩 경로 — 버블에는 `trimmed`(한국어 label)를 그대로 보여
@@ -1533,6 +1539,8 @@ export default function ChatEntryScreen() {
        // 서버가 "사진이 안 보인다" 고 응답함.
       attachedImageUrl:
         imagePayload?.serverImageUrl ?? attachment?.imageUrl ?? undefined,
+      // 스테이징(이미 항목 선택)發 이미지 검색 — pick_item(1,2,3,4) 스킵 요청.
+      skipItemPick: imagePayload?.skipItemPick,
     };
 
     // 첫 이벤트가 오기 전 서버가 조용히 멈춰버리는 케이스 대비 즉시 착수.

@@ -277,7 +277,7 @@ function TrendingRail({
 
 // 구좌당 가로로 보여줄 카드 수 — 그 이상은 '더보기'로 전용 그리드 페이지에서.
 // 그리드 페이지는 이 개수만큼 건너뛰고 나머지를 보여주므로 공유(export).
-export const CURATION_ROW_LIMIT = 10;
+export const CURATION_ROW_LIMIT = 20;
 
 export function CurationSheet({
   sections: serverSections,

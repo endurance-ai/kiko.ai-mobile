@@ -74,6 +74,9 @@ export interface ChatRequest {
    * wires through with zero client change.
    */
   attached_image_url?: string | null;
+  /** 스테이징에서 이미 항목을 골라 보낼 때 true — 이미지가 붙어도 서버가
+   *  pick_item(1,2,3,4) 재선택을 건너뛰고 바로 이미지 검색으로. */
+  skip_item_pick?: boolean;
 }
 
 /**

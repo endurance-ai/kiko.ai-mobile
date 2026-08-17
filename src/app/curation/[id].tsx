@@ -231,7 +231,8 @@ export default function CurationSectionScreen() {
       if (pinnedProduct.price != null)
         qs.push(`pin_price=${encodeURIComponent(String(Math.round(pinnedProduct.price)))}`);
     }
-    router.push(`/home?${qs.join('&')}` as never);
+    // seed 핸드오프도 무조건 새 채팅 화면으로(chat=1).
+    router.push(`/home?chat=1&${qs.join('&')}` as never);
   };
   const handleSend = () => {
     if (!canSend) return;

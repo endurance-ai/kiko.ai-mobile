@@ -34,6 +34,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FLOATING_HEADER_OFFSET, FloatingHeader } from '@/components/floating-header';
 import { followBrand, getBrandHome, getBrandProducts, unfollowBrand } from '@/lib/brands';
+import { updateNotifications } from '@/lib/devices';
 import { relativeTime } from '@/lib/relative-time';
 import { useAuth } from '@/state/auth';
 import { Duration, Haptic, IOSColors, IOSFont, IOSText, Motion, Opacity, Radius, Scrim, withAlpha } from '@/theme';
@@ -129,6 +130,14 @@ export default function BrandHomeScreen() {
     setFollowing(true);
     setNotify(true);
     void followBrand(id, true).catch(() => setNotify(false));
+    // 브랜드 알림을 켰으면 설정의 관련 카테고리도 함께 ON — 안 그러면 설정 토글이
+    // 꺼진 채라 실제 발송에서 필터링된다. 시트 문구("세일, 신상 소식")에 맞춰
+    // 마스터(system) + 브랜드 소식(brand_new_product) + 세일(price_drop) ON.
+    void updateNotifications({
+      system: true,
+      brand_new_product: true,
+      price_drop: true,
+    }).catch(() => {});
   };
 
   const toggleFollow = () => {
