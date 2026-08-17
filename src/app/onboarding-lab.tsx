@@ -287,7 +287,7 @@ export default function OnboardingLabScreen() {
       {step === 'taste' && (
         <View style={[styles.ctaArea, { paddingBottom: insets.bottom + Spacing.two }]}>
           <PrimaryButton
-            label={selectedMoods.size >= MOOD_MIN ? '다음' : '무드를 1개 이상 골라주세요'}
+            label={selectedMoods.size >= MOOD_MIN ? '다음' : `최대 ${MOOD_MAX}개까지 고를 수 있어요`}
             disabled={selectedMoods.size < MOOD_MIN}
             onPress={handleTasteNext}
           />
