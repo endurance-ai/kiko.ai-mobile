@@ -1037,6 +1037,9 @@ const styles = StyleSheet.create({
     ...IOSText.caption1,
     color: 'rgba(255,255,255,0.82)',
     fontFamily: IOSFont.sans,
+    // 항상 2줄 높이를 예약(caption1 lineHeight 16 × 2) — 브랜드가 1줄이든
+    // 2줄이든 블록 높이가 같아, 바닥 정렬에서도 무드명 위치가 카드마다 통일된다.
+    height: 32,
   },
   // 선택 순서 배지 — 우상단 원형, 브랜드 피치 필.
   moodBadge: {
