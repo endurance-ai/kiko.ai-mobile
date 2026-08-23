@@ -178,14 +178,19 @@ export default function CurationSectionScreen() {
   const [text, setText] = useState('');
   const [pinnedProductId, setPinnedProductId] = useState<string | null>(null);
 
-  // 홈 카드 행에서 이미 보여준 앞 CURATION_ROW_LIMIT 개는 제외하고 나머지만.
-  const products = useMemo(
-    () =>
-      (sections?.find((s) => s.id === sectionId)?.products ?? []).slice(
-        CURATION_ROW_LIMIT,
-      ),
+  const section = useMemo(
+    () => sections?.find((item) => item.id === sectionId),
     [sections, sectionId],
   );
+  // Trending renderer만 홈 카드 행 뒤의 항목을 이어서 보여준다.
+  const products = useMemo(
+    () =>
+      section?.display_type === 'trending'
+        ? section.products.slice(CURATION_ROW_LIMIT)
+        : section?.products ?? [],
+    [section],
+  );
+  const productPositionOffset = section?.display_type === 'trending' ? CURATION_ROW_LIMIT : 0;
   const pinnedProduct = pinnedProductId
     ? products.find((p) => String(p.product_id) === pinnedProductId) ?? null
     : null;
@@ -264,10 +269,7 @@ export default function CurationSectionScreen() {
                 <GridTile
                   key={p.product_id}
                   product={p}
-                  // 구좌 내 절대 위치 — 이 그리드는 홈 행이 이미 보여준 앞
-                  // CURATION_ROW_LIMIT 개를 제외하고 시작하므로 오프셋 보정.
-                  // (홈 행 impression 의 position 과 좌표계 통일)
-                  position={CURATION_ROW_LIMIT + idx}
+                  position={productPositionOffset + idx}
                   sectionId={sectionId}
                   pinned={pinnedProductId === pidStr}
                   onTogglePin={() => togglePinnedProduct(pidStr)}
@@ -277,7 +279,7 @@ export default function CurationSectionScreen() {
           </View>
         ) : (
           <View style={styles.center}>
-            <Text style={styles.muted}>상품을 불러오는 중이에요…</Text>
+            <Text style={styles.muted}>표시할 상품이 없어요.</Text>
           </View>
         )}
       </ScrollView>
