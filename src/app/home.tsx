@@ -1337,6 +1337,10 @@ export default function ChatEntryScreen() {
     // 클라이언트에서 파싱 에러로 이어질 때 "요청을 처리하지 못했어요" 배너
     // 가 캡 소진 배너를 덮어버리는 걸 방지.
     let capHitThisTurn = false;
+    // 이번 턴에 상품/텍스트가 하나라도 도착했는지. 도착했으면 뒤늦은 stall/error
+    // 로 턴을 통째로 지우지 않고 그대로 마감한다(card_sent 됐는데 "카드가
+    // 안보이는데" 버그 방지 — 실트레이스 2026-09-05).
+    let deliveredAny = false;
     // 타임아웃 관리 — 이벤트 도착 시마다 리셋, 정적으로 오래 걸리면 발동.
     const killTimeout = () => {
       if (streamTimeoutRef.current) {
@@ -1348,7 +1352,19 @@ export default function ChatEntryScreen() {
       streamRef.current?.cancel();
       streamRef.current = null;
       killTimeout();
-      // 낙관적 어시스턴트 스피너 제거 + 유저 버블도 함께 정리.
+      // 이미 상품/텍스트가 도착했으면 턴을 지우지 말고 그대로 마감한다 —
+      // 늦은 stall 로 이미 보여준 카드를 지우면 "카드가 안보이는데"가 된다.
+      if (deliveredAny) {
+        setMessages((prev) =>
+          prev.map((t) =>
+            t.id === turnId
+              ? { ...t, streamDone: true, isStream: false, status: "results" as const }
+              : t,
+          ),
+        );
+        return;
+      }
+      // 아무것도 못 받았으면 빈 턴 제거 + 재시도 배너.
       setMessages((prev) => prev.filter((t) => t.id !== turnId));
       // 캡 소진 배너가 이미 떠 있는 상황이면 에러 배너로 덮지 않음.
       if (capHitThisTurn) return;
@@ -1431,6 +1447,7 @@ export default function ChatEntryScreen() {
       },
       onTextDelta: (delta: string) => {
         bumpTimeout();
+        if (delta) deliveredAny = true;
         patch((t) => ({ streamText: (t.streamText ?? "") + delta }));
       },
       onProgress: () => {
@@ -1439,6 +1456,7 @@ export default function ChatEntryScreen() {
       },
       onProduct: (product: ProductRef) => {
         bumpTimeout();
+        deliveredAny = true;
         patch((t) => ({
           streamProducts: appendUniqueProduct(t.streamProducts, product),
         }));
@@ -1502,6 +1520,18 @@ export default function ChatEntryScreen() {
       onError: () => {
         killTimeout();
         streamRef.current = null;
+        // 이미 상품/텍스트가 도착했으면 지우지 말고 마감 — 늦은 에러로 이미
+        // 보여준 카드를 지우면 "카드가 안보이는데"가 된다(실트레이스 2026-09-05).
+        if (deliveredAny && !capHitThisTurn) {
+          setMessages((prev) =>
+            prev.map((t) =>
+              t.id === turnId
+                ? { ...t, streamDone: true, isStream: false, status: "results" as const }
+                : t,
+            ),
+          );
+          return;
+        }
         // 캡 소진으로 스트림이 닫힌 케이스면 캡 배너가 이미 떠 있어야 함.
         // 여기서 "요청을 처리하지 못했어요" 를 추가로 띄우면 우선순위상 그
         // 배너가 캡 배너를 덮어 유저가 진짜 원인을 못 봄. 조용히 종료.
