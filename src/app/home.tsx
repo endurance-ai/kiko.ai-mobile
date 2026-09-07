@@ -22,6 +22,7 @@ import { Image as ExpoImage } from "expo-image";
 
 import { Banner } from "@/components/banner";
 import { FeedbackTrigger } from "@/components/feedback-trigger";
+import { SearchFailedTrigger } from "@/components/search-failed-trigger";
 import { GlassSurface } from "@/components/glass-surface";
 import { PixelSpinner, ShimmerText } from "@/components/pixel-spinner";
 import { PRODUCT_CARD_WIDTH, ProductCard } from "@/components/product-card";
@@ -249,7 +250,7 @@ type PendingChatSeed = {
   };
   imagePayload?: { localImageUri?: string; serverImageUrl?: string };
   serverQueryOverride?: string;
-  entryPoint: "typed" | "chip" | "critique" | "seed" | "retry";
+  entryPoint: "typed" | "chip" | "critique" | "seed" | "retry" | "product_refine";
 };
 // 모듈 레벨 상태는 컴포넌트 밖 함수로만 읽고/쓴다 — 컴포넌트/훅 본문에서
 // 직접 재할당하면 React Compiler 규칙("This value cannot be modified")에
@@ -682,8 +683,12 @@ export default function ChatEntryScreen() {
         }
       : undefined;
     // Defer slightly so the session effect can stamp sessionIdRef first.
+    // 상품 앵커(pin_*)를 달고 넘어온 핸드오프는 "상품→검색 다리"라 product_refine
+    // 으로 구분한다. 앵커 없는 순수 텍스트 핸드오프만 seed 로 남긴다.
+    const seedEntryPoint = attachment ? "product_refine" : "seed";
     setTimeout(
-      () => runStreamingTurn(seedParam, attachment, undefined, undefined, "seed"),
+      () =>
+        runStreamingTurn(seedParam, attachment, undefined, undefined, seedEntryPoint),
       50,
     );
   }, [
@@ -1178,8 +1183,15 @@ export default function ChatEntryScreen() {
     serverQueryOverride?: string,
     /** 검색 진입 경로 (기획 7/23) — 디깅 시작 방식 분류.
      *  typed=컴포저 직접 입력 / chip=골든셋 유도 칩 / critique=보정 칩 /
-     *  seed=PDP·그리드 핸드오프 / retry=실패 재시도. */
-    entryPoint: "typed" | "chip" | "critique" | "seed" | "retry" = "typed",
+     *  seed=그리드 텍스트 핸드오프 / product_refine=상품 앵커(pin)를 달고 시작된
+     *  리파인(상품→검색 다리) / retry=실패 재시도. */
+    entryPoint:
+      | "typed"
+      | "chip"
+      | "critique"
+      | "seed"
+      | "retry"
+      | "product_refine" = "typed",
   ) => {
     // 비로그인 상태에선 어떤 경로로 들어오든 (composer send / seedParam /
     // critique / retry) 로그인 화면으로 유도. Apple 5.1.1(v) 대응 —
@@ -2195,6 +2207,9 @@ export default function ChatEntryScreen() {
                                   ? undefined
                                   : () => void toggleWishlist(String(productId))
                               }
+                              searchId={turn.streamSearchId ?? null}
+                              position={i}
+                              source="search"
                             />
                           );
                         })}
@@ -2248,6 +2263,18 @@ export default function ChatEntryScreen() {
                         />
                       </View>
                     )}
+                    {/* 결과가 실제로 떴을 때만 자가신고 버튼 노출 — clarify/무결과는 제외. */}
+                    {turn.streamDone &&
+                      !turn.streamClarify &&
+                      turn.streamProducts &&
+                      turn.streamProducts.length > 0 && (
+                        <View style={styles.searchFailedRow}>
+                          <SearchFailedTrigger
+                            query={turn.user.text ?? ""}
+                            sessionId={sessionIdRef.current}
+                          />
+                        </View>
+                      )}
                   </View>
                 )}
 
@@ -2308,6 +2335,13 @@ export default function ChatEntryScreen() {
 
                       <View style={styles.feedbackTriggerRow}>
                         <FeedbackTrigger turnKey={`search:${turn.id}`} />
+                      </View>
+
+                      <View style={styles.searchFailedRow}>
+                        <SearchFailedTrigger
+                          query={turn.user.text ?? ""}
+                          sessionId={sessionIdRef.current}
+                        />
                       </View>
 
                       {turn.narrowing && (
@@ -2735,6 +2769,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     paddingHorizontal: 4,
     marginTop: -8,
+  },
+  searchFailedRow: {
+    alignItems: "center",
+    marginTop: 12,
   },
   seeMoreCta: {
     flexDirection: "row",
