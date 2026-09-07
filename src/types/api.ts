@@ -317,6 +317,9 @@ export interface OutboundRequest {
   /** 발화 문맥 — 서버 Literal(curation/search/pdp/wishlist/history). */
   source?: 'curation' | 'search' | 'pdp' | 'wishlist' | 'history';
   section_id?: string;
+  /** 현재 채팅 session_id — 서버가 thread_id 로 변환해 기록(attribution).
+   *  세션이 없으면 생략. */
+  session_id?: string;
 }
 
 export interface OutboundResponse {
