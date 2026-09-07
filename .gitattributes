@@ -1,0 +1,3 @@
+# Keep TypeScript changes reviewable even when a source file contains a NUL delimiter.
+*.ts text diff
+*.tsx text diff
