@@ -1842,6 +1842,7 @@ export default function ChatEntryScreen() {
                             const sid = sessionIdRef.current;
                             const search = turn.streamSearchId;
                             const params = [
+                              "source=search",
                               sid ? `session=${encodeURIComponent(sid)}` : "",
                               search
                                 ? `search_id=${encodeURIComponent(search)}`
@@ -2039,7 +2040,20 @@ export default function ChatEntryScreen() {
                             key={p.id}
                             product={p}
                             pinned={isLast && pinnedId === p.id}
-                            onPress={() => router.push(`/product/${p.id}`)}
+                            onPress={() => {
+                              const sid = sessionIdRef.current;
+                              const search = turn.streamSearchId;
+                              const params = [
+                                "source=search",
+                                sid ? `session=${encodeURIComponent(sid)}` : "",
+                                search
+                                  ? `search_id=${encodeURIComponent(search)}`
+                                  : "",
+                              ]
+                                .filter(Boolean)
+                                .join("&");
+                              router.push(`/product/${p.id}?${params}`);
+                            }}
                             onPin={() =>
                               isLast && handlePin(p, turn.streamSearchId ?? null)
                             }

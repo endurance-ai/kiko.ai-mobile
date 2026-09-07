@@ -85,9 +85,16 @@ export default function HistoryScreen() {
           `/list?session=${sessionId}&search=${item.search_id}` as never,
         );
       } else {
-        router.push(
-          `/product/${item.product_id}?session=${sessionId}&source=${item.source_search_id ?? ""}` as never,
-        );
+        const params = [
+          "source=history",
+          sessionId ? `session=${encodeURIComponent(sessionId)}` : "",
+          item.source_search_id
+            ? `search_id=${encodeURIComponent(item.source_search_id)}`
+            : "",
+        ]
+          .filter(Boolean)
+          .join("&");
+        router.push(`/product/${item.product_id}?${params}` as never);
       }
     },
     [sessionId],

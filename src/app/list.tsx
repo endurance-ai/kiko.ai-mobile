@@ -320,6 +320,7 @@ function GridCard({
   const openPdp = () => {
     Haptic.light();
     const qs = [
+      'source=search',
       sessionId ? `session=${encodeURIComponent(sessionId)}` : '',
       searchId ? `search_id=${encodeURIComponent(searchId)}` : '',
     ]

@@ -10,6 +10,7 @@ import {
 import { Platform } from 'react-native';
 
 import { enqueueCurationImpression } from '@/lib/curation-impressions';
+import { buildOutboundClickProperties } from '@/lib/product-attribution';
 
 // EXPO_PUBLIC_ prefix 는 클라이언트 번들에 인라인됨 — 앰플리튜드 client
 // SDK key 는 원래 노출 대상이라 안전. 서버 API key 는 별개.
@@ -169,6 +170,22 @@ export function trackOnboarding(
   props?: Record<string, unknown>,
 ): void {
   trackEvent(event, { platform: Platform.OS, ...props });
+}
+
+/** 외부몰 이동 계측. 검색 스레드 식별자는 모바일 session_id 와 동일하며,
+ * 라우트가 문맥을 잃은 경우 현재 analytics 세션을 한 번 더 사용한다. */
+export function trackOutboundClick(params: {
+  productId: string;
+  alternativeUsed: boolean;
+  sessionId?: string | null;
+  searchId?: string | null;
+  source?: string | null;
+  sectionId?: string | null;
+}): void {
+  trackEvent(
+    'outbound_click',
+    buildOutboundClickProperties(params, cachedSessionId),
+  );
 }
 
 // (search_id, product_id, source) 조합 dedupe. 페이지네이션 재렌더 / 리스트

@@ -122,7 +122,7 @@ function WishCard({
         onPress={() => {
           if (!pid) return;
           Haptic.light();
-          router.push(`/product/${pid}` as never);
+          router.push(`/product/${pid}?source=wishlist` as never);
         }}
       >
         {product?.image_url ? (

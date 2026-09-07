@@ -258,7 +258,7 @@ export default function CurationLabScreen() {
   };
 
   const handleProductPress = (product: Product) => {
-    router.push(`/product/${product.id}`);
+    router.push(`/product/${product.id}?source=curation`);
   };
 
   const noop = (haptic: () => void) => () => {
