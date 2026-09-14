@@ -42,6 +42,46 @@ export function chipsForGender(gender: 'women' | 'men' | null | undefined): read
   return gender === 'men' ? SUGGESTION_CHIPS_MEN : SUGGESTION_CHIPS_WOMEN;
 }
 
+/**
+ * 최초 랜딩(Auto Keyboard) 컴포저 위 제안 칩 — 온보딩 성별로 분기하는 세로
+ * 리스트 3개. 위 SUGGESTION_CHIPS_* (큐레이션 '찾는 게 없나요?' 블록)와는
+ * 다른 지면·다른 카피다. 두 종류(즉시 검색 / 사진 첨부):
+ *  - kind:'query' — label 을 그대로 서버 쿼리로 전송(한국어). 엔진 검증
+ *    완료 카피라 label === 쿼리. entry_point=chip 으로 즉시 검색.
+ *  - kind:'photo' — 컴포저 '+' 버튼과 동일한 이미지 첨부 플로우 실행,
+ *    검색은 돌리지 않음 (계측 source=suggest).
+ *
+ * ※ 카피 전부 엔진 검증 완료(결과 15~30개). 문구 원문 그대로 — 임의 수정 금지.
+ */
+export type LandingSuggestion =
+  | { id: string; kind: 'query'; label: string }
+  | { id: string; kind: 'photo'; label: string };
+
+export const LANDING_SUGGESTIONS_WOMEN: readonly LandingSuggestion[] = [
+  { id: 'land-w1', kind: 'query', label: '닝닝 공항룩 같은 옷 찾아줘' },
+  { id: 'land-w2', kind: 'query', label: '코르티스 스타일 데님' },
+  { id: 'land-w3', kind: 'photo', label: '사진 한 장으로 찾기' },
+] as const;
+
+export const LANDING_SUGGESTIONS_MEN: readonly LandingSuggestion[] = [
+  { id: 'land-m1', kind: 'query', label: '코르티스 스타일 데님' },
+  { id: 'land-m2', kind: 'query', label: '미니멀한 무채색 가을 자켓' },
+  { id: 'land-m3', kind: 'photo', label: '사진 한 장으로 찾기' },
+] as const;
+
+export function landingSuggestionsForGender(
+  gender: 'women' | 'men' | null | undefined,
+): readonly LandingSuggestion[] {
+  // 성별 미상 → 여성 세트 (기획: 성별 미상 시 여성 세트 적용).
+  return gender === 'men' ? LANDING_SUGGESTIONS_MEN : LANDING_SUGGESTIONS_WOMEN;
+}
+
+/** 최초 랜딩 성별별 플레이스홀더. 성별 미상 → 여성. */
+export const LANDING_PLACEHOLDER: Record<'women' | 'men', string> = {
+  women: '미니멀한 무채색 가을 자켓',
+  men: '10만원 이하 가을 롱슬리브',
+} as const;
+
 // 검증된 영어 query → 한국어 label 역매핑. 유도 칩은 버블엔 한국어 label 을
 // 보이지만 서버엔 영어 query 를 보내 저장하므로, 재입장(getMessages) 시 유저
 // 메시지가 영어로 뜬다. 이 맵으로 알려진 칩 query 를 한국어 label 로 되돌린다.

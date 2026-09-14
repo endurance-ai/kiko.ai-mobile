@@ -5,6 +5,7 @@ import { SymbolView } from "expo-symbols";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
+  InteractionManager,
   Keyboard,
   KeyboardAvoidingView,
   Platform,
@@ -27,7 +28,7 @@ import { GlassSurface } from "@/components/glass-surface";
 import { PixelSpinner, ShimmerText } from "@/components/pixel-spinner";
 import { PRODUCT_CARD_WIDTH, ProductCard } from "@/components/product-card";
 import { TopBar } from "@/components/top-bar";
-import { Haptic, IOSColors, IOSFont, IOSText, Opacity , Radius , withAlpha , Scrim } from "@/theme";
+import { Elevation, Haptic, IOSColors, IOSFont, IOSText, Opacity , Radius , withAlpha , Scrim } from "@/theme";
 import { useKeyboardHeight } from "@/hooks/use-keyboard-height";
 import {
   createSessionStream,
@@ -53,6 +54,7 @@ import {
 } from "@/lib/sse";
 import { uploadImage } from "@/lib/uploads";
 import { CurationSheet } from "@/components/curation-sheet";
+import { HeaderScrim, KeyboardScrim } from "@/components/keyboard-scrim";
 import { ImageStagingView, type StagingItem } from "@/components/image-staging";
 import { analyzeImage } from "@/lib/vision";
 import type { VisionAnalyzeItem } from "@/types/api";
@@ -63,10 +65,12 @@ import { readOnboardingGender, type OnboardingGender } from "@/state/onboarding"
 import {
   chipLabelForQuery,
   chipsForGender,
+  LANDING_PLACEHOLDER,
+  landingSuggestionsForGender,
   type SuggestionChip,
 } from "@/state/suggestion-chips";
 import { useCap } from "@/state/cap";
-import { buildFilterLabel, PRICE_MAX, useFilter } from "@/state/filter";
+import { PRICE_MAX, useFilter } from "@/state/filter";
 import { MOCK_PRODUCTS, type Product } from "@/state/products";
 import { useWishlist } from "@/state/wishlist";
 import type { ClarifyPayload, ProductRef } from "@/types/api";
@@ -161,6 +165,13 @@ type Turn = {
   streamClarify?: ClarifyPayload | null;
   streamClarifyPicks?: string[];
 };
+
+// 최초 랜딩(Explore 빈 화면) 진입 시 컴포저 autofocus 로 키보드 자동 오픈.
+// 즉시 이탈률이 오르면 코드 수정 없이 끌 수 있도록 env 플래그로 감쌌다
+// (EAS 빌드 프로파일에서 EXPO_PUBLIC_AUTO_KEYBOARD=false 로 토글). 기본 on.
+// (analytics API 키와 동일한 EXPO_PUBLIC_ 관례 — 클라 번들 인라인.)
+const AUTO_KEYBOARD_ENABLED =
+  process.env.EXPO_PUBLIC_AUTO_KEYBOARD !== "false";
 
 const SEARCH_HINT = "인디 · 빈티지 2,900+ 브랜드에서 찾는 중…";
 const ANALYZE_HINT = "사진 분석 중… 아이템 추출하고 있어";
@@ -743,6 +754,10 @@ export default function ChatEntryScreen() {
     uploading;
   const hasResults = lastStatus === "results";
   const isEmpty = lastStatus === "empty";
+  // 최초 랜딩(메인 Explore 빈 화면) — 성별 제안 칩 · 성별 플레이스홀더 ·
+  // 오토키보드 · 흰 스크림이 이 상태에서만 뜬다. 과거 채팅 복귀
+  // (resumedFromHistory) · 새 채팅 세션(chatMode) · 대화 진행 중에는 제외.
+  const isLanding = !chatMode && !resumedFromHistory && !hasConversation;
   const canSend =
     !isBusy && !capLocked && (text.trim().length > 0 || pickedImage !== null);
   // 스테이징 전송 활성 — 반드시 상품 버튼('이 제품 기준')을 선택해야 활성.
@@ -832,11 +847,53 @@ export default function ChatEntryScreen() {
       return pool[Math.floor(Math.random() * pool.length)];
     }
     if (pinnedProduct) return "또는 직접 입력...";
+    // 최초 랜딩은 성별별 고정 플레이스홀더 (기획: 여=미니멀한 무채색 가을
+    // 자켓 / 남=10만원 이하 가을 롱슬리브, 성별 미상 시 여성).
+    if (isLanding) {
+      return LANDING_PLACEHOLDER[onboardGender === "men" ? "men" : "women"];
+    }
     const pool = hasResults ? IDLE_AFTER_RESULTS_HINTS : IDLE_INITIAL_HINTS;
     return pool[Math.floor(Math.random() * pool.length)];
-  }, [capLocked, isBusy, hasResults, pinnedProduct]);
+  }, [capLocked, isBusy, hasResults, pinnedProduct, isLanding, onboardGender]);
 
   const kbHeight = useKeyboardHeight();
+  // 컴포저 float 높이 — 흰 스크림의 solid 구간 계산용. onLayout 으로 채운다.
+  const [composerH, setComposerH] = useState(0);
+  // 제안 칩 리스트(3개) 높이 — "사진 칩부터 solid" 를 맞추려고 위 두 칩
+  // 높이(= 2/3)를 빼서 solid 시작점을 사진 칩 상단에 정렬한다.
+  const [suggestH, setSuggestH] = useState(0);
+  // 헤더(안전영역+TopBar) 높이 — 상단 스크림 높이 계산용.
+  const [headerH, setHeaderH] = useState(0);
+  // 컴포저 TextInput ref — 최초 랜딩 오토키보드용.
+  const inputRef = useRef<TextInput>(null);
+  // 오토키보드 발동 조건 — 최초 랜딩이면서, 온보딩 직후/핸드오프/핀 진입이
+  // 아닐 때. env 플래그로 전역 off 가능.
+  const shouldAutoFocus =
+    AUTO_KEYBOARD_ENABLED &&
+    isLanding &&
+    fromParam !== "onboarding" &&
+    !seedParam &&
+    !pinLabelParam &&
+    !capLocked;
+  // 진입 즉시가 아니라 화면이 뜬 뒤에 키보드가 올라오도록.
+  // InteractionManager 로 화면 전환(splash→home 등) 애니메이션이 끝난 뒤에
+  // focus 한다 — 전환 중에 focus 하면 키보드가 전환에 섞여 옆에서 슬라이드하거나
+  // 회색 프레임이 먼저 뜬 뒤 시스템 키보드로 바뀐다. mount 1회만.
+  const autoFocusFiredRef = useRef(false);
+  useEffect(() => {
+    if (!shouldAutoFocus || autoFocusFiredRef.current) return;
+    autoFocusFiredRef.current = true;
+    let settle: ReturnType<typeof setTimeout>;
+    const handle = InteractionManager.runAfterInteractions(() => {
+      // 전환 종료 후 한 틱 더 여유를 둬 레이아웃이 안정된 뒤 focus.
+      settle = setTimeout(() => inputRef.current?.focus(), 80);
+    });
+    return () => {
+      handle.cancel();
+      clearTimeout(settle);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Auto-scroll to bottom whenever messages, status, or keyboard change.
   // 대화가 있을 때만 — 대화 없는(큐레이션만) 상태에서 scrollToEnd 하면
@@ -938,9 +995,16 @@ export default function ChatEntryScreen() {
     }
   };
 
-  const handlePickPhoto = async () => {
+  // source — 첨부 플로우를 어디서 띄웠는지. 'composer' = 컴포저 '+' 버튼,
+  // 'suggest' = 랜딩 제안 칩([사진 한 장으로 찾기]). 둘 다 동일한 첨부
+  // 플로우를 타되 계측만 구분한다 (기획: 사진 칩은 source=suggest).
+  const handlePickPhoto = async (source: "composer" | "suggest" = "composer") => {
     if (isBusy) return;
     Haptic.light();
+    trackEvent("image_attach", {
+      source,
+      session_id: sessionIdRef.current,
+    });
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
       Haptic.error();
@@ -988,12 +1052,6 @@ export default function ChatEntryScreen() {
         }
       })();
     }
-  };
-
-  const handleOpenFilter = () => {
-    if (isBusy) return;
-    Haptic.light();
-    router.push("/filter");
   };
 
   const handlePickItem = (turnId: number, item: VisionItem) => {
@@ -2386,6 +2444,30 @@ export default function ChatEntryScreen() {
         )}
       </ScrollView>
 
+      {/* 최초 랜딩 흰 그라데이션 — solid(흰색)는 "사진 한 장으로 찾기" 칩
+          상단부터 아래로(+키보드), 그 위 두 칩은 페이드. 위 두 칩 높이 =
+          제안 리스트의 2/3(칩 3개 균등). pointerEvents=none. */}
+      {isLanding && composerH > 0 && (
+        <KeyboardScrim
+          // 키보드 열림(칩 노출) 시엔 "사진 칩부터 solid"로 위 두 칩을 페이드
+          // 구간에 넣고, 닫힘(칩 없음) 시엔 컴포저 + 폰 하단 세이프에어리어를
+          // solid 로 덮고 그 위만 살짝 페이드한다. 어느 쪽이든 하단은 항상 깔림.
+          solidHeight={
+            kbHeight > 0
+              ? kbHeight + composerH - (suggestH * 2) / 3
+              : // 닫힘: solid 시작선을 컴포저 아래쪽으로 더 내림 → 컴포저
+                // 대부분이 페이드, 바닥 근처만 solid. 컴포저 바닥은
+                // paddingBottom(insets.bottom+12).
+                insets.bottom + 20
+          }
+          fadeHeight={kbHeight > 0 ? (suggestH * 2) / 3 + 44 : 60}
+          // 키보드 닫힘일 땐 더 투명(0.6)하고, 가로 균일(rightDrop 0)로 헤더
+          // 페이드와 동일한 완만한 그라데이션. 열림일 땐 오른쪽 falloff 유지.
+          peak={kbHeight > 0 ? 0.9 : 0.6}
+          rightDrop={kbHeight > 0 ? 0.6 : 0}
+        />
+      )}
+
       {/* Composer — floats over content so chips/input show real glass with
           the result cards scrolling underneath. */}
       <KeyboardAvoidingView
@@ -2397,9 +2479,12 @@ export default function ChatEntryScreen() {
         <View
           style={[
             styles.composerWrap,
-            { paddingBottom: insets.bottom + 12 },
+            // 키보드가 올라오면 홈 인디케이터 인셋이 키보드에 가려 불필요 →
+            // 간격을 좁히되 살짝만 둔다(8). 닫힘 땐 안전영역 확보.
+            { paddingBottom: kbHeight > 0 ? 8 : insets.bottom + 12 },
             isBusy && styles.composerBusy,
           ]}
+          onLayout={(e) => setComposerH(e.nativeEvent.layout.height)}
         >
           {pinnedAttachment && !capLocked && (
             <View style={styles.attachmentRow}>
@@ -2438,45 +2523,81 @@ export default function ChatEntryScreen() {
 
           <Banner />
 
-          {!activeBanner && (
+          {/* 최초 랜딩 — 온보딩 성별별 제안 칩(세로 리스트 3개). 필터 pill
+              (공용/성별·가격)은 여기서 걷어냈다: 성별은 온보딩값을 서버가
+              taste_profile pin 으로 반영하므로 수동 토글이 불필요. */}
+          {isLanding && kbHeight > 0 && !activeBanner && !capLocked && (
+            <View
+              style={styles.suggestList}
+              onLayout={(e) => setSuggestH(e.nativeEvent.layout.height)}
+            >
+              {landingSuggestionsForGender(onboardGender).map((s) => (
+                <Pressable
+                  key={s.id}
+                  disabled={isBusy}
+                  style={({ pressed }) => [
+                    styles.suggestChip,
+                    pressed && { opacity: Opacity.muted },
+                  ]}
+                  onPress={() => {
+                    Haptic.selection();
+                    if (s.kind === "photo") {
+                      // 사진 칩 — 컴포저 '+' 와 동일한 첨부 플로우, 검색 미실행.
+                      // image_attach(source=suggest) 는 handlePickPhoto 가 발사.
+                      void handlePickPhoto("suggest");
+                      return;
+                    }
+                    // 즉시 검색 — label 을 그대로 서버 쿼리로(엔진 검증 카피).
+                    trackEvent("chip_tap", {
+                      chip_id: s.id,
+                      label_ko: s.label,
+                      query_en: s.label,
+                      session_id: sessionIdRef.current,
+                    });
+                    runStreamingTurn(
+                      s.label,
+                      undefined,
+                      undefined,
+                      undefined,
+                      "chip",
+                    );
+                  }}
+                >
+                  <SymbolView
+                    name={s.kind === "photo" ? "camera" : "magnifyingglass"}
+                    size={21}
+                    tintColor={IOSColors.secondaryLabel}
+                    weight="medium"
+                    style={styles.suggestIcon}
+                  />
+                  <Text style={styles.suggestChipText}>{s.label}</Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
+
+          {/* 결과 상태 — 보정 칩(더 비슷하게/더 저렴하게). */}
+          {hasResults && !activeBanner && (
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.chipRow}
             >
-              <Pressable onPress={handleOpenFilter} disabled={isBusy}>
-                <GlassSurface
-                  variant="pill"
-                  isInteractive
-                  style={styles.filterChip}
+              {critiqueChips.map((c) => (
+                <Pressable
+                  key={c.id}
+                  onPress={() => handleCritique(c.id)}
+                  disabled={isBusy}
                 >
-                  <Text style={styles.filterChipText}>
-                    {buildFilterLabel(filter)}
-                  </Text>
-                  <SymbolView
-                    name="chevron.up"
-                    size={11}
-                    tintColor={IOSColors.secondaryLabel}
-                    weight="semibold"
-                  />
-                </GlassSurface>
-              </Pressable>
-              {hasResults &&
-                critiqueChips.map((c) => (
-                  <Pressable
-                    key={c.id}
-                    onPress={() => handleCritique(c.id)}
-                    disabled={isBusy}
+                  <GlassSurface
+                    variant="pill"
+                    isInteractive
+                    style={styles.critiqueChip}
                   >
-                    <GlassSurface
-                      variant="pill"
-                      isInteractive
-                      style={styles.critiqueChip}
-                    >
-                      <Text style={styles.critiqueChipText}>{c.label}</Text>
-                    </GlassSurface>
-                  </Pressable>
-                ))}
+                    <Text style={styles.critiqueChipText}>{c.label}</Text>
+                  </GlassSurface>
+                </Pressable>
+              ))}
               {/* 골든셋 유도 칩은 메인 큐레이션('찾는 게 없나요?' 블록)으로 이동. */}
             </ScrollView>
           )}
@@ -2505,11 +2626,19 @@ export default function ChatEntryScreen() {
             </View>
           )}
 
-          <GlassSurface variant="composer" style={styles.composer}>
+          {/* 그림자 래퍼 — 컴포저 GlassSurface 는 overflow:hidden 이라 자체
+              그림자가 클립된다. 같은 라운드의 래퍼에 Elevation.lifted 를 얹어
+              스크롤 콘텐츠/스크림과 살짝 분리한다. */}
+          <View style={styles.composerShadow}>
+          <GlassSurface
+            variant="composer"
+            tintColor={IOSColors.systemBackground}
+            style={styles.composer}
+          >
             <Pressable
               hitSlop={6}
               style={styles.composerIcon}
-              onPress={handlePickPhoto}
+              onPress={() => handlePickPhoto("composer")}
               disabled={isBusy || capLocked}
             >
               <SymbolView
@@ -2520,6 +2649,7 @@ export default function ChatEntryScreen() {
               />
             </Pressable>
             <TextInput
+              ref={inputRef}
               value={text}
               onChangeText={setText}
               placeholder={composerPlaceholder}
@@ -2543,13 +2673,23 @@ export default function ChatEntryScreen() {
               />
             </Pressable>
           </GlassSurface>
+          </View>
         </View>
       </KeyboardAvoidingView>
 
+      {/* 헤더 흰 그라데이션 — 위 반투명 → 아래 투명(얇게). 스크롤 콘텐츠가
+          헤더 밑으로 지나가도 타이틀/아이콘이 읽힌다. Explore 메인에서만. */}
+      {!chatMode && !resumedFromHistory && headerH > 0 && (
+        <HeaderScrim height={headerH + 20} />
+      )}
+
       {/* Floating top bar — sits above the scroll so glass pills can show
-          the chat content drifting underneath. Otherwise the pills only
-          have the solid root color behind them and look opaque. */}
-      <View style={styles.topBarFloat} pointerEvents="box-none">
+          the chat content drifting underneath. */}
+      <View
+        style={styles.topBarFloat}
+        pointerEvents="box-none"
+        onLayout={(e) => setHeaderH(e.nativeEvent.layout.height)}
+      >
         <TopBar
           title={chatMode || resumedFromHistory ? "Chat" : "Explore"}
           onBack={
@@ -2909,18 +3049,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     gap: 8,
   },
-  filterChip: {
+  // 최초 랜딩 제안 칩 — 세로 리스트 3개. 좌측 정렬(내용 폭만큼) + 뒤 흰
+  // 그라데이션 배경(KeyboardScrim fill). 칩은 pill 이 아니라 아이콘+텍스트 row.
+  suggestList: {
+    paddingHorizontal: 12,
+    alignItems: "flex-start",
+  },
+  suggestChip: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: Radius.pill,
-    overflow: "hidden",
+    gap: 14,
+    paddingVertical: 9,
+    paddingHorizontal: 0,
   },
-  filterChipText: {
-    ...IOSText.subhead,
-    fontWeight: "500",
+  suggestIcon: {
+    width: 21,
+    height: 21,
+  },
+  suggestChipText: {
+    ...IOSText.body, // 17px / weight 400
     color: IOSColors.label,
     fontFamily: IOSFont.sans,
   },
@@ -3034,6 +3181,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
 
+  // 컴포저 그림자 래퍼 — 라운드는 컴포저와 동일(Radius.xxl)해야 그림자
+  // 모양이 맞는다. overflow 없음(그림자 클립 방지).
+  composerShadow: {
+    borderRadius: Radius.xxl,
+    ...Elevation.lifted,
+  },
   composer: {
     flexDirection: "row",
     alignItems: "center",

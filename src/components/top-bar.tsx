@@ -54,7 +54,11 @@ export function TopBar({
           accessibilityRole="button"
           accessibilityLabel={onBack ? '뒤로가기' : '메뉴'}
         >
-          <GlassSurface variant="pill" isInteractive style={styles.iconPill}>
+          <GlassSurface
+            variant="pill"
+            isInteractive
+            style={styles.iconPill}
+          >
             <SymbolView
               name={onBack ? 'chevron.left' : 'line.3.horizontal'}
               size={20}
@@ -70,7 +74,11 @@ export function TopBar({
           {showCuration && (
             <Animated.View entering={FadeIn.duration(180)} exiting={FadeOut.duration(180)}>
               <Pressable hitSlop={6} onPress={tap(onOpenCuration)}>
-                <GlassSurface variant="pill" isInteractive style={styles.textPill}>
+                <GlassSurface
+                  variant="pill"
+                  isInteractive
+                  style={styles.textPill}
+                >
                   <SymbolView
                     name="sparkles"
                     size={16}
@@ -92,7 +100,11 @@ export function TopBar({
             accessibilityRole="button"
             accessibilityLabel="알림, 읽지 않은 소식 있음"
           >
-            <GlassSurface variant="pill" isInteractive style={styles.iconPill}>
+            <GlassSurface
+              variant="pill"
+              isInteractive
+              style={styles.iconPill}
+            >
               <SymbolView
                 name="bell"
                 size={18}
@@ -109,7 +121,11 @@ export function TopBar({
             accessibilityRole="button"
             accessibilityLabel="찜"
           >
-            <GlassSurface variant="pill" isInteractive style={styles.iconPill}>
+            <GlassSurface
+              variant="pill"
+              isInteractive
+              style={styles.iconPill}
+            >
               <SymbolView
                 name="heart"
                 size={18}
