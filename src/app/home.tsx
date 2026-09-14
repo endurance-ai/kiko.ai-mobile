@@ -918,11 +918,15 @@ export default function ChatEntryScreen() {
   }, []);
 
   // 제안 칩 세션당 1회 — 키보드를 한 번 내리면(첫 포커스 종료) 소진.
+  // 단, 칩이 실제로 한 번 보인 뒤에만 소진한다 — 오토포커스/화면 전환 중
+  // keyboardDidHide 가 튀어 칩을 못 본 채 소진되는 것을 막는다.
   // 리스너 콜백에서 setState 라 effect-body 동기 setState 규칙에 안 걸린다.
   const [chipsHidden, setChipsHidden] = useState(isLandingChipsUsed());
+  const chipsSeenRef = useRef(false);
   useEffect(() => {
     if (chipsHidden) return;
     const sub = Keyboard.addListener("keyboardDidHide", () => {
+      if (!chipsSeenRef.current) return; // 아직 한 번도 안 보였으면 소진 보류
       markLandingChipsUsed();
       setChipsHidden(true);
     });
@@ -939,6 +943,10 @@ export default function ChatEntryScreen() {
     !chipsHidden &&
     !activeBanner &&
     !capLocked;
+  // 칩이 실제로 노출되면 기록 — 위 소진 가드가 이 값을 본다.
+  useEffect(() => {
+    if (chipsVisible) chipsSeenRef.current = true;
+  }, [chipsVisible]);
 
   // Auto-scroll to bottom whenever messages, status, or keyboard change.
   // 대화가 있을 때만 — 대화 없는(큐레이션만) 상태에서 scrollToEnd 하면
