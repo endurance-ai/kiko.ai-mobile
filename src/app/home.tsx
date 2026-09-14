@@ -2504,7 +2504,7 @@ export default function ChatEntryScreen() {
       {chipsVisible && composerH > 0 && (
         <KeyboardScrim
           solidHeight={kbHeight + composerH - (suggestH * 2) / 3}
-          fadeHeight={(suggestH * 2) / 3 + 96}
+          fadeHeight={(suggestH * 2) / 3 + 140}
           peak={0.9}
           rightDrop={0.6}
         />
