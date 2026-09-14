@@ -299,6 +299,17 @@ function claimMainScreenViewed(): boolean {
   return true;
 }
 
+// 랜딩 제안 칩은 앱 세션(JS 런타임)당 최초 1회(첫 포커스)만 노출한다. 키보드를
+// 한 번 내리는 순간 소진 처리 → 이후 재포커스엔 안 뜬다. 모듈 레벨이라 홈
+// 리마운트(핸드오프/복귀)에도 유지된다.
+let landingChipsUsed = false;
+function markLandingChipsUsed(): void {
+  landingChipsUsed = true;
+}
+function isLandingChipsUsed(): boolean {
+  return landingChipsUsed;
+}
+
 const AGENT_INTRO_DEFAULT = "이런 거 어때? · 콕집기로 골라봐";
 const AGENT_INTRO_NARROWING = "이런 거 찾았어 · 근데 좀 갈리네";
 const EMPTY_FALLBACK = "이 무드는 아직 딱 맞는 걸 못 찾았어. 이렇게 해볼까?";
@@ -905,6 +916,21 @@ export default function ChatEntryScreen() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // 제안 칩 세션당 1회 — 키보드를 한 번 내리면(첫 포커스 종료) 소진.
+  // 리스너 콜백에서 setState 라 effect-body 동기 setState 규칙에 안 걸린다.
+  const [chipsHidden, setChipsHidden] = useState(isLandingChipsUsed());
+  useEffect(() => {
+    if (chipsHidden) return;
+    const sub = Keyboard.addListener("keyboardDidHide", () => {
+      markLandingChipsUsed();
+      setChipsHidden(true);
+    });
+    return () => sub.remove();
+  }, [chipsHidden]);
+  // 랜딩 제안 칩 실제 노출 여부 — 칩 렌더와 스크림 geometry 가 공유한다.
+  const chipsVisible =
+    isLanding && kbHeight > 0 && !chipsHidden && !activeBanner && !capLocked;
 
   // Auto-scroll to bottom whenever messages, status, or keyboard change.
   // 대화가 있을 때만 — 대화 없는(큐레이션만) 상태에서 scrollToEnd 하면
@@ -2457,22 +2483,23 @@ export default function ChatEntryScreen() {
           제안 리스트의 2/3(칩 3개 균등). pointerEvents=none. */}
       {isLanding && composerH > 0 && (
         <KeyboardScrim
-          // 키보드 열림(칩 노출) 시엔 "사진 칩부터 solid"로 위 두 칩을 페이드
-          // 구간에 넣고, 닫힘(칩 없음) 시엔 컴포저 + 폰 하단 세이프에어리어를
-          // solid 로 덮고 그 위만 살짝 페이드한다. 어느 쪽이든 하단은 항상 깔림.
+          // 세 케이스:
+          //  · 칩 노출(chipsVisible): "사진 칩부터 solid" — 위 두 칩은 페이드,
+          //    페이드를 위로 더 올려(+96) 칩 위 콘텐츠까지 자연스럽게 감쌈.
+          //  · 키보드 열림·칩 없음: 컴포저+키보드만 solid, 위로 살짝 페이드.
+          //  · 닫힘: 컴포저 바닥 근처만 solid, 대부분 페이드(더 투명).
           solidHeight={
-            kbHeight > 0
+            chipsVisible
               ? kbHeight + composerH - (suggestH * 2) / 3
-              : // 닫힘: solid 시작선을 컴포저 아래쪽으로 더 내림 → 컴포저
-                // 대부분이 페이드, 바닥 근처만 solid. 컴포저 바닥은
-                // paddingBottom(insets.bottom+12).
-                insets.bottom + 20
+              : kbHeight > 0
+                ? kbHeight + composerH
+                : insets.bottom + 20
           }
-          fadeHeight={kbHeight > 0 ? (suggestH * 2) / 3 + 44 : 60}
-          // 키보드 닫힘일 땐 더 투명(0.6)하고, 가로 균일(rightDrop 0)로 헤더
-          // 페이드와 동일한 완만한 그라데이션. 열림일 땐 오른쪽 falloff 유지.
+          fadeHeight={
+            chipsVisible ? (suggestH * 2) / 3 + 96 : kbHeight > 0 ? 44 : 60
+          }
           peak={kbHeight > 0 ? 0.9 : 0.6}
-          rightDrop={kbHeight > 0 ? 0.6 : 0}
+          rightDrop={chipsVisible ? 0.6 : 0}
         />
       )}
 
@@ -2534,7 +2561,7 @@ export default function ChatEntryScreen() {
           {/* 최초 랜딩 — 온보딩 성별별 제안 칩(세로 리스트 3개). 필터 pill
               (공용/성별·가격)은 여기서 걷어냈다: 성별은 온보딩값을 서버가
               taste_profile pin 으로 반영하므로 수동 토글이 불필요. */}
-          {isLanding && kbHeight > 0 && !activeBanner && !capLocked && (
+          {chipsVisible && (
             <View
               style={styles.suggestList}
               onLayout={(e) => setSuggestH(e.nativeEvent.layout.height)}
