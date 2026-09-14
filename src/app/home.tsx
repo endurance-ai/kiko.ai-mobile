@@ -928,9 +928,17 @@ export default function ChatEntryScreen() {
     });
     return () => sub.remove();
   }, [chipsHidden]);
+  // 컴포저 포커스 상태 — 칩 노출 게이트. kbHeight 대신 포커스로 판정해야
+  // 시뮬레이터(하드웨어 키보드 연결 시 소프트 키보드 미표시, kbHeight=0)에서도
+  // 포커스만으로 칩이 뜬다. 실기기에선 포커스=키보드 오픈이라 동일.
+  const [composerFocused, setComposerFocused] = useState(false);
   // 랜딩 제안 칩 실제 노출 여부 — 칩 렌더와 스크림 geometry 가 공유한다.
   const chipsVisible =
-    isLanding && kbHeight > 0 && !chipsHidden && !activeBanner && !capLocked;
+    isLanding &&
+    composerFocused &&
+    !chipsHidden &&
+    !activeBanner &&
+    !capLocked;
 
   // Auto-scroll to bottom whenever messages, status, or keyboard change.
   // 대화가 있을 때만 — 대화 없는(큐레이션만) 상태에서 scrollToEnd 하면
@@ -2687,6 +2695,8 @@ export default function ChatEntryScreen() {
               ref={inputRef}
               value={text}
               onChangeText={setText}
+              onFocus={() => setComposerFocused(true)}
+              onBlur={() => setComposerFocused(false)}
               placeholder={composerPlaceholder}
               placeholderTextColor={IOSColors.placeholderText}
               style={styles.input}
