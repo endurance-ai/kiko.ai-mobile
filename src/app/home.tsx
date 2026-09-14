@@ -2497,7 +2497,9 @@ export default function ChatEntryScreen() {
       {/* 최초 랜딩 흰 그라데이션 — solid(흰색)는 "사진 한 장으로 찾기" 칩
           상단부터 아래로(+키보드), 그 위 두 칩은 페이드. 위 두 칩 높이 =
           제안 리스트의 2/3(칩 3개 균등). pointerEvents=none. */}
-      {isLanding && composerH > 0 && (
+      {/* 포커스했는데 칩이 없는 상태(재포커스=칩 소진)에선 흰 페이드 제거.
+          칩 노출 중이거나(chipsVisible) 미포커스 idle(닫힘 하단 페이드)일 때만. */}
+      {isLanding && composerH > 0 && (chipsVisible || !composerFocused) && (
         <KeyboardScrim
           // 세 케이스:
           //  · 칩 노출(chipsVisible): "사진 칩부터 solid" — 위 두 칩은 페이드,
