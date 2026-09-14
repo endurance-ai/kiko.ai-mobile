@@ -207,6 +207,17 @@ const IDLE_AFTER_RESULTS_HINTS = [
 ];
 const PICK_PROMPT = (n: number) =>
   `이 사진에서 ${n}개 아이템 찾았어. 어떤 거 찾아줄까?`;
+
+// 랜덤 힌트/타임스탬프는 모듈 레벨로 격리한다 — React Compiler 는 컴포넌트
+// 렌더 중 Math.random·Date.now 직접 호출을 impure 로 보고 그 컴포넌트 최적화를
+// 포기(bail)한다. 모듈 함수로 감싸면 렌더 순수성 분석을 통과해 컴파일러가
+// home 을 메모라이즈할 수 있다(동작 동일).
+function pickHint(pool: readonly string[]): string {
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+function fallbackImageName(): string {
+  return `image-${Date.now()}.jpg`;
+}
 // 빈 상태 히어로 카피 — 큐레이션 시트 위에 얹는 메인 표제. 핵심가치를
 // 하나씩 말하는 3종을 마운트마다 랜덤 로테이션 (7/16 재이식 — 7/14 정리 때
 // SSE 결과 카드의 caption(HTML-ish)을 ProductCard 의 brand/name/price 로 분해.
@@ -844,7 +855,7 @@ export default function ChatEntryScreen() {
       const pool = lastSendFromCritiqueRef.current
         ? BUSY_CRITIQUE_HINTS
         : BUSY_GENERAL_HINTS;
-      return pool[Math.floor(Math.random() * pool.length)];
+      return pickHint(pool);
     }
     if (pinnedProduct) return "또는 직접 입력...";
     // 최초 랜딩은 성별별 고정 플레이스홀더 (기획: 여=미니멀한 무채색 가을
@@ -853,7 +864,7 @@ export default function ChatEntryScreen() {
       return LANDING_PLACEHOLDER[onboardGender === "men" ? "men" : "women"];
     }
     const pool = hasResults ? IDLE_AFTER_RESULTS_HINTS : IDLE_INITIAL_HINTS;
-    return pool[Math.floor(Math.random() * pool.length)];
+    return pickHint(pool);
   }, [capLocked, isBusy, hasResults, pinnedProduct, isLanding, onboardGender]);
 
   const kbHeight = useKeyboardHeight();
@@ -1026,7 +1037,7 @@ export default function ChatEntryScreen() {
       const filename =
         asset.fileName ||
         asset.uri.split("/").pop()?.split("?")[0] ||
-        `image-${Date.now()}.jpg`;
+        fallbackImageName();
       pickedAssetRef.current = { filename };
       // 스테이징 진입 — 블러 화면 띄우고, 업로드 → 비전 분석으로 실제 항목/무드
       // 를 채운다. 엔드포인트 미구현/실패 시 목업 유지(catch). 업로드해둔 URL 은
@@ -1348,7 +1359,7 @@ export default function ChatEntryScreen() {
         const pool = lastSendFromCritiqueRef.current
           ? BUSY_CRITIQUE_HINTS
           : BUSY_GENERAL_HINTS;
-        return pool[Math.floor(Math.random() * pool.length)];
+        return pickHint(pool);
       })(),
     };
     setMessages((prev) => [...prev, turn]);
@@ -1666,10 +1677,7 @@ export default function ChatEntryScreen() {
       streamText: "",
       streamProducts: [],
       streamDone: false,
-      streamPlaceholder:
-        BUSY_GENERAL_HINTS[
-          Math.floor(Math.random() * BUSY_GENERAL_HINTS.length)
-        ],
+      streamPlaceholder: pickHint(BUSY_GENERAL_HINTS),
     };
     setMessages((prev) => [...prev, newTurn]);
 
