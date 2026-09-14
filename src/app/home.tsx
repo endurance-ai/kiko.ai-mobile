@@ -2497,27 +2497,16 @@ export default function ChatEntryScreen() {
       {/* 최초 랜딩 흰 그라데이션 — solid(흰색)는 "사진 한 장으로 찾기" 칩
           상단부터 아래로(+키보드), 그 위 두 칩은 페이드. 위 두 칩 높이 =
           제안 리스트의 2/3(칩 3개 균등). pointerEvents=none. */}
-      {/* 포커스했는데 칩이 없는 상태(재포커스=칩 소진)에선 흰 페이드 제거.
-          칩 노출 중이거나(chipsVisible) 미포커스 idle(닫힘 하단 페이드)일 때만. */}
-      {isLanding && composerH > 0 && (chipsVisible || !composerFocused) && (
+      {/* 흰 페이드 = 제안 칩과 항상 함께. 칩이 없는 어떤 상태(닫힘 idle·재포커스
+          소진)에서도 페이드는 렌더하지 않는다 → 포커스 전환 중 깜빡임 없음.
+          "사진 칩부터 solid", 위 두 칩(리스트의 2/3)은 페이드 구간, 페이드를
+          위로 더 올려(+96) 칩 위 콘텐츠까지 자연스럽게 감싼다. */}
+      {chipsVisible && composerH > 0 && (
         <KeyboardScrim
-          // 세 케이스:
-          //  · 칩 노출(chipsVisible): "사진 칩부터 solid" — 위 두 칩은 페이드,
-          //    페이드를 위로 더 올려(+96) 칩 위 콘텐츠까지 자연스럽게 감쌈.
-          //  · 키보드 열림·칩 없음: 컴포저+키보드만 solid, 위로 살짝 페이드.
-          //  · 닫힘: 컴포저 바닥 근처만 solid, 대부분 페이드(더 투명).
-          solidHeight={
-            chipsVisible
-              ? kbHeight + composerH - (suggestH * 2) / 3
-              : kbHeight > 0
-                ? kbHeight + composerH
-                : insets.bottom + 20
-          }
-          fadeHeight={
-            chipsVisible ? (suggestH * 2) / 3 + 96 : kbHeight > 0 ? 44 : 60
-          }
-          peak={kbHeight > 0 ? 0.9 : 0.6}
-          rightDrop={chipsVisible ? 0.6 : 0}
+          solidHeight={kbHeight + composerH - (suggestH * 2) / 3}
+          fadeHeight={(suggestH * 2) / 3 + 96}
+          peak={0.9}
+          rightDrop={0.6}
         />
       )}
 
