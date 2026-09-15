@@ -399,9 +399,17 @@ async function fetchLinkPreviewImage(url: string): Promise<string | null> {
 
 /**
  * Convert server message history (chronological) into the home Turn list.
- * Each (user, assistant) pair becomes a single completed SSE-style turn.
- * Trailing user message with no reply (rare) still renders as a turn with
- * empty assistant content so the user input is visible.
+ *
+ * The transcript is NOT strictly user↔assistant alternating: one user turn can
+ * produce several assistant rows (preamble/clarify + results) and the user can
+ * send consecutive messages before the assistant replies. The previous 1:1
+ * pairing (`i += 2`) mis-paired those and DROPPED the results row — so restored
+ * conversations showed the text but none of the product cards.
+ *
+ * New rule: each user message starts a turn; each assistant message MERGES into
+ * the most recent turn (text joined by blank line, product_refs concatenated,
+ * latest search_id wins). A leading assistant with no preceding user gets a
+ * synthetic empty-user turn. No product_refs are ever dropped.
  */
 function messageItemsToTurns(
   items: import("@/types/api").MessageItem[],
@@ -412,34 +420,44 @@ function messageItemsToTurns(
       new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
   );
   const turns: Turn[] = [];
-  let i = 0;
-  while (i < sorted.length) {
-    const userMsg = sorted[i];
-    if (userMsg.role !== "user") {
-      i++;
-      continue;
-    }
-    const assistantMsg =
-      sorted[i + 1]?.role === "assistant" ? sorted[i + 1] : null;
-    const { text: parsedText, anchorProductId } = parseAnchorPrefix(
-      userMsg.content,
-    );
-    // 유도 칩은 서버에 검증된 영어 query 로 저장돼 재입장 시 영어로 뜬다.
-    // 알려진 칩 query 면 한국어 label 로 되돌려 사용자가 친 대로 보이게 한다.
-    const userText = chipLabelForQuery(parsedText) ?? parsedText;
-    turns.push({
+  const pushUserTurn = (text: string, anchorProductId?: string): Turn => {
+    const turn: Turn = {
       id: nextIdRef.current++,
-      user: { text: userText, anchorProductId },
+      user: { text, anchorProductId },
       status: "results",
       isStream: true,
-      streamText: assistantMsg?.content ?? "",
-      streamProducts: assistantMsg?.product_refs ?? [],
-      // 서버가 어시스턴트 턴에 결과 세트 search_id 를 실어 보내므로,
-      // 재접속 시에도 [더보기] CTA 를 복원 가능.
-      streamSearchId: assistantMsg?.search_id ?? undefined,
+      streamText: "",
+      streamProducts: [],
       streamDone: true,
-    });
-    i += assistantMsg ? 2 : 1;
+    };
+    turns.push(turn);
+    return turn;
+  };
+  for (const msg of sorted) {
+    if (msg.role === "user") {
+      const { text: parsedText, anchorProductId } = parseAnchorPrefix(
+        msg.content,
+      );
+      // 유도 칩은 서버에 검증된 영어 query 로 저장돼 재입장 시 영어로 뜬다.
+      // 알려진 칩 query 면 한국어 label 로 되돌려 사용자가 친 대로 보이게 한다.
+      const userText = chipLabelForQuery(parsedText) ?? parsedText;
+      pushUserTurn(userText, anchorProductId);
+      continue;
+    }
+    // assistant — merge into the most recent turn (synthetic turn if none).
+    const turn = turns[turns.length - 1] ?? pushUserTurn("");
+    const prev = turn.streamText ?? "";
+    const next = msg.content ?? "";
+    turn.streamText = prev && next ? `${prev}\n\n${next}` : prev || next;
+    if (msg.product_refs && msg.product_refs.length > 0) {
+      turn.streamProducts = [
+        ...(turn.streamProducts ?? []),
+        ...msg.product_refs,
+      ];
+    }
+    // 서버가 어시스턴트 턴에 결과 세트 search_id 를 실어 보내므로,
+    // 재접속 시에도 [더보기] CTA 를 복원 가능 (마지막 값 우선).
+    if (msg.search_id) turn.streamSearchId = msg.search_id;
   }
   return turns;
 }
@@ -1460,6 +1478,10 @@ export default function ChatEntryScreen() {
     // 클라이언트에서 파싱 에러로 이어질 때 "요청을 처리하지 못했어요" 배너
     // 가 캡 소진 배너를 덮어버리는 걸 방지.
     let capHitThisTurn = false;
+    // 이번 턴에 상품/텍스트가 하나라도 도착했는지. 도착했으면 뒤늦은 stall/error
+    // 로 턴을 통째로 지우지 않고 그대로 마감한다(card_sent 됐는데 "카드가
+    // 안보이는데" 버그 방지 — 실트레이스 2026-09-05).
+    let deliveredAny = false;
     // 타임아웃 관리 — 이벤트 도착 시마다 리셋, 정적으로 오래 걸리면 발동.
     const killTimeout = () => {
       if (streamTimeoutRef.current) {
@@ -1471,7 +1493,19 @@ export default function ChatEntryScreen() {
       streamRef.current?.cancel();
       streamRef.current = null;
       killTimeout();
-      // 낙관적 어시스턴트 스피너 제거 + 유저 버블도 함께 정리.
+      // 이미 상품/텍스트가 도착했으면 턴을 지우지 말고 그대로 마감한다 —
+      // 늦은 stall 로 이미 보여준 카드를 지우면 "카드가 안보이는데"가 된다.
+      if (deliveredAny) {
+        setMessages((prev) =>
+          prev.map((t) =>
+            t.id === turnId
+              ? { ...t, streamDone: true, isStream: false, status: "results" as const }
+              : t,
+          ),
+        );
+        return;
+      }
+      // 아무것도 못 받았으면 빈 턴 제거 + 재시도 배너.
       setMessages((prev) => prev.filter((t) => t.id !== turnId));
       // 캡 소진 배너가 이미 떠 있는 상황이면 에러 배너로 덮지 않음.
       if (capHitThisTurn) return;
@@ -1554,6 +1588,7 @@ export default function ChatEntryScreen() {
       },
       onTextDelta: (delta: string) => {
         bumpTimeout();
+        if (delta) deliveredAny = true;
         patch((t) => ({ streamText: (t.streamText ?? "") + delta }));
       },
       onProgress: () => {
@@ -1562,6 +1597,7 @@ export default function ChatEntryScreen() {
       },
       onProduct: (product: ProductRef) => {
         bumpTimeout();
+        deliveredAny = true;
         patch((t) => ({
           streamProducts: appendUniqueProduct(t.streamProducts, product),
         }));
@@ -1625,6 +1661,18 @@ export default function ChatEntryScreen() {
       onError: () => {
         killTimeout();
         streamRef.current = null;
+        // 이미 상품/텍스트가 도착했으면 지우지 말고 마감 — 늦은 에러로 이미
+        // 보여준 카드를 지우면 "카드가 안보이는데"가 된다(실트레이스 2026-09-05).
+        if (deliveredAny && !capHitThisTurn) {
+          setMessages((prev) =>
+            prev.map((t) =>
+              t.id === turnId
+                ? { ...t, streamDone: true, isStream: false, status: "results" as const }
+                : t,
+            ),
+          );
+          return;
+        }
         // 캡 소진으로 스트림이 닫힌 케이스면 캡 배너가 이미 떠 있어야 함.
         // 여기서 "요청을 처리하지 못했어요" 를 추가로 띄우면 우선순위상 그
         // 배너가 캡 배너를 덮어 유저가 진짜 원인을 못 봄. 조용히 종료.
