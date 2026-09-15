@@ -464,8 +464,9 @@ const styles = StyleSheet.create({
     marginTop: Spacing.four,
   },
   genderTab: {
-    paddingHorizontal: 18,
-    paddingVertical: 8,
+    // 카테고리 칩과 동일 사이즈.
+    paddingHorizontal: 14,
+    paddingVertical: 7,
     borderRadius: Radius.pill,
     backgroundColor: IOSColors.systemBackground,
     borderWidth: StyleSheet.hairlineWidth,
