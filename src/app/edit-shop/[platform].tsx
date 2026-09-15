@@ -187,7 +187,14 @@ export default function EditShopScreen() {
     return (
       <Pressable
         style={[styles.tile, { width: tileW }]}
-        onPress={() => router.push(`/product/${item.id}` as never)}
+        // 편집샵 발(發) 전환 귀속 — PDP 의 product_view·outbound_click 이
+        // source='edit_shop' + section_id=platform 을 실어, 편집샵별
+        // 클릭→구매하러가기 플로우를 앰플리튜드에서 카운팅한다.
+        onPress={() =>
+          router.push(
+            `/product/${item.id}?source=edit_shop&section_id=${encodeURIComponent(platform)}` as never,
+          )
+        }
         accessibilityRole="button"
       >
         <ExpoImage
