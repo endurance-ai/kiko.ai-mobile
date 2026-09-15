@@ -2734,7 +2734,7 @@ export default function ChatEntryScreen() {
       {/* 헤더 흰 그라데이션 — 위 반투명 → 아래 투명(얇게). 스크롤 콘텐츠가
           헤더 밑으로 지나가도 타이틀/아이콘이 읽힌다. Explore 메인에서만. */}
       {!chatMode && !resumedFromHistory && headerH > 0 && (
-        <HeaderScrim height={headerH + 20} />
+        <HeaderScrim height={headerH + 48} />
       )}
 
       {/* Floating top bar — sits above the scroll so glass pills can show
