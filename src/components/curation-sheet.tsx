@@ -59,7 +59,7 @@ const PLATFORM_BANNER_TEXT: Record<
   '8division': { subtitle: 'Innir, Entire Studios', title: '8DIVISION' },
   kith: { subtitle: 'Nike, Stone Island', title: 'KITH' },
   fr8ight: { subtitle: 'Eastlogue, Unaffected', title: 'FR8IGHT' },
-  etcseoul: { subtitle: 'Tonywack, Art if Acts', title: 'ETC SEOUL' },
+  etcseoul: { subtitle: 'Tonywack, Art if Acts...', title: 'ETC SEOUL' },
 };
 
 // 구 Spacing 토큰 값 — labs 와 동일한 로컬 유지 (재도입 여부:
