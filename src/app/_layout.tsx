@@ -55,7 +55,15 @@ export default function RootLayout() {
                             animation: 'slide_from_bottom',
                           }}
                         />
-                        <Stack.Screen name="home" />
+                        {/* home 은 가로 슬라이드 대신 fade — splash→home
+                            replace 전환이 가로로 움직이면 최초 랜딩 오토키보드
+                            focus 가 그 전환에 물려 키보드가 옆에서 슬라이드하고
+                            회색 프레임이 먼저 뜬다. 가로 모션을 없애 정상적으로
+                            아래에서 올라오게 한다. */}
+                        <Stack.Screen
+                          name="home"
+                          options={{ animation: 'fade' }}
+                        />
                         <Stack.Screen name="list" />
                         <Stack.Screen name="wishlist" />
                         <Stack.Screen name="product/[id]" />

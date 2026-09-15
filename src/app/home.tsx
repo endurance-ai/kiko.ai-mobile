@@ -5,6 +5,7 @@ import { SymbolView } from "expo-symbols";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
+  InteractionManager,
   Keyboard,
   KeyboardAvoidingView,
   Platform,
@@ -22,11 +23,12 @@ import { Image as ExpoImage } from "expo-image";
 
 import { Banner } from "@/components/banner";
 import { FeedbackTrigger } from "@/components/feedback-trigger";
+import { SearchFailedTrigger } from "@/components/search-failed-trigger";
 import { GlassSurface } from "@/components/glass-surface";
 import { PixelSpinner, ShimmerText } from "@/components/pixel-spinner";
 import { PRODUCT_CARD_WIDTH, ProductCard } from "@/components/product-card";
 import { TopBar } from "@/components/top-bar";
-import { Haptic, IOSColors, IOSFont, IOSText, Opacity , Radius , withAlpha , Scrim } from "@/theme";
+import { Elevation, Haptic, IOSColors, IOSFont, IOSText, Opacity , Radius , withAlpha , Scrim } from "@/theme";
 import { useKeyboardHeight } from "@/hooks/use-keyboard-height";
 import {
   createSessionStream,
@@ -52,6 +54,7 @@ import {
 } from "@/lib/sse";
 import { uploadImage } from "@/lib/uploads";
 import { CurationSheet } from "@/components/curation-sheet";
+import { HeaderScrim, KeyboardScrim } from "@/components/keyboard-scrim";
 import { ImageStagingView, type StagingItem } from "@/components/image-staging";
 import { analyzeImage } from "@/lib/vision";
 import type { VisionAnalyzeItem } from "@/types/api";
@@ -62,10 +65,12 @@ import { readOnboardingGender, type OnboardingGender } from "@/state/onboarding"
 import {
   chipLabelForQuery,
   chipsForGender,
+  LANDING_PLACEHOLDER,
+  landingSuggestionsForGender,
   type SuggestionChip,
 } from "@/state/suggestion-chips";
 import { useCap } from "@/state/cap";
-import { buildFilterLabel, PRICE_MAX, useFilter } from "@/state/filter";
+import { PRICE_MAX, useFilter } from "@/state/filter";
 import { MOCK_PRODUCTS, type Product } from "@/state/products";
 import { useWishlist } from "@/state/wishlist";
 import type { ClarifyPayload, ProductRef } from "@/types/api";
@@ -161,6 +166,13 @@ type Turn = {
   streamClarifyPicks?: string[];
 };
 
+// 최초 랜딩(Explore 빈 화면) 진입 시 컴포저 autofocus 로 키보드 자동 오픈.
+// 즉시 이탈률이 오르면 코드 수정 없이 끌 수 있도록 env 플래그로 감쌌다
+// (EAS 빌드 프로파일에서 EXPO_PUBLIC_AUTO_KEYBOARD=false 로 토글). 기본 on.
+// (analytics API 키와 동일한 EXPO_PUBLIC_ 관례 — 클라 번들 인라인.)
+const AUTO_KEYBOARD_ENABLED =
+  process.env.EXPO_PUBLIC_AUTO_KEYBOARD !== "false";
+
 const SEARCH_HINT = "인디 · 빈티지 2,900+ 브랜드에서 찾는 중…";
 const ANALYZE_HINT = "사진 분석 중… 아이템 추출하고 있어";
 // 새 채팅 빈 화면 인트로 인사말 (봇 버블).
@@ -195,6 +207,17 @@ const IDLE_AFTER_RESULTS_HINTS = [
 ];
 const PICK_PROMPT = (n: number) =>
   `이 사진에서 ${n}개 아이템 찾았어. 어떤 거 찾아줄까?`;
+
+// 랜덤 힌트/타임스탬프는 모듈 레벨로 격리한다 — React Compiler 는 컴포넌트
+// 렌더 중 Math.random·Date.now 직접 호출을 impure 로 보고 그 컴포넌트 최적화를
+// 포기(bail)한다. 모듈 함수로 감싸면 렌더 순수성 분석을 통과해 컴파일러가
+// home 을 메모라이즈할 수 있다(동작 동일).
+function pickHint(pool: readonly string[]): string {
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+function fallbackImageName(): string {
+  return `image-${Date.now()}.jpg`;
+}
 // 빈 상태 히어로 카피 — 큐레이션 시트 위에 얹는 메인 표제. 핵심가치를
 // 하나씩 말하는 3종을 마운트마다 랜덤 로테이션 (7/16 재이식 — 7/14 정리 때
 // SSE 결과 카드의 caption(HTML-ish)을 ProductCard 의 brand/name/price 로 분해.
@@ -249,7 +272,7 @@ type PendingChatSeed = {
   };
   imagePayload?: { localImageUri?: string; serverImageUrl?: string };
   serverQueryOverride?: string;
-  entryPoint: "typed" | "chip" | "critique" | "seed" | "retry";
+  entryPoint: "typed" | "chip" | "critique" | "seed" | "retry" | "product_refine";
 };
 // 모듈 레벨 상태는 컴포넌트 밖 함수로만 읽고/쓴다 — 컴포넌트/훅 본문에서
 // 직접 재할당하면 React Compiler 규칙("This value cannot be modified")에
@@ -274,6 +297,17 @@ function claimMainScreenViewed(): boolean {
   if (mainScreenViewedFired) return false;
   mainScreenViewedFired = true;
   return true;
+}
+
+// 랜딩 제안 칩은 앱 세션(JS 런타임)당 최초 1회(첫 포커스)만 노출한다. 키보드를
+// 한 번 내리는 순간 소진 처리 → 이후 재포커스엔 안 뜬다. 모듈 레벨이라 홈
+// 리마운트(핸드오프/복귀)에도 유지된다.
+let landingChipsUsed = false;
+function markLandingChipsUsed(): void {
+  landingChipsUsed = true;
+}
+function isLandingChipsUsed(): boolean {
+  return landingChipsUsed;
 }
 
 const AGENT_INTRO_DEFAULT = "이런 거 어때? · 콕집기로 골라봐";
@@ -682,8 +716,12 @@ export default function ChatEntryScreen() {
         }
       : undefined;
     // Defer slightly so the session effect can stamp sessionIdRef first.
+    // 상품 앵커(pin_*)를 달고 넘어온 핸드오프는 "상품→검색 다리"라 product_refine
+    // 으로 구분한다. 앵커 없는 순수 텍스트 핸드오프만 seed 로 남긴다.
+    const seedEntryPoint = attachment ? "product_refine" : "seed";
     setTimeout(
-      () => runStreamingTurn(seedParam, attachment, undefined, undefined, "seed"),
+      () =>
+        runStreamingTurn(seedParam, attachment, undefined, undefined, seedEntryPoint),
       50,
     );
   }, [
@@ -738,6 +776,10 @@ export default function ChatEntryScreen() {
     uploading;
   const hasResults = lastStatus === "results";
   const isEmpty = lastStatus === "empty";
+  // 최초 랜딩(메인 Explore 빈 화면) — 성별 제안 칩 · 성별 플레이스홀더 ·
+  // 오토키보드 · 흰 스크림이 이 상태에서만 뜬다. 과거 채팅 복귀
+  // (resumedFromHistory) · 새 채팅 세션(chatMode) · 대화 진행 중에는 제외.
+  const isLanding = !chatMode && !resumedFromHistory && !hasConversation;
   const canSend =
     !isBusy && !capLocked && (text.trim().length > 0 || pickedImage !== null);
   // 스테이징 전송 활성 — 반드시 상품 버튼('이 제품 기준')을 선택해야 활성.
@@ -824,14 +866,87 @@ export default function ChatEntryScreen() {
       const pool = lastSendFromCritiqueRef.current
         ? BUSY_CRITIQUE_HINTS
         : BUSY_GENERAL_HINTS;
-      return pool[Math.floor(Math.random() * pool.length)];
+      return pickHint(pool);
     }
     if (pinnedProduct) return "또는 직접 입력...";
+    // 최초 랜딩은 성별별 고정 플레이스홀더 (기획: 여=미니멀한 무채색 가을
+    // 자켓 / 남=10만원 이하 가을 롱슬리브, 성별 미상 시 여성).
+    if (isLanding) {
+      return LANDING_PLACEHOLDER[onboardGender === "men" ? "men" : "women"];
+    }
     const pool = hasResults ? IDLE_AFTER_RESULTS_HINTS : IDLE_INITIAL_HINTS;
-    return pool[Math.floor(Math.random() * pool.length)];
-  }, [capLocked, isBusy, hasResults, pinnedProduct]);
+    return pickHint(pool);
+  }, [capLocked, isBusy, hasResults, pinnedProduct, isLanding, onboardGender]);
 
   const kbHeight = useKeyboardHeight();
+  // 컴포저 float 높이 — 흰 스크림의 solid 구간 계산용. onLayout 으로 채운다.
+  const [composerH, setComposerH] = useState(0);
+  // 제안 칩 리스트(3개) 높이 — "사진 칩부터 solid" 를 맞추려고 위 두 칩
+  // 높이(= 2/3)를 빼서 solid 시작점을 사진 칩 상단에 정렬한다.
+  const [suggestH, setSuggestH] = useState(0);
+  // 헤더(안전영역+TopBar) 높이 — 상단 스크림 높이 계산용.
+  const [headerH, setHeaderH] = useState(0);
+  // 컴포저 TextInput ref — 최초 랜딩 오토키보드용.
+  const inputRef = useRef<TextInput>(null);
+  // 오토키보드 발동 조건 — 최초 랜딩이면서, 온보딩 직후/핸드오프/핀 진입이
+  // 아닐 때. env 플래그로 전역 off 가능.
+  const shouldAutoFocus =
+    AUTO_KEYBOARD_ENABLED &&
+    isLanding &&
+    fromParam !== "onboarding" &&
+    !seedParam &&
+    !pinLabelParam &&
+    !capLocked;
+  // 진입 즉시가 아니라 화면이 뜬 뒤에 키보드가 올라오도록.
+  // InteractionManager 로 화면 전환(splash→home 등) 애니메이션이 끝난 뒤에
+  // focus 한다 — 전환 중에 focus 하면 키보드가 전환에 섞여 옆에서 슬라이드하거나
+  // 회색 프레임이 먼저 뜬 뒤 시스템 키보드로 바뀐다. mount 1회만.
+  const autoFocusFiredRef = useRef(false);
+  useEffect(() => {
+    if (!shouldAutoFocus || autoFocusFiredRef.current) return;
+    autoFocusFiredRef.current = true;
+    let settle: ReturnType<typeof setTimeout>;
+    const handle = InteractionManager.runAfterInteractions(() => {
+      // 전환 종료 후 한 틱 더 여유를 둬 레이아웃이 안정된 뒤 focus.
+      settle = setTimeout(() => inputRef.current?.focus(), 80);
+    });
+    return () => {
+      handle.cancel();
+      clearTimeout(settle);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 제안 칩 세션당 1회 — 키보드를 한 번 내리면(첫 포커스 종료) 소진.
+  // 단, 칩이 실제로 한 번 보인 뒤에만 소진한다 — 오토포커스/화면 전환 중
+  // keyboardDidHide 가 튀어 칩을 못 본 채 소진되는 것을 막는다.
+  // 리스너 콜백에서 setState 라 effect-body 동기 setState 규칙에 안 걸린다.
+  const [chipsHidden, setChipsHidden] = useState(isLandingChipsUsed());
+  const chipsSeenRef = useRef(false);
+  useEffect(() => {
+    if (chipsHidden) return;
+    const sub = Keyboard.addListener("keyboardDidHide", () => {
+      if (!chipsSeenRef.current) return; // 아직 한 번도 안 보였으면 소진 보류
+      markLandingChipsUsed();
+      setChipsHidden(true);
+    });
+    return () => sub.remove();
+  }, [chipsHidden]);
+  // 컴포저 포커스 상태 — 칩 노출 게이트. kbHeight 대신 포커스로 판정해야
+  // 시뮬레이터(하드웨어 키보드 연결 시 소프트 키보드 미표시, kbHeight=0)에서도
+  // 포커스만으로 칩이 뜬다. 실기기에선 포커스=키보드 오픈이라 동일.
+  const [composerFocused, setComposerFocused] = useState(false);
+  // 랜딩 제안 칩 실제 노출 여부 — 칩 렌더와 스크림 geometry 가 공유한다.
+  const chipsVisible =
+    isLanding &&
+    composerFocused &&
+    !chipsHidden &&
+    !activeBanner &&
+    !capLocked;
+  // 칩이 실제로 노출되면 기록 — 위 소진 가드가 이 값을 본다.
+  useEffect(() => {
+    if (chipsVisible) chipsSeenRef.current = true;
+  }, [chipsVisible]);
 
   // Auto-scroll to bottom whenever messages, status, or keyboard change.
   // 대화가 있을 때만 — 대화 없는(큐레이션만) 상태에서 scrollToEnd 하면
@@ -933,9 +1048,16 @@ export default function ChatEntryScreen() {
     }
   };
 
-  const handlePickPhoto = async () => {
+  // source — 첨부 플로우를 어디서 띄웠는지. 'composer' = 컴포저 '+' 버튼,
+  // 'suggest' = 랜딩 제안 칩([사진 한 장으로 찾기]). 둘 다 동일한 첨부
+  // 플로우를 타되 계측만 구분한다 (기획: 사진 칩은 source=suggest).
+  const handlePickPhoto = async (source: "composer" | "suggest" = "composer") => {
     if (isBusy) return;
     Haptic.light();
+    trackEvent("image_attach", {
+      source,
+      session_id: sessionIdRef.current,
+    });
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
       Haptic.error();
@@ -957,7 +1079,7 @@ export default function ChatEntryScreen() {
       const filename =
         asset.fileName ||
         asset.uri.split("/").pop()?.split("?")[0] ||
-        `image-${Date.now()}.jpg`;
+        fallbackImageName();
       pickedAssetRef.current = { filename };
       // 스테이징 진입 — 블러 화면 띄우고, 업로드 → 비전 분석으로 실제 항목/무드
       // 를 채운다. 엔드포인트 미구현/실패 시 목업 유지(catch). 업로드해둔 URL 은
@@ -983,12 +1105,6 @@ export default function ChatEntryScreen() {
         }
       })();
     }
-  };
-
-  const handleOpenFilter = () => {
-    if (isBusy) return;
-    Haptic.light();
-    router.push("/filter");
   };
 
   const handlePickItem = (turnId: number, item: VisionItem) => {
@@ -1178,8 +1294,15 @@ export default function ChatEntryScreen() {
     serverQueryOverride?: string,
     /** 검색 진입 경로 (기획 7/23) — 디깅 시작 방식 분류.
      *  typed=컴포저 직접 입력 / chip=골든셋 유도 칩 / critique=보정 칩 /
-     *  seed=PDP·그리드 핸드오프 / retry=실패 재시도. */
-    entryPoint: "typed" | "chip" | "critique" | "seed" | "retry" = "typed",
+     *  seed=그리드 텍스트 핸드오프 / product_refine=상품 앵커(pin)를 달고 시작된
+     *  리파인(상품→검색 다리) / retry=실패 재시도. */
+    entryPoint:
+      | "typed"
+      | "chip"
+      | "critique"
+      | "seed"
+      | "retry"
+      | "product_refine" = "typed",
   ) => {
     // 비로그인 상태에선 어떤 경로로 들어오든 (composer send / seedParam /
     // critique / retry) 로그인 화면으로 유도. Apple 5.1.1(v) 대응 —
@@ -1278,7 +1401,7 @@ export default function ChatEntryScreen() {
         const pool = lastSendFromCritiqueRef.current
           ? BUSY_CRITIQUE_HINTS
           : BUSY_GENERAL_HINTS;
-        return pool[Math.floor(Math.random() * pool.length)];
+        return pickHint(pool);
       })(),
     };
     setMessages((prev) => [...prev, turn]);
@@ -1596,10 +1719,7 @@ export default function ChatEntryScreen() {
       streamText: "",
       streamProducts: [],
       streamDone: false,
-      streamPlaceholder:
-        BUSY_GENERAL_HINTS[
-          Math.floor(Math.random() * BUSY_GENERAL_HINTS.length)
-        ],
+      streamPlaceholder: pickHint(BUSY_GENERAL_HINTS),
     };
     setMessages((prev) => [...prev, newTurn]);
 
@@ -1861,6 +1981,16 @@ export default function ChatEntryScreen() {
               onPinProduct={handlePinCuration}
               onSaveProduct={handleCurationSave}
               onSeeMore={(section) => {
+                // 편집샵 배너 → 편집샵 화면. 그 외 → 구좌 전용 그리드.
+                if (
+                  section.destinationType === "edit_shop" &&
+                  section.destinationKey
+                ) {
+                  router.push(
+                    `/edit-shop/${encodeURIComponent(section.destinationKey)}`,
+                  );
+                  return;
+                }
                 const q = [
                   `title=${encodeURIComponent(section.title)}`,
                   `gender=${curationGender}`,
@@ -2195,6 +2325,9 @@ export default function ChatEntryScreen() {
                                   ? undefined
                                   : () => void toggleWishlist(String(productId))
                               }
+                              searchId={turn.streamSearchId ?? null}
+                              position={i}
+                              source="search"
                             />
                           );
                         })}
@@ -2248,6 +2381,18 @@ export default function ChatEntryScreen() {
                         />
                       </View>
                     )}
+                    {/* 결과가 실제로 떴을 때만 자가신고 버튼 노출 — clarify/무결과는 제외. */}
+                    {turn.streamDone &&
+                      !turn.streamClarify &&
+                      turn.streamProducts &&
+                      turn.streamProducts.length > 0 && (
+                        <View style={styles.searchFailedRow}>
+                          <SearchFailedTrigger
+                            query={turn.user.text ?? ""}
+                            sessionId={sessionIdRef.current}
+                          />
+                        </View>
+                      )}
                   </View>
                 )}
 
@@ -2310,6 +2455,13 @@ export default function ChatEntryScreen() {
                         <FeedbackTrigger turnKey={`search:${turn.id}`} />
                       </View>
 
+                      <View style={styles.searchFailedRow}>
+                        <SearchFailedTrigger
+                          query={turn.user.text ?? ""}
+                          sessionId={sessionIdRef.current}
+                        />
+                      </View>
+
                       {turn.narrowing && (
                         <View style={styles.narrowingBlock}>
                           <Text style={styles.narrowingQ}>
@@ -2352,6 +2504,22 @@ export default function ChatEntryScreen() {
         )}
       </ScrollView>
 
+      {/* 최초 랜딩 흰 그라데이션 — solid(흰색)는 "사진 한 장으로 찾기" 칩
+          상단부터 아래로(+키보드), 그 위 두 칩은 페이드. 위 두 칩 높이 =
+          제안 리스트의 2/3(칩 3개 균등). pointerEvents=none. */}
+      {/* 흰 페이드 = 제안 칩과 항상 함께. 칩이 없는 어떤 상태(닫힘 idle·재포커스
+          소진)에서도 페이드는 렌더하지 않는다 → 포커스 전환 중 깜빡임 없음.
+          "사진 칩부터 solid", 위 두 칩(리스트의 2/3)은 페이드 구간, 페이드를
+          위로 더 올려(+96) 칩 위 콘텐츠까지 자연스럽게 감싼다. */}
+      {chipsVisible && composerH > 0 && (
+        <KeyboardScrim
+          solidHeight={kbHeight + composerH - (suggestH * 2) / 3}
+          fadeHeight={(suggestH * 2) / 3 + 140}
+          peak={0.9}
+          rightDrop={0.6}
+        />
+      )}
+
       {/* Composer — floats over content so chips/input show real glass with
           the result cards scrolling underneath. */}
       <KeyboardAvoidingView
@@ -2363,9 +2531,12 @@ export default function ChatEntryScreen() {
         <View
           style={[
             styles.composerWrap,
-            { paddingBottom: insets.bottom + 12 },
+            // 키보드가 올라오면 홈 인디케이터 인셋이 키보드에 가려 불필요 →
+            // 간격을 좁히되 살짝만 둔다(8). 닫힘 땐 안전영역 확보.
+            { paddingBottom: kbHeight > 0 ? 8 : insets.bottom + 12 },
             isBusy && styles.composerBusy,
           ]}
+          onLayout={(e) => setComposerH(e.nativeEvent.layout.height)}
         >
           {pinnedAttachment && !capLocked && (
             <View style={styles.attachmentRow}>
@@ -2404,45 +2575,81 @@ export default function ChatEntryScreen() {
 
           <Banner />
 
-          {!activeBanner && (
+          {/* 최초 랜딩 — 온보딩 성별별 제안 칩(세로 리스트 3개). 필터 pill
+              (공용/성별·가격)은 여기서 걷어냈다: 성별은 온보딩값을 서버가
+              taste_profile pin 으로 반영하므로 수동 토글이 불필요. */}
+          {chipsVisible && (
+            <View
+              style={styles.suggestList}
+              onLayout={(e) => setSuggestH(e.nativeEvent.layout.height)}
+            >
+              {landingSuggestionsForGender(onboardGender).map((s) => (
+                <Pressable
+                  key={s.id}
+                  disabled={isBusy}
+                  style={({ pressed }) => [
+                    styles.suggestChip,
+                    pressed && { opacity: Opacity.muted },
+                  ]}
+                  onPress={() => {
+                    Haptic.selection();
+                    if (s.kind === "photo") {
+                      // 사진 칩 — 컴포저 '+' 와 동일한 첨부 플로우, 검색 미실행.
+                      // image_attach(source=suggest) 는 handlePickPhoto 가 발사.
+                      void handlePickPhoto("suggest");
+                      return;
+                    }
+                    // 즉시 검색 — label 을 그대로 서버 쿼리로(엔진 검증 카피).
+                    trackEvent("chip_tap", {
+                      chip_id: s.id,
+                      label_ko: s.label,
+                      query_en: s.label,
+                      session_id: sessionIdRef.current,
+                    });
+                    runStreamingTurn(
+                      s.label,
+                      undefined,
+                      undefined,
+                      undefined,
+                      "chip",
+                    );
+                  }}
+                >
+                  <SymbolView
+                    name={s.kind === "photo" ? "camera" : "magnifyingglass"}
+                    size={21}
+                    tintColor={IOSColors.secondaryLabel}
+                    weight="medium"
+                    style={styles.suggestIcon}
+                  />
+                  <Text style={styles.suggestChipText}>{s.label}</Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
+
+          {/* 결과 상태 — 보정 칩(더 비슷하게/더 저렴하게). */}
+          {hasResults && !activeBanner && (
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.chipRow}
             >
-              <Pressable onPress={handleOpenFilter} disabled={isBusy}>
-                <GlassSurface
-                  variant="pill"
-                  isInteractive
-                  style={styles.filterChip}
+              {critiqueChips.map((c) => (
+                <Pressable
+                  key={c.id}
+                  onPress={() => handleCritique(c.id)}
+                  disabled={isBusy}
                 >
-                  <Text style={styles.filterChipText}>
-                    {buildFilterLabel(filter)}
-                  </Text>
-                  <SymbolView
-                    name="chevron.up"
-                    size={11}
-                    tintColor={IOSColors.secondaryLabel}
-                    weight="semibold"
-                  />
-                </GlassSurface>
-              </Pressable>
-              {hasResults &&
-                critiqueChips.map((c) => (
-                  <Pressable
-                    key={c.id}
-                    onPress={() => handleCritique(c.id)}
-                    disabled={isBusy}
+                  <GlassSurface
+                    variant="pill"
+                    isInteractive
+                    style={styles.critiqueChip}
                   >
-                    <GlassSurface
-                      variant="pill"
-                      isInteractive
-                      style={styles.critiqueChip}
-                    >
-                      <Text style={styles.critiqueChipText}>{c.label}</Text>
-                    </GlassSurface>
-                  </Pressable>
-                ))}
+                    <Text style={styles.critiqueChipText}>{c.label}</Text>
+                  </GlassSurface>
+                </Pressable>
+              ))}
               {/* 골든셋 유도 칩은 메인 큐레이션('찾는 게 없나요?' 블록)으로 이동. */}
             </ScrollView>
           )}
@@ -2471,11 +2678,19 @@ export default function ChatEntryScreen() {
             </View>
           )}
 
-          <GlassSurface variant="composer" style={styles.composer}>
+          {/* 그림자 래퍼 — 컴포저 GlassSurface 는 overflow:hidden 이라 자체
+              그림자가 클립된다. 같은 라운드의 래퍼에 Elevation.lifted 를 얹어
+              스크롤 콘텐츠/스크림과 살짝 분리한다. */}
+          <View style={styles.composerShadow}>
+          <GlassSurface
+            variant="composer"
+            tintColor={IOSColors.systemBackground}
+            style={styles.composer}
+          >
             <Pressable
               hitSlop={6}
               style={styles.composerIcon}
-              onPress={handlePickPhoto}
+              onPress={() => handlePickPhoto("composer")}
               disabled={isBusy || capLocked}
             >
               <SymbolView
@@ -2486,8 +2701,11 @@ export default function ChatEntryScreen() {
               />
             </Pressable>
             <TextInput
+              ref={inputRef}
               value={text}
               onChangeText={setText}
+              onFocus={() => setComposerFocused(true)}
+              onBlur={() => setComposerFocused(false)}
               placeholder={composerPlaceholder}
               placeholderTextColor={IOSColors.placeholderText}
               style={styles.input}
@@ -2509,13 +2727,23 @@ export default function ChatEntryScreen() {
               />
             </Pressable>
           </GlassSurface>
+          </View>
         </View>
       </KeyboardAvoidingView>
 
+      {/* 헤더 흰 그라데이션 — 위 반투명 → 아래 투명(얇게). 스크롤 콘텐츠가
+          헤더 밑으로 지나가도 타이틀/아이콘이 읽힌다. Explore 메인에서만. */}
+      {!chatMode && !resumedFromHistory && headerH > 0 && (
+        <HeaderScrim height={headerH + 20} />
+      )}
+
       {/* Floating top bar — sits above the scroll so glass pills can show
-          the chat content drifting underneath. Otherwise the pills only
-          have the solid root color behind them and look opaque. */}
-      <View style={styles.topBarFloat} pointerEvents="box-none">
+          the chat content drifting underneath. */}
+      <View
+        style={styles.topBarFloat}
+        pointerEvents="box-none"
+        onLayout={(e) => setHeaderH(e.nativeEvent.layout.height)}
+      >
         <TopBar
           title={chatMode || resumedFromHistory ? "Chat" : "Explore"}
           onBack={
@@ -2736,6 +2964,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     marginTop: -8,
   },
+  searchFailedRow: {
+    alignItems: "center",
+    marginTop: 12,
+  },
   seeMoreCta: {
     flexDirection: "row",
     alignItems: "center",
@@ -2871,18 +3103,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     gap: 8,
   },
-  filterChip: {
+  // 최초 랜딩 제안 칩 — 세로 리스트 3개. 좌측 정렬(내용 폭만큼) + 뒤 흰
+  // 그라데이션 배경(KeyboardScrim fill). 칩은 pill 이 아니라 아이콘+텍스트 row.
+  suggestList: {
+    paddingHorizontal: 12,
+    alignItems: "flex-start",
+  },
+  suggestChip: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: Radius.pill,
-    overflow: "hidden",
+    gap: 14,
+    paddingVertical: 9,
+    paddingHorizontal: 0,
   },
-  filterChipText: {
-    ...IOSText.subhead,
-    fontWeight: "500",
+  suggestIcon: {
+    width: 21,
+    height: 21,
+  },
+  suggestChipText: {
+    ...IOSText.body, // 17px / weight 400
     color: IOSColors.label,
     fontFamily: IOSFont.sans,
   },
@@ -2996,6 +3235,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
 
+  // 컴포저 그림자 래퍼 — 라운드는 컴포저와 동일(Radius.xxl)해야 그림자
+  // 모양이 맞는다. overflow 없음(그림자 클립 방지).
+  composerShadow: {
+    borderRadius: Radius.xxl,
+    ...Elevation.lifted,
+  },
   composer: {
     flexDirection: "row",
     alignItems: "center",

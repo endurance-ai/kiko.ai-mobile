@@ -317,6 +317,9 @@ export interface OutboundRequest {
   /** 발화 문맥 — 서버 Literal(curation/search/pdp/wishlist/history). */
   source?: 'curation' | 'search' | 'pdp' | 'wishlist' | 'history';
   section_id?: string;
+  /** 현재 채팅 session_id — 서버가 thread_id 로 변환해 기록(attribution).
+   *  세션이 없으면 생략. */
+  session_id?: string;
 }
 
 export interface OutboundResponse {
@@ -551,6 +554,61 @@ export interface CurationSection {
   title: string;
   subtitle: string | null;
   products: CurationProduct[];
+  /** 배너 이동 목적지 — 'edit_shop' 이면 products 대신 편집샵 화면으로 보낸다.
+   *  이 경우 products 는 비어 있을 수 있다(배너 전용 구좌). */
+  destination_type?: 'edit_shop' | null;
+  /** 편집샵 platform 키 (destination_type='edit_shop' 일 때). */
+  destination_key?: string | null;
+}
+
+// ── 편집샵 (GET /v1/edit-shops/{platform}/…) — ai-server app/api/edit_shops.py
+//    스키마와 1:1. 성별은 women/men 만(서버가 unisex 를 각 성별에 병합). ────────
+export interface EditShopProfile {
+  platform: string;
+  display_name: string;
+  description: string;
+}
+export interface EditShopGenderOption {
+  key: 'women' | 'men';
+  count: number;
+}
+export interface EditShopCategoryOption {
+  /** 카테고리 키. '전체'는 key='all'(EDIT_SHOP_ALL_CATEGORY). */
+  key: string;
+  label: string;
+  count: number;
+  thumbnail_url: string | null;
+}
+/** GET /v1/edit-shops/{platform}/filters?gender= */
+export interface EditShopFiltersResponse {
+  shop: EditShopProfile;
+  selected_gender: 'women' | 'men';
+  genders: EditShopGenderOption[];
+  categories: EditShopCategoryOption[];
+}
+export interface EditShopProduct {
+  id: number;
+  brand: string;
+  name: string;
+  price: number | null;
+  original_price: number | null;
+  sale_price: number | null;
+  image_url: string;
+  product_url: string;
+  /** 파트너 어트리뷰션(UTM 등)이 붙은 외부몰 이동 URL. */
+  external_url: string;
+  ranking_source:
+    | 'what100'
+    | 'popular'
+    | 'daily_shuffle'
+    | 'what100_plus_shuffle';
+  /** 랭킹 생성 기준일(YYYY-MM-DD). */
+  generated_for: string;
+}
+/** GET /v1/edit-shops/{platform}/products?gender=&category=&cursor=&limit= */
+export interface EditShopProductsResponse {
+  items: EditShopProduct[];
+  next_cursor: string | null;
 }
 
 /** GET /v1/curation?gender= — server-driven 메인 구좌. 구좌 개수·순서·타이틀

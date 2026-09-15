@@ -80,6 +80,9 @@ export async function initAnalytics(): Promise<void> {
         // silent
       }
     }
+    // identity 적용 후 콜드 런치당 정확히 1회 발화하는 신뢰 진입 이벤트.
+    // (session_start·main_screen 둘 다 불완전 — 확정 진입 신호 확보)
+    trackEvent('app_opened', { platform: Platform.OS, cold_start: true });
     // init 전에 큐잉된 이벤트 재발사 — ts 는 큐잉 시점 값을 보존한다.
     const queued = pendingEvents;
     pendingEvents = [];
