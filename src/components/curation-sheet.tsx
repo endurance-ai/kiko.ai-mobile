@@ -40,14 +40,26 @@ const TREND_TEMPLATES = [
 ] as const;
 
 // 편집샵 platform 별 고정 배너 이미지 — index 순환(회전) 대신 플랫폼마다 고정.
-// TODO: 현재 3종 템플릿을 5개 플랫폼에 결정적으로 매핑(일부 재사용). 플랫폼
-// 전용 배너 아트가 준비되면 여기만 교체.
+// fr8ight·etcseoul 은 디자인 전용 배너 반영. 나머지 3개는 전용 아트 준비 전까지
+// 템플릿 유지(도착하면 여기만 교체).
 const PLATFORM_BANNER: Record<string, (typeof TREND_TEMPLATES)[number]> = {
   slowsteadyclub: TREND_TEMPLATES[0],
   '8division': TREND_TEMPLATES[1],
-  etcseoul: TREND_TEMPLATES[2],
-  fr8ight: TREND_TEMPLATES[0],
+  etcseoul: require('../../assets/curation-trending/etcseoul.png'),
+  fr8ight: require('../../assets/curation-trending/fr8ight.png'),
   kith: TREND_TEMPLATES[1],
+};
+
+// 편집샵 배너 텍스트(서브타이틀·타이틀) — 서버 섹션 값 대신 플랫폼별 고정 카피.
+const PLATFORM_BANNER_TEXT: Record<
+  string,
+  { subtitle: string; title: string }
+> = {
+  slowsteadyclub: { subtitle: 'Auralee, Nanamica', title: '슬로우스테디클럽' },
+  '8division': { subtitle: 'Innir, Entire Studios', title: '8DIVISION' },
+  kith: { subtitle: 'Nike, Stone Island', title: 'KITH' },
+  fr8ight: { subtitle: 'Eastlogue, Unaffected', title: 'FR8IGHT' },
+  etcseoul: { subtitle: 'Tonywack, Art if Acts', title: 'ETC SEOUL' },
 };
 
 // 구 Spacing 토큰 값 — labs 와 동일한 로컬 유지 (재도입 여부:
@@ -179,12 +191,16 @@ function TrendingCard({
   index: number;
   onPress: () => void;
 }) {
-  // 편집샵은 platform 고정 배너, 그 외 트렌딩은 기존 index 순환.
-  const bg =
-    section.destinationType === 'edit_shop' && section.destinationKey
-      ? (PLATFORM_BANNER[section.destinationKey] ??
-        TREND_TEMPLATES[index % TREND_TEMPLATES.length])
-      : TREND_TEMPLATES[index % TREND_TEMPLATES.length];
+  // 편집샵은 platform 고정 배너/텍스트, 그 외 트렌딩은 기존 index 순환 + 서버 값.
+  const editShopKey =
+    section.destinationType === 'edit_shop' ? section.destinationKey : null;
+  const bg = editShopKey
+    ? (PLATFORM_BANNER[editShopKey] ??
+      TREND_TEMPLATES[index % TREND_TEMPLATES.length])
+    : TREND_TEMPLATES[index % TREND_TEMPLATES.length];
+  const bannerText = editShopKey ? PLATFORM_BANNER_TEXT[editShopKey] : undefined;
+  const subtitle = bannerText?.subtitle ?? section.subtitle;
+  const title = bannerText?.title ?? section.title;
 
   const scale = useSharedValue(1);
   const scaleStyle = useAnimatedStyle(() => ({
@@ -211,13 +227,13 @@ function TrendingCard({
         <Image source={bg} style={StyleSheet.absoluteFill} contentFit="cover" />
         {/* 좌하단 서브타이틀 + 타이틀 (Kiko 워드마크는 배경 이미지에 각인됨). */}
         <View style={styles.trendTextWrap}>
-          {section.subtitle != null && (
+          {subtitle != null && (
             <Text style={styles.trendSubtitle} numberOfLines={1}>
-              {section.subtitle}
+              {subtitle}
             </Text>
           )}
           <Text style={styles.trendTitle} numberOfLines={2}>
-            {section.title}
+            {title}
           </Text>
         </View>
       </Animated.View>
