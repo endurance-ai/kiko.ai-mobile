@@ -6,17 +6,29 @@
  */
 import { Image as ExpoImage } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { SymbolView } from 'expo-symbols';
+import * as WebBrowser from 'expo-web-browser';
+import { type ReactNode, useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
+  Modal,
   Pressable,
   ScrollView,
+  type StyleProp,
   StyleSheet,
   Text,
   useWindowDimensions,
   View,
+  type ViewStyle,
 } from 'react-native';
+import Animated, {
+  FadeIn,
+  FadeOut,
+  runOnJS,
+  SlideInDown,
+  SlideOutDown,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FLOATING_HEADER_OFFSET, FloatingHeader } from '@/components/floating-header';
@@ -26,7 +38,17 @@ import {
   getEditShopProducts,
 } from '@/lib/edit-shops';
 import { readOnboardingGender } from '@/state/onboarding';
-import { Haptic, IOSColors, IOSFont, IOSText, Radius } from '@/theme';
+import {
+  Duration,
+  Haptic,
+  IOSColors,
+  IOSFont,
+  IOSText,
+  Motion,
+  Radius,
+  Scrim,
+  withAlpha,
+} from '@/theme';
 import type { EditShopFiltersResponse, EditShopProduct } from '@/types/api';
 
 const PAGE_SIZE = 21; // 3 배수
@@ -55,6 +77,16 @@ const CATEGORY_META: Record<string, { label: string; rank: number }> = {
 };
 const CATEGORY_UNKNOWN_RANK = 50; // 알려지지 않은 key → 알려진 것 뒤, '기타' 앞
 
+// 편집샵 공식 홈페이지 — 실제 상품 URL 도메인 기준. 서버 프로필에 store_url 이
+// 없어 클라 상수로 둔다(플랫폼 5개 고정). TODO: 프로필에 store_url 추가되면 교체.
+const PLATFORM_HOME: Record<string, string> = {
+  slowsteadyclub: 'https://slowsteadyclub.com',
+  '8division': 'https://www.8division.com',
+  etcseoul: 'https://etcseoul.com',
+  fr8ight: 'https://fr8ight.co.kr',
+  kith: 'https://kith.com',
+};
+
 export default function EditShopScreen() {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
@@ -69,6 +101,7 @@ export default function EditShopScreen() {
   const [products, setProducts] = useState<EditShopProduct[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [descSheetVisible, setDescSheetVisible] = useState(false);
 
   useEffect(() => {
     void readOnboardingGender().then((g) => {
@@ -163,7 +196,19 @@ export default function EditShopScreen() {
     <View style={styles.info}>
       <Text style={styles.shopName}>{headerTitle}</Text>
       {filters?.shop.description ? (
-        <Text style={styles.desc}>{filters.shop.description}</Text>
+        // 브랜드 페이지와 동일 — 말줄임(3줄), 탭하면 전체 설명 바텀시트.
+        <Pressable
+          onPress={() => {
+            Haptic.light();
+            setDescSheetVisible(true);
+          }}
+          accessibilityRole="button"
+          accessibilityLabel="편집샵 설명 전체 보기"
+        >
+          <Text style={styles.desc} numberOfLines={3}>
+            {filters.shop.description}
+          </Text>
+        </Pressable>
       ) : null}
 
       {/* 성별 탭 */}
@@ -280,8 +325,119 @@ export default function EditShopScreen() {
           loadingMore ? <ActivityIndicator style={{ paddingVertical: 24 }} /> : null
         }
       />
+
+      {/* 설명 전문 시트 — ✕ + 전체 설명 + 공식 홈페이지 링크 (브랜드 페이지 문법). */}
+      <AnimatedSheet
+        visible={descSheetVisible}
+        onClose={() => setDescSheetVisible(false)}
+        cardStyle={styles.descSheetCard}
+      >
+        <Pressable
+          hitSlop={8}
+          onPress={() => setDescSheetVisible(false)}
+          style={styles.sheetCloseBtn}
+          accessibilityRole="button"
+          accessibilityLabel="닫기"
+        >
+          <SymbolView
+            name="xmark"
+            size={14}
+            tintColor={IOSColors.secondaryLabel}
+            weight="semibold"
+          />
+        </Pressable>
+        <Text style={styles.descSheetTitle}>{headerTitle}</Text>
+        {filters?.shop.description ? (
+          <Text style={styles.descSheetBody}>{filters.shop.description}</Text>
+        ) : null}
+        {PLATFORM_HOME[platform] ? (
+          <Pressable
+            hitSlop={8}
+            onPress={() => {
+              Haptic.light();
+              void WebBrowser.openBrowserAsync(PLATFORM_HOME[platform], {
+                presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
+              });
+            }}
+            style={styles.descSheetLink}
+            accessibilityRole="link"
+            accessibilityLabel="공식 홈페이지 방문"
+          >
+            <Text style={styles.descSheetLinkText}>공식 홈페이지 방문</Text>
+            <SymbolView
+              name="arrow.up.right"
+              size={13}
+              tintColor={IOSColors.systemBlue}
+              weight="semibold"
+            />
+          </Pressable>
+        ) : null}
+      </AnimatedSheet>
+
       <FloatingHeader title={headerTitle} />
     </View>
+  );
+}
+
+/**
+ * 바텀시트 프리미티브 — 스크림 페이드 + 카드 슬라이드. 브랜드 홈의 것과 동일
+ * (release 급해 공유 추출 대신 복사 — 추후 shared 컴포넌트로 통합 여지).
+ */
+function AnimatedSheet({
+  visible,
+  onClose,
+  cardStyle,
+  children,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  cardStyle?: StyleProp<ViewStyle>;
+  children: ReactNode;
+}) {
+  const insets = useSafeAreaInsets();
+  const [mounted, setMounted] = useState(visible);
+  if (visible && !mounted) setMounted(true);
+  if (!mounted) return null;
+  return (
+    <Modal
+      visible
+      transparent
+      statusBarTranslucent
+      animationType="none"
+      onRequestClose={onClose}
+    >
+      <View style={styles.sheetScrim}>
+        {visible ? (
+          <>
+            <Animated.View
+              entering={FadeIn.duration(Duration.base)}
+              exiting={FadeOut.duration(Duration.base)}
+              style={styles.sheetBackdrop}
+            >
+              <Pressable
+                style={StyleSheet.absoluteFill}
+                onPress={onClose}
+                accessibilityLabel="닫기"
+              />
+            </Animated.View>
+            <Animated.View
+              entering={SlideInDown.springify()
+                .dampingRatio(Motion.drawer.dampingRatio ?? 0.8)
+                .duration(Motion.drawer.duration ?? 300)}
+              exiting={SlideOutDown.duration(Duration.base).withCallback(
+                (finished) => {
+                  'worklet';
+                  if (finished) runOnJS(setMounted)(false);
+                },
+              )}
+              style={[styles.sheetCard, cardStyle, { paddingBottom: insets.bottom + 24 }]}
+            >
+              {children}
+            </Animated.View>
+          </>
+        ) : null}
+      </View>
+    </Modal>
   );
 }
 
@@ -381,6 +537,62 @@ const styles = StyleSheet.create({
     ...IOSText.footnote,
     fontWeight: '400',
     color: IOSColors.systemRed,
+    fontFamily: IOSFont.sans,
+  },
+  // ── 설명 바텀시트 (브랜드 페이지와 동일) ──
+  sheetScrim: { flex: 1, justifyContent: 'flex-end' },
+  sheetBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: withAlpha('#000000', Scrim.heavy),
+  },
+  sheetCard: {
+    backgroundColor: IOSColors.systemBackground,
+    borderTopLeftRadius: Radius.xxl,
+    borderTopRightRadius: Radius.xxl,
+    paddingHorizontal: Spacing.four,
+    paddingTop: Spacing.four,
+    alignItems: 'stretch',
+  },
+  descSheetCard: { alignItems: 'stretch' },
+  sheetCloseBtn: {
+    position: 'absolute',
+    top: Spacing.three,
+    right: Spacing.three,
+    width: 34,
+    height: 34,
+    borderRadius: Radius.pill,
+    backgroundColor: IOSColors.systemGray5,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  descSheetTitle: {
+    ...IOSText.title2,
+    fontWeight: '700',
+    color: IOSColors.label,
+    fontFamily: IOSFont.sans,
+    marginBottom: Spacing.three,
+  },
+  descSheetBody: {
+    ...IOSText.body,
+    color: IOSColors.label,
+    fontFamily: IOSFont.sans,
+    lineHeight: 24,
+  },
+  descSheetLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.one,
+    marginTop: Spacing.four,
+    alignSelf: 'flex-start',
+  },
+  descSheetLinkText: {
+    ...IOSText.body,
+    fontWeight: '600',
+    color: IOSColors.systemBlue,
     fontFamily: IOSFont.sans,
   },
 });
