@@ -33,6 +33,28 @@ const PAGE_SIZE = 21; // 3 배수
 const Spacing = { one: 4, two: 8, three: 16, four: 24 } as const;
 const won = (n: number): string => `₩${Math.round(n).toLocaleString('ko-KR')}`;
 
+// 카테고리 표시 순서(중요도) + 한글 라벨. 서버는 category(영문 L1)를 key 알파벳
+// 순으로 주는데, 의류 핵심(상의·하의·아우터…)부터 오도록 재정렬하고 영문 key
+// 를 한글로 보여준다. 목록에 없는 key 는 뒤로(기타 앞) 밀고 원문 라벨 유지.
+const CATEGORY_META: Record<string, { label: string; rank: number }> = {
+  tops: { label: '상의', rank: 1 },
+  bottoms: { label: '하의', rank: 2 },
+  outerwear: { label: '아우터', rank: 3 },
+  knitwear: { label: '니트', rank: 4 },
+  dresses: { label: '원피스', rank: 5 },
+  shoes: { label: '신발', rank: 6 },
+  bags: { label: '가방', rank: 7 },
+  accessories: { label: '액세서리', rank: 8 },
+  headwear: { label: '모자', rank: 9 },
+  jewelry: { label: '주얼리', rank: 10 },
+  eyewear: { label: '아이웨어', rank: 11 },
+  activewear: { label: '액티브웨어', rank: 12 },
+  swimwear: { label: '스윔웨어', rank: 13 },
+  underwear: { label: '언더웨어', rank: 14 },
+  other: { label: '기타', rank: 99 },
+};
+const CATEGORY_UNKNOWN_RANK = 50; // 알려지지 않은 key → 알려진 것 뒤, '기타' 앞
+
 export default function EditShopScreen() {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
@@ -124,6 +146,18 @@ export default function EditShopScreen() {
     { key: 'women' as const, count: 0 },
     { key: 'men' as const, count: 0 },
   ];
+  // '전체'(all) 고정 첫번째, 나머지는 CATEGORY_META rank 순(미지정 key 는 뒤로).
+  const orderedCategories = [...(filters?.categories ?? [])].sort((a, b) => {
+    const ra =
+      a.key === EDIT_SHOP_ALL_CATEGORY
+        ? -1
+        : (CATEGORY_META[a.key]?.rank ?? CATEGORY_UNKNOWN_RANK);
+    const rb =
+      b.key === EDIT_SHOP_ALL_CATEGORY
+        ? -1
+        : (CATEGORY_META[b.key]?.rank ?? CATEGORY_UNKNOWN_RANK);
+    return ra - rb;
+  });
 
   const listHeader = (
     <View style={styles.info}>
@@ -152,16 +186,17 @@ export default function EditShopScreen() {
         })}
       </View>
 
-      {/* 카테고리 필터 */}
-      {filters?.categories && filters.categories.length > 0 ? (
+      {/* 카테고리 필터 — '전체' 고정 첫번째 + 중요도 순 재정렬 + 한글 라벨. */}
+      {orderedCategories.length > 0 ? (
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           style={styles.catScroll}
           contentContainerStyle={styles.catContent}
         >
-          {filters.categories.map((c) => {
+          {orderedCategories.map((c) => {
             const on = category === c.key;
+            const label = CATEGORY_META[c.key]?.label ?? c.label;
             return (
               <Pressable
                 key={c.key}
@@ -171,7 +206,7 @@ export default function EditShopScreen() {
                 accessibilityState={{ selected: on }}
               >
                 <Text style={[styles.catChipText, on && styles.catChipTextOn]}>
-                  {c.label}
+                  {label}
                 </Text>
               </Pressable>
             );
