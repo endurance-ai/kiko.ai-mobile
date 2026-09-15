@@ -32,6 +32,7 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FLOATING_HEADER_OFFSET, FloatingHeader } from '@/components/floating-header';
+import { HeaderScrim } from '@/components/keyboard-scrim';
 import {
   EDIT_SHOP_ALL_CATEGORY,
   getEditShopFilters,
@@ -374,6 +375,9 @@ export default function EditShopScreen() {
         ) : null}
       </AnimatedSheet>
 
+      {/* 헤더 상단 흰 페이드 — 스크롤 콘텐츠가 헤더 밑으로 지나가도 타이틀/
+          아이콘이 읽히게. FloatingHeader(z50) 뒤(z45). */}
+      <HeaderScrim height={insets.top + FLOATING_HEADER_OFFSET + 12} />
       <FloatingHeader title={headerTitle} />
     </View>
   );
