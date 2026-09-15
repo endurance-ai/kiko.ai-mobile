@@ -474,8 +474,8 @@ const styles = StyleSheet.create({
   },
   genderTabOn: { backgroundColor: IOSColors.label, borderColor: IOSColors.label },
   genderTabText: {
+    // 카테고리 칩과 동일 — 볼드 없이 기본 굵기.
     ...IOSText.subhead,
-    fontWeight: '600',
     color: IOSColors.label,
     fontFamily: IOSFont.sans,
   },
