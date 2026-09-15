@@ -32,13 +32,23 @@ import { type Product } from '@/state/products';
 import { Haptic, IOSColors, IOSFont, IOSText, Motion, withAlpha } from '@/theme';
 import type { CurationSection } from '@/types/api';
 
-// 트렌딩 배너 배경 템플릿(디자인 export, Kiko 워드마크 각인 포함). 서버가
-// 섹션 배경을 안 주므로 클라가 index 로 순회 — 트렌딩 섹션 수와 무관하게 순환.
+// 트렌딩 배너 배경 템플릿(디자인 export, Kiko 워드마크 각인 포함).
 const TREND_TEMPLATES = [
   require('../../assets/curation-trending/glow.png'),
   require('../../assets/curation-trending/green.png'),
   require('../../assets/curation-trending/blue.png'),
 ] as const;
+
+// 편집샵 platform 별 고정 배너 이미지 — index 순환(회전) 대신 플랫폼마다 고정.
+// TODO: 현재 3종 템플릿을 5개 플랫폼에 결정적으로 매핑(일부 재사용). 플랫폼
+// 전용 배너 아트가 준비되면 여기만 교체.
+const PLATFORM_BANNER: Record<string, (typeof TREND_TEMPLATES)[number]> = {
+  slowsteadyclub: TREND_TEMPLATES[0],
+  '8division': TREND_TEMPLATES[1],
+  etcseoul: TREND_TEMPLATES[2],
+  fr8ight: TREND_TEMPLATES[0],
+  kith: TREND_TEMPLATES[1],
+};
 
 // 구 Spacing 토큰 값 — labs 와 동일한 로컬 유지 (재도입 여부:
 // docs/design-system-migration.md §3.2 논의 대상).
@@ -76,6 +86,9 @@ type ViewSection = {
   subtitle: string | null;
   trending: boolean;
   products: Product[];
+  /** 배너 이동 목적지 — 'edit_shop' 이면 편집샵 화면으로. */
+  destinationType?: 'edit_shop' | null;
+  destinationKey?: string | null;
 };
 
 // 서버 CurationProduct → 카드 Product. price 는 원화 float → 정수 절사.
@@ -166,7 +179,12 @@ function TrendingCard({
   index: number;
   onPress: () => void;
 }) {
-  const bg = TREND_TEMPLATES[index % TREND_TEMPLATES.length];
+  // 편집샵은 platform 고정 배너, 그 외 트렌딩은 기존 index 순환.
+  const bg =
+    section.destinationType === 'edit_shop' && section.destinationKey
+      ? (PLATFORM_BANNER[section.destinationKey] ??
+        TREND_TEMPLATES[index % TREND_TEMPLATES.length])
+      : TREND_TEMPLATES[index % TREND_TEMPLATES.length];
 
   const scale = useSharedValue(1);
   const scaleStyle = useAnimatedStyle(() => ({
@@ -248,7 +266,7 @@ function TrendingRail({
   return (
     <View style={styles.rowSection}>
       <View style={styles.rowHeader}>
-        <Text style={styles.sectionTitle}>트렌딩</Text>
+        <Text style={styles.sectionTitle}>편집샵 모아보기</Text>
       </View>
       <ScrollView
         ref={scrollRef}
@@ -304,8 +322,14 @@ export function CurationSheet({
   onPinProduct: (product: Product, sectionKey: string) => void;
   /** 찜 토글 — 로그인 시 위시리스트, 비로그인 시 로그인 시트 (home 이 분기). */
   onSaveProduct: (product: Product, sectionKey: string) => void;
-  /** 더보기 — 구좌 전용 그리드 페이지로 이동 (home 이 gender/route 처리). */
-  onSeeMore?: (section: { key: string; title: string }) => void;
+  /** 더보기/배너 탭 — home 이 route 처리. destinationType='edit_shop' 이면
+   *  편집샵 화면으로, 아니면 구좌 전용 그리드 페이지로. */
+  onSeeMore?: (section: {
+    key: string;
+    title: string;
+    destinationType?: 'edit_shop' | null;
+    destinationKey?: string | null;
+  }) => void;
   /** 찜 여부 조회 (위시리스트). */
   isSaved: (productId: string) => boolean;
   /** 이 제목의 섹션 바로 위에 렌더할 노드 ('찾는 게 없나요?' 칩 블록). */
@@ -321,8 +345,13 @@ export function CurationSheet({
         subtitle: s.subtitle,
         trending: s.display_type === 'trending',
         products: toProducts(s),
+        destinationType: s.destination_type ?? null,
+        destinationKey: s.destination_key ?? null,
       }))
-      .filter((s) => s.products.length > 0);
+      // 편집샵 배너는 products 가 비어도 노출(배너 전용 구좌).
+      .filter(
+        (s) => s.products.length > 0 || s.destinationType === 'edit_shop',
+      );
   }, [serverSections]);
 
   // 트렌딩은 서버 순서상 어디에 있든 상단 히어로 레일로 승격, 나머지는 기존
@@ -340,7 +369,14 @@ export function CurationSheet({
       {trendingSections.length > 0 && (
         <TrendingRail
           sections={trendingSections}
-          onOpen={(section) => onSeeMore?.({ key: section.key, title: section.title })}
+          onOpen={(section) =>
+            onSeeMore?.({
+              key: section.key,
+              title: section.title,
+              destinationType: section.destinationType,
+              destinationKey: section.destinationKey,
+            })
+          }
         />
       )}
       {defaultSections.map((section) => {

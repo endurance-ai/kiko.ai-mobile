@@ -1981,6 +1981,16 @@ export default function ChatEntryScreen() {
               onPinProduct={handlePinCuration}
               onSaveProduct={handleCurationSave}
               onSeeMore={(section) => {
+                // 편집샵 배너 → 편집샵 화면. 그 외 → 구좌 전용 그리드.
+                if (
+                  section.destinationType === "edit_shop" &&
+                  section.destinationKey
+                ) {
+                  router.push(
+                    `/edit-shop/${encodeURIComponent(section.destinationKey)}`,
+                  );
+                  return;
+                }
                 const q = [
                   `title=${encodeURIComponent(section.title)}`,
                   `gender=${curationGender}`,
