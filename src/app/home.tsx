@@ -5,6 +5,7 @@ import { SymbolView } from "expo-symbols";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
+  FlatList,
   InteractionManager,
   Keyboard,
   KeyboardAvoidingView,
@@ -985,10 +986,29 @@ export default function ChatEntryScreen() {
     return () => clearTimeout(t);
   }, [messages, kbHeight]);
 
+  // 랜딩(큐레이션) 가상화 스크롤러 ref — 채팅/embedded 는 scrollRef(ScrollView),
+  // 랜딩은 이 FlatList 를 스크롤러로 쓴다(둘은 동시에 마운트되지 않음).
+  const landingListRef = useRef<FlatList | null>(null);
+
   // 컴포저 위 플로팅 '큐레이션' 버튼 — 최상단 큐레이션으로 복귀.
   const scrollToCuration = () => {
     Haptic.light();
     scrollRef.current?.scrollTo({ y: 0, animated: true });
+    landingListRef.current?.scrollToOffset({ offset: 0, animated: true });
+  };
+
+  // 랜딩 FlatList 스크롤 — jump-top 노출 토글. 리스트 전체가 큐레이션이라
+  // 첫 화면 이상 내려가면(대략 vp*0.6) '큐레이션' 버튼을 띄운다.
+  const handleLandingScroll = (e: {
+    nativeEvent: {
+      contentOffset: { y: number };
+      layoutMeasurement: { height: number };
+    };
+  }) => {
+    const y = e.nativeEvent.contentOffset.y;
+    const vpH = e.nativeEvent.layoutMeasurement.height;
+    const next = y > vpH * 0.6;
+    setShowJumpTop((prev) => (prev === next ? prev : next));
   };
 
   // 큐레이션 블록이 화면에 5% 미만 남았을 때만 헤더 '큐레이션' 버튼 노출.
@@ -1970,11 +1990,100 @@ export default function ChatEntryScreen() {
 
   const topPad = insets.top + 52;
 
+  // 큐레이션 시트 — 랜딩은 scroller(FlatList 루트로 가상화), 조합/기타 경로는
+  // embedded(기존 ScrollView 공유). 두 경로가 같은 props 를 쓰도록 헬퍼로 통일.
+  const renderCurationSheet = (scroller: boolean) => (
+    <CurationSheet
+      sections={curationSections}
+      loading={curationLoading || !heavyReady}
+      pinnedProductId={pinnedCurationProduct?.id ?? null}
+      onPressProduct={handleCurationPress}
+      onPinProduct={handlePinCuration}
+      onSaveProduct={handleCurationSave}
+      onSeeMore={(section) => {
+        // 편집샵 배너 → 편집샵 화면. 그 외 → 구좌 전용 그리드.
+        if (section.destinationType === "edit_shop" && section.destinationKey) {
+          router.push(
+            `/edit-shop/${encodeURIComponent(section.destinationKey)}`,
+          );
+          return;
+        }
+        const q = [
+          `title=${encodeURIComponent(section.title)}`,
+          `gender=${curationGender}`,
+        ];
+        router.push(`/curation/${section.key}?${q.join("&")}`);
+      }}
+      isSaved={(id) => isWishlisted(id)}
+      insertBeforeTitle="브랜드 픽"
+      insertBeforeSlot={
+        suggestionChips.length > 0 ? (
+          <View style={styles.findMoreBlock}>
+            <Text style={styles.findMoreTitle}>찾는 게 없나요?</Text>
+            <View style={styles.findMoreChips}>
+              {suggestionChips.map((chip: SuggestionChip) => (
+                <Pressable
+                  key={chip.id}
+                  disabled={isBusy}
+                  onPress={() => {
+                    Haptic.selection();
+                    trackEvent("chip_tap", {
+                      chip_id: chip.id,
+                      label_ko: chip.label,
+                      query_en: chip.query,
+                      session_id: sessionIdRef.current,
+                    });
+                    runStreamingTurn(
+                      chip.label,
+                      undefined,
+                      undefined,
+                      chip.query,
+                      "chip",
+                    );
+                  }}
+                >
+                  <GlassSurface
+                    variant="pill"
+                    isInteractive
+                    style={styles.critiqueChip}
+                  >
+                    <Text style={styles.critiqueChipText}>{chip.label}</Text>
+                  </GlassSurface>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        ) : null
+      }
+      scroller={scroller}
+      {...(scroller
+        ? {
+            listRef: landingListRef,
+            contentContainerStyle: {
+              // embedded 경로의 curationBlock(paddingHorizontal:16)과 동일하게
+              // 좌우 여백을 줘 타이틀/레일 정렬을 맞춘다.
+              paddingHorizontal: 16,
+              paddingTop: topPad + 16,
+              paddingBottom: insets.bottom + 180 + kbHeight,
+            },
+            onScroll: handleLandingScroll,
+            scrollEventThrottle: 16,
+            keyboardDismissMode: "on-drag" as const,
+          }
+        : {})}
+    />
+  );
+
   return (
     <View style={styles.root}>
       {/* 홈 = 단일 스크롤. 큐레이션(발견 구좌)이 항상 최상단에 있고, 사용자가
           요청을 보내면 그 아래로 대화가 이어붙는다. 최초 진입은 최상단
-          유지(auto-scroll 가드), 대화 후엔 헤더 '큐레이션' 버튼으로 복귀. */}
+          유지(auto-scroll 가드), 대화 후엔 헤더 '큐레이션' 버튼으로 복귀.
+          랜딩(대화 없음)은 CurationSheet 를 FlatList 스크롤러로 띄워 세로 섹션을
+          가상화한다. 대화/조합/과거채팅은 아래 단일 ScrollView 유지. */}
+      {isLanding ? (
+        renderCurationSheet(true)
+      ) : (
       <ScrollView
         ref={scrollRef}
         contentContainerStyle={{
@@ -2000,74 +2109,7 @@ export default function ChatEntryScreen() {
               curationLayoutRef.current = { y, height };
             }}
           >
-            <CurationSheet
-              sections={curationSections}
-              loading={curationLoading || !heavyReady}
-              pinnedProductId={pinnedCurationProduct?.id ?? null}
-              onPressProduct={handleCurationPress}
-              onPinProduct={handlePinCuration}
-              onSaveProduct={handleCurationSave}
-              onSeeMore={(section) => {
-                // 편집샵 배너 → 편집샵 화면. 그 외 → 구좌 전용 그리드.
-                if (
-                  section.destinationType === "edit_shop" &&
-                  section.destinationKey
-                ) {
-                  router.push(
-                    `/edit-shop/${encodeURIComponent(section.destinationKey)}`,
-                  );
-                  return;
-                }
-                const q = [
-                  `title=${encodeURIComponent(section.title)}`,
-                  `gender=${curationGender}`,
-                ];
-                router.push(`/curation/${section.key}?${q.join("&")}`);
-              }}
-              isSaved={(id) => isWishlisted(id)}
-              insertBeforeTitle="브랜드 픽"
-              insertBeforeSlot={
-                suggestionChips.length > 0 ? (
-                  <View style={styles.findMoreBlock}>
-                    <Text style={styles.findMoreTitle}>찾는 게 없나요?</Text>
-                    <View style={styles.findMoreChips}>
-                      {suggestionChips.map((chip: SuggestionChip) => (
-                        <Pressable
-                          key={chip.id}
-                          disabled={isBusy}
-                          onPress={() => {
-                            Haptic.selection();
-                            trackEvent("chip_tap", {
-                              chip_id: chip.id,
-                              label_ko: chip.label,
-                              query_en: chip.query,
-                              session_id: sessionIdRef.current,
-                            });
-                            runStreamingTurn(
-                              chip.label,
-                              undefined,
-                              undefined,
-                              chip.query,
-                              "chip",
-                            );
-                          }}
-                        >
-                          <GlassSurface
-                            variant="pill"
-                            isInteractive
-                            style={styles.critiqueChip}
-                          >
-                            <Text style={styles.critiqueChipText}>
-                              {chip.label}
-                            </Text>
-                          </GlassSurface>
-                        </Pressable>
-                      ))}
-                    </View>
-                  </View>
-                ) : null
-              }
-            />
+            {renderCurationSheet(false)}
           </View>
         )}
 
@@ -2530,6 +2572,7 @@ export default function ChatEntryScreen() {
           </View>
         )}
       </ScrollView>
+      )}
 
       {/* 최초 랜딩 흰 그라데이션 — solid(흰색)는 "사진 한 장으로 찾기" 칩
           상단부터 아래로(+키보드), 그 위 두 칩은 페이드. 위 두 칩 높이 =
