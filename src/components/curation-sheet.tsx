@@ -224,7 +224,14 @@ function TrendingCard({
       accessibilityLabel={`${section.title} 트렌딩`}
     >
       <Animated.View style={[styles.trendCard, scaleStyle]}>
-        <Image source={bg} style={StyleSheet.absoluteFill} contentFit="cover" />
+        <Image
+          source={bg}
+          style={StyleSheet.absoluteFill}
+          contentFit="cover"
+          cachePolicy="memory-disk"
+          transition={0}
+          recyclingKey={editShopKey ?? String(index)}
+        />
         {/* 좌하단 서브타이틀 + 타이틀 (Kiko 워드마크는 배경 이미지에 각인됨). */}
         <View style={styles.trendTextWrap}>
           {subtitle != null && (
