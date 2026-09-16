@@ -2532,10 +2532,10 @@ export default function ChatEntryScreen() {
           담당하므로 여기선 !composerFocused 로 한정(가로 균일 rightDrop=0). */}
       {isLanding && !composerFocused && composerH > 0 && (
         <KeyboardScrim
-          // composerH 는 이미 하단 인셋 패딩 포함. idle 은 헤더 스크림 수준의
-          // 낮은 높이 + 낮은 불투명도(더 투명)로 컴포저 아래만 은은히 감싼다.
-          solidHeight={composerH * 0.6}
-          fadeHeight={14}
+          // idle — 위로 갈수록 더 투명한 그라데이션이 지배하도록 fade 비중을
+          // 키우고 solid(바닥) 은 최소화. 윗부분 투명 → 아랫부분 peak.
+          solidHeight={composerH * 0.15}
+          fadeHeight={composerH * 0.55}
           peak={0.55}
           rightDrop={0}
         />
