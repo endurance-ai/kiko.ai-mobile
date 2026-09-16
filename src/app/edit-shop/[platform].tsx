@@ -180,8 +180,14 @@ export default function EditShopScreen() {
     { key: 'women' as const, count: 0 },
     { key: 'men' as const, count: 0 },
   ];
+  // 프런트 임시 가드 — 남성에 새는 성별 부적합 카테고리 숨김(서버 태깅 수정 전까지).
+  // 근본 원인은 서버 오태깅/성별 스코핑(원피스 누수 리포트 참조). 여기선 칩만 가림.
+  const hiddenCategories =
+    gender === 'men' ? new Set(['dresses']) : new Set<string>();
   // '전체'(all) 고정 첫번째, 나머지는 CATEGORY_META rank 순(미지정 key 는 뒤로).
-  const orderedCategories = [...(filters?.categories ?? [])].sort((a, b) => {
+  const orderedCategories = [...(filters?.categories ?? [])]
+    .filter((c) => !hiddenCategories.has(c.key))
+    .sort((a, b) => {
     const ra =
       a.key === EDIT_SHOP_ALL_CATEGORY
         ? -1
