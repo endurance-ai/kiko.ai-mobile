@@ -2547,6 +2547,18 @@ export default function ChatEntryScreen() {
         />
       )}
 
+      {/* idle(비포커스) 컴포저 뒤 흰 페이드 — 컴포저 글래스 아래로 스크롤
+          콘텐츠가 비쳐 어수선해지는 걸 막는다. 포커스 시엔 위 칩 스크림이
+          담당하므로 여기선 !composerFocused 로 한정(가로 균일 rightDrop=0). */}
+      {isLanding && !composerFocused && composerH > 0 && (
+        <KeyboardScrim
+          solidHeight={composerH + insets.bottom + 12}
+          fadeHeight={88}
+          peak={0.9}
+          rightDrop={0}
+        />
+      )}
+
       {/* Composer — floats over content so chips/input show real glass with
           the result cards scrolling underneath. */}
       <KeyboardAvoidingView
