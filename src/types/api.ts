@@ -284,6 +284,10 @@ export interface ProductDetail {
   image_url: string;
   images: string[] | null;
   product_url: string;
+  /** 파트너 어트리뷰션(UTM 등)이 붙은 외부몰 이동 URL. 서버가 실어주면 구매
+   *  버튼이 이걸로 나간다(미제공 시 product_url 폴백). 편집샵 products 의
+   *  external_url 과 동일 계약. */
+  external_url?: string | null;
   in_stock: boolean;
   platform: string;
   gender: string[] | null;
