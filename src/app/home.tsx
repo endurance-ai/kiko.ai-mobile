@@ -2552,8 +2552,8 @@ export default function ChatEntryScreen() {
           담당하므로 여기선 !composerFocused 로 한정(가로 균일 rightDrop=0). */}
       {isLanding && !composerFocused && composerH > 0 && (
         <KeyboardScrim
-          solidHeight={composerH + insets.bottom + 12}
-          fadeHeight={88}
+          solidHeight={composerH + insets.bottom}
+          fadeHeight={28}
           peak={0.9}
           rightDrop={0}
         />
