@@ -310,6 +310,18 @@ function isLandingChipsUsed(): boolean {
   return landingChipsUsed;
 }
 
+// 큐레이션(무거운 세로 시트) 렌더를 첫 진입의 화면 전환 애니메이션 뒤로 미룬다.
+// splash→home 전환 중에 수십 장 카드 트리를 동기 마운트하면 전환이 히치되므로,
+// InteractionManager 로 전환 종료 후 렌더한다(그 사이엔 기존 스켈레톤). 세션당
+// 1회만 — 이후 PDP→홈 뒤로가기 재진입 때는 이미 true 라 스켈레톤 플래시가 없다.
+let homeHeavyReady = false;
+function markHomeHeavyReady(): void {
+  homeHeavyReady = true;
+}
+function isHomeHeavyReady(): boolean {
+  return homeHeavyReady;
+}
+
 const AGENT_INTRO_DEFAULT = "이런 거 어때? · 콕집기로 골라봐";
 const AGENT_INTRO_NARROWING = "이런 거 찾았어 · 근데 좀 갈리네";
 const EMPTY_FALLBACK = "이 무드는 아직 딱 맞는 걸 못 찾았어. 이렇게 해볼까?";
@@ -916,6 +928,19 @@ export default function ChatEntryScreen() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // 큐레이션 세로 시트 렌더를 첫 진입 전환 애니 뒤로 미룸(모듈 플래그 참조).
+  // 이미 준비됐으면(재진입) 즉시 true — 스켈레톤 플래시 없음. 최초 1회만
+  // InteractionManager 로 전환 종료 후 켠다.
+  const [heavyReady, setHeavyReady] = useState(isHomeHeavyReady());
+  useEffect(() => {
+    if (heavyReady) return;
+    const handle = InteractionManager.runAfterInteractions(() => {
+      markHomeHeavyReady();
+      setHeavyReady(true);
+    });
+    return () => handle.cancel();
+  }, [heavyReady]);
 
   // 제안 칩 세션당 1회 — 키보드를 한 번 내리면(첫 포커스 종료) 소진.
   // 단, 칩이 실제로 한 번 보인 뒤에만 소진한다 — 오토포커스/화면 전환 중
@@ -1960,6 +1985,8 @@ export default function ChatEntryScreen() {
         // 스크롤(드래그) 시작하는 순간 키보드 내려감. 흔한 iOS 메시징 앱 UX.
         keyboardDismissMode="on-drag"
         showsVerticalScrollIndicator={false}
+        // offscreen 큐레이션 섹션/카드 언마운트 → 긴 세로 스크롤 프레임 부하↓.
+        removeClippedSubviews
         onScroll={handleHomeScroll}
         scrollEventThrottle={16}
       >
@@ -1975,7 +2002,7 @@ export default function ChatEntryScreen() {
           >
             <CurationSheet
               sections={curationSections}
-              loading={curationLoading}
+              loading={curationLoading || !heavyReady}
               pinnedProductId={pinnedCurationProduct?.id ?? null}
               onPressProduct={handleCurationPress}
               onPinProduct={handlePinCuration}
