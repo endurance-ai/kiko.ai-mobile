@@ -5,7 +5,6 @@ import { SymbolView } from "expo-symbols";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
-  FlatList,
   InteractionManager,
   Keyboard,
   KeyboardAvoidingView,
@@ -986,55 +985,6 @@ export default function ChatEntryScreen() {
     return () => clearTimeout(t);
   }, [messages, kbHeight]);
 
-  // 랜딩(큐레이션) 가상화 스크롤러 ref — 채팅/embedded 는 scrollRef(ScrollView),
-  // 랜딩은 이 FlatList 를 스크롤러로 쓴다(둘은 동시에 마운트되지 않음).
-  const landingListRef = useRef<FlatList | null>(null);
-
-  // 컴포저 위 플로팅 '큐레이션' 버튼 — 최상단 큐레이션으로 복귀.
-  const scrollToCuration = () => {
-    Haptic.light();
-    scrollRef.current?.scrollTo({ y: 0, animated: true });
-    landingListRef.current?.scrollToOffset({ offset: 0, animated: true });
-  };
-
-  // 랜딩 FlatList 스크롤 — jump-top 노출 토글. 리스트 전체가 큐레이션이라
-  // 첫 화면 이상 내려가면(대략 vp*0.6) '큐레이션' 버튼을 띄운다.
-  const handleLandingScroll = (e: {
-    nativeEvent: {
-      contentOffset: { y: number };
-      layoutMeasurement: { height: number };
-    };
-  }) => {
-    const y = e.nativeEvent.contentOffset.y;
-    const vpH = e.nativeEvent.layoutMeasurement.height;
-    const next = y > vpH * 0.6;
-    setShowJumpTop((prev) => (prev === next ? prev : next));
-  };
-
-  // 큐레이션 블록이 화면에 5% 미만 남았을 때만 헤더 '큐레이션' 버튼 노출.
-  // 큐레이션 블록의 위치(y)·높이를 onLayout 으로 재고, 스크롤 시 뷰포트와
-  // 겹치는 양(overlap)을 화면 높이 대비로 판정한다. 최상단(다 보임)엔 안 뜨고,
-  // 스크롤을 내려 큐레이션이 거의 화면 밖으로 나가면 뜬다.
-  const curationLayoutRef = useRef({ y: 0, height: 0 });
-  const [showJumpTop, setShowJumpTop] = useState(false);
-  const handleHomeScroll = (e: {
-    nativeEvent: {
-      contentOffset: { y: number };
-      layoutMeasurement: { height: number };
-    };
-  }) => {
-    const { y: cTop, height: cH } = curationLayoutRef.current;
-    if (cH <= 0) return;
-    const scrollY = e.nativeEvent.contentOffset.y;
-    const vpH = e.nativeEvent.layoutMeasurement.height;
-    // 큐레이션 블록[cTop, cTop+cH] 과 뷰포트[scrollY, scrollY+vpH] 의 겹침.
-    const overlap = Math.max(
-      0,
-      Math.min(scrollY + vpH, cTop + cH) - Math.max(scrollY, cTop),
-    );
-    const next = overlap < vpH * 0.05;
-    setShowJumpTop((prev) => (prev === next ? prev : next));
-  };
 
   const updateTurn = (id: number, patch: Partial<Turn>) => {
     setMessages((prev) =>
@@ -2058,7 +2008,6 @@ export default function ChatEntryScreen() {
       scroller={scroller}
       {...(scroller
         ? {
-            listRef: landingListRef,
             contentContainerStyle: {
               // embedded 경로의 curationBlock(paddingHorizontal:16)과 동일하게
               // 좌우 여백을 줘 타이틀/레일 정렬을 맞춘다.
@@ -2066,8 +2015,6 @@ export default function ChatEntryScreen() {
               paddingTop: topPad + 16,
               paddingBottom: insets.bottom + 180 + kbHeight,
             },
-            onScroll: handleLandingScroll,
-            scrollEventThrottle: 16,
             keyboardDismissMode: "on-drag" as const,
           }
         : {})}
@@ -2096,21 +2043,11 @@ export default function ChatEntryScreen() {
         showsVerticalScrollIndicator={false}
         // offscreen 큐레이션 섹션/카드 언마운트 → 긴 세로 스크롤 프레임 부하↓.
         removeClippedSubviews
-        onScroll={handleHomeScroll}
-        scrollEventThrottle={16}
       >
         {/* 히어로 표제 + 큐레이션 구좌 — '메인 홈'에서만. 히스토리에서 연
             과거 채팅(resumedFromHistory)에는 채팅 내용만 보인다. */}
         {!resumedFromHistory && !chatMode && (
-          <View
-            style={styles.curationBlock}
-            onLayout={(e) => {
-              const { y, height } = e.nativeEvent.layout;
-              curationLayoutRef.current = { y, height };
-            }}
-          >
-            {renderCurationSheet(false)}
-          </View>
+          <View style={styles.curationBlock}>{renderCurationSheet(false)}</View>
         )}
 
         {/* 새 채팅 인트로 — 빈 챗 화면에서 봇 인사말 버블. 대화 시작하면 사라짐. */}
@@ -2595,8 +2532,10 @@ export default function ChatEntryScreen() {
           담당하므로 여기선 !composerFocused 로 한정(가로 균일 rightDrop=0). */}
       {isLanding && !composerFocused && composerH > 0 && (
         <KeyboardScrim
-          solidHeight={composerH + insets.bottom}
-          fadeHeight={28}
+          // composerH 는 이미 하단 인셋 패딩 포함 → +insets.bottom 이중계산 제거.
+          // 페이드도 최소화해 컴포저 아래만 살짝 감싼다.
+          solidHeight={composerH}
+          fadeHeight={14}
           peak={0.9}
           rightDrop={0}
         />
@@ -2816,7 +2755,7 @@ export default function ChatEntryScreen() {
       {/* 헤더 흰 그라데이션 — 위 반투명 → 아래 투명(얇게). 스크롤 콘텐츠가
           헤더 밑으로 지나가도 타이틀/아이콘이 읽힌다. Explore 메인에서만. */}
       {!chatMode && !resumedFromHistory && headerH > 0 && (
-        <HeaderScrim height={headerH + 48} />
+        <HeaderScrim height={headerH + 64} />
       )}
 
       {/* Floating top bar — sits above the scroll so glass pills can show
@@ -2841,8 +2780,6 @@ export default function ChatEntryScreen() {
             const sid = sessionIdRef.current;
             router.push(sid ? `/sidebar?current=${sid}` : "/sidebar");
           }}
-          showCuration={showJumpTop && !resumedFromHistory && !chatMode}
-          onOpenCuration={scrollToCuration}
           onOpenNotifications={() => router.push("/notifications-inbox")}
           hasUnread={hasUnread}
           onOpenWishlist={() => router.push("/wishlist")}
