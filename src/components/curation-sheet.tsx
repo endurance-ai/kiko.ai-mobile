@@ -10,16 +10,19 @@
  */
 import { Image } from 'expo-image';
 import { SymbolView } from 'expo-symbols';
-import { Fragment, type ReactNode, useMemo, useRef } from 'react';
+import { Fragment, type ReactNode, type Ref, useMemo, useRef } from 'react';
 import {
+  FlatList,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
   Platform,
   Pressable,
   ScrollView,
+  type StyleProp,
   StyleSheet,
   Text,
   View,
+  type ViewStyle,
 } from 'react-native';
 import Animated, {
   useAnimatedStyle,
@@ -331,6 +334,13 @@ export function CurationSheet({
   isSaved,
   insertBeforeTitle,
   insertBeforeSlot,
+  scroller = false,
+  contentContainerStyle,
+  onScroll,
+  scrollEventThrottle,
+  keyboardDismissMode,
+  showsVerticalScrollIndicator,
+  listRef,
 }: {
   /** GET /v1/curation 응답 구좌 (useCuration) — 없으면 로딩/빈 상태. */
   sections?: CurationSection[] | null;
@@ -358,6 +368,18 @@ export function CurationSheet({
   /** 이 제목의 섹션 바로 위에 렌더할 노드 ('찾는 게 없나요?' 칩 블록). */
   insertBeforeTitle?: string;
   insertBeforeSlot?: ReactNode;
+  /** true 면 루트를 FlatList 로 렌더해 세로 섹션을 가상화한다(랜딩 전용 —
+   *  이때 CurationSheet 가 화면 스크롤러다. ScrollView 안에 넣지 말 것).
+   *  false(기본)면 기존처럼 View+map (다른 콘텐츠와 한 ScrollView 공유용). */
+  scroller?: boolean;
+  /** scroller 모드 스크롤 패스스루 (home 이 header/composer 패딩·jump-top 제어). */
+  contentContainerStyle?: StyleProp<ViewStyle>;
+  onScroll?: (e: NativeSyntheticEvent<NativeScrollEvent>) => void;
+  scrollEventThrottle?: number;
+  keyboardDismissMode?: 'none' | 'on-drag' | 'interactive';
+  showsVerticalScrollIndicator?: boolean;
+  /** scroller 모드 FlatList ref — home 의 '큐레이션' 버튼(맨위로)용. */
+  listRef?: Ref<FlatList<ViewSection>>;
 }) {
   const sections = useMemo<ViewSection[]>(() => {
     if (!serverSections || serverSections.length === 0) return [];
@@ -383,37 +405,25 @@ export function CurationSheet({
   const defaultSections = useMemo(() => sections.filter((s) => !s.trending), [sections]);
 
   // 실데이터 없고 아직 로딩 중이면 mock 대신 스켈레톤(데모 깜빡임 방지).
-  if (sections.length === 0) {
+  // scroller 모드는 FlatList 의 ListEmptyComponent 로 처리해 contentContainerStyle
+  // (헤더 top 패딩)을 스켈레톤에도 먹인다. embedded 모드만 여기서 조기 반환.
+  if (!scroller && sections.length === 0) {
     return loading ? <CurationSkeleton /> : null;
   }
 
-  return (
-    <View>
-      {trendingSections.length > 0 && (
-        <TrendingRail
-          sections={trendingSections}
-          onOpen={(section) =>
-            onSeeMore?.({
-              key: section.key,
-              title: section.title,
-              destinationType: section.destinationType,
-              destinationKey: section.destinationKey,
-            })
-          }
-        />
-      )}
-      {defaultSections.map((section) => {
-        // 가로엔 5개만. 그 이상 있으면 '더보기'로 전용 그리드 페이지 유도.
-        const hasMore = section.products.length > CURATION_ROW_LIMIT;
-        const visible = section.products.slice(0, CURATION_ROW_LIMIT);
-        const goMore = () => {
-          Haptic.light();
-          onSeeMore?.({ key: section.key, title: section.title });
-        };
-        return (
-        <Fragment key={section.key}>
-          {section.title === insertBeforeTitle && insertBeforeSlot}
-          <View style={styles.rowSection}>
+  // 세로 섹션 1행(가로 상품 레일) — scroller(FlatList)/embedded(map) 공용.
+  const renderRow = (section: ViewSection) => {
+    // 가로엔 5개만. 그 이상 있으면 '더보기'로 전용 그리드 페이지 유도.
+    const hasMore = section.products.length > CURATION_ROW_LIMIT;
+    const visible = section.products.slice(0, CURATION_ROW_LIMIT);
+    const goMore = () => {
+      Haptic.light();
+      onSeeMore?.({ key: section.key, title: section.title });
+    };
+    return (
+      <Fragment key={section.key}>
+        {section.title === insertBeforeTitle && insertBeforeSlot}
+        <View style={styles.rowSection}>
           {/* 더보기 = 타이틀 바로 오른쪽 › 셰브런(brand-lab '최근 소식 ›' 문법).
               타이틀+셰브런 전체가 탭 영역 → 전용 그리드 페이지로. */}
           {hasMore ? (
@@ -464,10 +474,52 @@ export function CurationSheet({
               />
             ))}
           </ScrollView>
-          </View>
-        </Fragment>
-        );
-      })}
+        </View>
+      </Fragment>
+    );
+  };
+
+  // 트렌딩 레일 — 두 모드 공용 헤더(세로 섹션 위 히어로 레일).
+  const trendingHeader =
+    trendingSections.length > 0 ? (
+      <TrendingRail
+        sections={trendingSections}
+        onOpen={(section) =>
+          onSeeMore?.({
+            key: section.key,
+            title: section.title,
+            destinationType: section.destinationType,
+            destinationKey: section.destinationKey,
+          })
+        }
+      />
+    ) : null;
+
+  // scroller = 랜딩 전용. 루트를 FlatList 로 세로 섹션 가상화(보이는 행만 마운트).
+  if (scroller) {
+    return (
+      <FlatList
+        ref={listRef}
+        data={defaultSections}
+        keyExtractor={(s) => s.key}
+        renderItem={({ item }) => renderRow(item)}
+        ListHeaderComponent={trendingHeader}
+        ListEmptyComponent={loading ? <CurationSkeleton /> : null}
+        contentContainerStyle={contentContainerStyle}
+        onScroll={onScroll}
+        scrollEventThrottle={scrollEventThrottle}
+        keyboardDismissMode={keyboardDismissMode}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={showsVerticalScrollIndicator ?? false}
+      />
+    );
+  }
+
+  // embedded = 다른 콘텐츠(대화)와 한 ScrollView 공유. 기존 동작 유지.
+  return (
+    <View>
+      {trendingHeader}
+      {defaultSections.map((section) => renderRow(section))}
     </View>
   );
 }

@@ -481,6 +481,7 @@ export default function ChatEntryScreen() {
     pin_name: pinNameParam,
     pin_price: pinPriceParam,
     chat: chatParam,
+    platform: platformParam,
   } = useLocalSearchParams<{
     session?: string;
     from?: string;
@@ -491,6 +492,7 @@ export default function ChatEntryScreen() {
     pin_name?: string;
     pin_price?: string;
     chat?: string;
+    platform?: string;
   }>();
   // 채팅 모드 — 메인(Explore) 컴포저發 새 검색이 push 한 home 인스턴스. 큐레이션
   // 을 숨겨 "새 세션 채팅 화면"으로 보이게 하고, 대기 중인 첫 검색을 소비한다.
@@ -985,36 +987,6 @@ export default function ChatEntryScreen() {
     return () => clearTimeout(t);
   }, [messages, kbHeight]);
 
-  // 컴포저 위 플로팅 '큐레이션' 버튼 — 최상단 큐레이션으로 복귀.
-  const scrollToCuration = () => {
-    Haptic.light();
-    scrollRef.current?.scrollTo({ y: 0, animated: true });
-  };
-
-  // 큐레이션 블록이 화면에 5% 미만 남았을 때만 헤더 '큐레이션' 버튼 노출.
-  // 큐레이션 블록의 위치(y)·높이를 onLayout 으로 재고, 스크롤 시 뷰포트와
-  // 겹치는 양(overlap)을 화면 높이 대비로 판정한다. 최상단(다 보임)엔 안 뜨고,
-  // 스크롤을 내려 큐레이션이 거의 화면 밖으로 나가면 뜬다.
-  const curationLayoutRef = useRef({ y: 0, height: 0 });
-  const [showJumpTop, setShowJumpTop] = useState(false);
-  const handleHomeScroll = (e: {
-    nativeEvent: {
-      contentOffset: { y: number };
-      layoutMeasurement: { height: number };
-    };
-  }) => {
-    const { y: cTop, height: cH } = curationLayoutRef.current;
-    if (cH <= 0) return;
-    const scrollY = e.nativeEvent.contentOffset.y;
-    const vpH = e.nativeEvent.layoutMeasurement.height;
-    // 큐레이션 블록[cTop, cTop+cH] 과 뷰포트[scrollY, scrollY+vpH] 의 겹침.
-    const overlap = Math.max(
-      0,
-      Math.min(scrollY + vpH, cTop + cH) - Math.max(scrollY, cTop),
-    );
-    const next = overlap < vpH * 0.05;
-    setShowJumpTop((prev) => (prev === next ? prev : next));
-  };
 
   const updateTurn = (id: number, patch: Partial<Turn>) => {
     setMessages((prev) =>
@@ -1689,6 +1661,9 @@ export default function ChatEntryScreen() {
         imagePayload?.serverImageUrl ?? attachment?.imageUrl ?? undefined,
       // 스테이징(이미 항목 선택)發 이미지 검색 — pick_item(1,2,3,4) 스킵 요청.
       skipItemPick: imagePayload?.skipItemPick,
+      // 편집샵 컴포저發 스코프 검색 — ?platform= 로 넘어온 편집샵으로 결과 제한.
+      // 서버 필터 대기 중이라 랜딩 전엔 no-op(전체 검색). (SPEC: 편집샵 스코프)
+      platform: platformParam || undefined,
     };
 
     // 첫 이벤트가 오기 전 서버가 조용히 멈춰버리는 케이스 대비 즉시 착수.
@@ -1970,11 +1945,97 @@ export default function ChatEntryScreen() {
 
   const topPad = insets.top + 52;
 
+  // 큐레이션 시트 — 랜딩은 scroller(FlatList 루트로 가상화), 조합/기타 경로는
+  // embedded(기존 ScrollView 공유). 두 경로가 같은 props 를 쓰도록 헬퍼로 통일.
+  const renderCurationSheet = (scroller: boolean) => (
+    <CurationSheet
+      sections={curationSections}
+      loading={curationLoading || !heavyReady}
+      pinnedProductId={pinnedCurationProduct?.id ?? null}
+      onPressProduct={handleCurationPress}
+      onPinProduct={handlePinCuration}
+      onSaveProduct={handleCurationSave}
+      onSeeMore={(section) => {
+        // 편집샵 배너 → 편집샵 화면. 그 외 → 구좌 전용 그리드.
+        if (section.destinationType === "edit_shop" && section.destinationKey) {
+          router.push(
+            `/edit-shop/${encodeURIComponent(section.destinationKey)}`,
+          );
+          return;
+        }
+        const q = [
+          `title=${encodeURIComponent(section.title)}`,
+          `gender=${curationGender}`,
+        ];
+        router.push(`/curation/${section.key}?${q.join("&")}`);
+      }}
+      isSaved={(id) => isWishlisted(id)}
+      insertBeforeTitle="브랜드 픽"
+      insertBeforeSlot={
+        suggestionChips.length > 0 ? (
+          <View style={styles.findMoreBlock}>
+            <Text style={styles.findMoreTitle}>찾는 게 없나요?</Text>
+            <View style={styles.findMoreChips}>
+              {suggestionChips.map((chip: SuggestionChip) => (
+                <Pressable
+                  key={chip.id}
+                  disabled={isBusy}
+                  onPress={() => {
+                    Haptic.selection();
+                    trackEvent("chip_tap", {
+                      chip_id: chip.id,
+                      label_ko: chip.label,
+                      query_en: chip.query,
+                      session_id: sessionIdRef.current,
+                    });
+                    runStreamingTurn(
+                      chip.label,
+                      undefined,
+                      undefined,
+                      chip.query,
+                      "chip",
+                    );
+                  }}
+                >
+                  <GlassSurface
+                    variant="pill"
+                    isInteractive
+                    style={styles.critiqueChip}
+                  >
+                    <Text style={styles.critiqueChipText}>{chip.label}</Text>
+                  </GlassSurface>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        ) : null
+      }
+      scroller={scroller}
+      {...(scroller
+        ? {
+            contentContainerStyle: {
+              // embedded 경로의 curationBlock(paddingHorizontal:16)과 동일하게
+              // 좌우 여백을 줘 타이틀/레일 정렬을 맞춘다.
+              paddingHorizontal: 16,
+              paddingTop: topPad + 16,
+              paddingBottom: insets.bottom + 180 + kbHeight,
+            },
+            keyboardDismissMode: "on-drag" as const,
+          }
+        : {})}
+    />
+  );
+
   return (
     <View style={styles.root}>
       {/* 홈 = 단일 스크롤. 큐레이션(발견 구좌)이 항상 최상단에 있고, 사용자가
           요청을 보내면 그 아래로 대화가 이어붙는다. 최초 진입은 최상단
-          유지(auto-scroll 가드), 대화 후엔 헤더 '큐레이션' 버튼으로 복귀. */}
+          유지(auto-scroll 가드), 대화 후엔 헤더 '큐레이션' 버튼으로 복귀.
+          랜딩(대화 없음)은 CurationSheet 를 FlatList 스크롤러로 띄워 세로 섹션을
+          가상화한다. 대화/조합/과거채팅은 아래 단일 ScrollView 유지. */}
+      {isLanding ? (
+        renderCurationSheet(true)
+      ) : (
       <ScrollView
         ref={scrollRef}
         contentContainerStyle={{
@@ -1987,88 +2048,11 @@ export default function ChatEntryScreen() {
         showsVerticalScrollIndicator={false}
         // offscreen 큐레이션 섹션/카드 언마운트 → 긴 세로 스크롤 프레임 부하↓.
         removeClippedSubviews
-        onScroll={handleHomeScroll}
-        scrollEventThrottle={16}
       >
         {/* 히어로 표제 + 큐레이션 구좌 — '메인 홈'에서만. 히스토리에서 연
             과거 채팅(resumedFromHistory)에는 채팅 내용만 보인다. */}
         {!resumedFromHistory && !chatMode && (
-          <View
-            style={styles.curationBlock}
-            onLayout={(e) => {
-              const { y, height } = e.nativeEvent.layout;
-              curationLayoutRef.current = { y, height };
-            }}
-          >
-            <CurationSheet
-              sections={curationSections}
-              loading={curationLoading || !heavyReady}
-              pinnedProductId={pinnedCurationProduct?.id ?? null}
-              onPressProduct={handleCurationPress}
-              onPinProduct={handlePinCuration}
-              onSaveProduct={handleCurationSave}
-              onSeeMore={(section) => {
-                // 편집샵 배너 → 편집샵 화면. 그 외 → 구좌 전용 그리드.
-                if (
-                  section.destinationType === "edit_shop" &&
-                  section.destinationKey
-                ) {
-                  router.push(
-                    `/edit-shop/${encodeURIComponent(section.destinationKey)}`,
-                  );
-                  return;
-                }
-                const q = [
-                  `title=${encodeURIComponent(section.title)}`,
-                  `gender=${curationGender}`,
-                ];
-                router.push(`/curation/${section.key}?${q.join("&")}`);
-              }}
-              isSaved={(id) => isWishlisted(id)}
-              insertBeforeTitle="브랜드 픽"
-              insertBeforeSlot={
-                suggestionChips.length > 0 ? (
-                  <View style={styles.findMoreBlock}>
-                    <Text style={styles.findMoreTitle}>찾는 게 없나요?</Text>
-                    <View style={styles.findMoreChips}>
-                      {suggestionChips.map((chip: SuggestionChip) => (
-                        <Pressable
-                          key={chip.id}
-                          disabled={isBusy}
-                          onPress={() => {
-                            Haptic.selection();
-                            trackEvent("chip_tap", {
-                              chip_id: chip.id,
-                              label_ko: chip.label,
-                              query_en: chip.query,
-                              session_id: sessionIdRef.current,
-                            });
-                            runStreamingTurn(
-                              chip.label,
-                              undefined,
-                              undefined,
-                              chip.query,
-                              "chip",
-                            );
-                          }}
-                        >
-                          <GlassSurface
-                            variant="pill"
-                            isInteractive
-                            style={styles.critiqueChip}
-                          >
-                            <Text style={styles.critiqueChipText}>
-                              {chip.label}
-                            </Text>
-                          </GlassSurface>
-                        </Pressable>
-                      ))}
-                    </View>
-                  </View>
-                ) : null
-              }
-            />
-          </View>
+          <View style={styles.curationBlock}>{renderCurationSheet(false)}</View>
         )}
 
         {/* 새 채팅 인트로 — 빈 챗 화면에서 봇 인사말 버블. 대화 시작하면 사라짐. */}
@@ -2530,6 +2514,7 @@ export default function ChatEntryScreen() {
           </View>
         )}
       </ScrollView>
+      )}
 
       {/* 최초 랜딩 흰 그라데이션 — solid(흰색)는 "사진 한 장으로 찾기" 칩
           상단부터 아래로(+키보드), 그 위 두 칩은 페이드. 위 두 칩 높이 =
@@ -2544,6 +2529,20 @@ export default function ChatEntryScreen() {
           fadeHeight={(suggestH * 2) / 3 + 140}
           peak={0.9}
           rightDrop={0.6}
+        />
+      )}
+
+      {/* idle(비포커스) 컴포저 뒤 흰 페이드 — 컴포저 글래스 아래로 스크롤
+          콘텐츠가 비쳐 어수선해지는 걸 막는다. 포커스 시엔 위 칩 스크림이
+          담당하므로 여기선 !composerFocused 로 한정(가로 균일 rightDrop=0). */}
+      {isLanding && !composerFocused && composerH > 0 && (
+        <KeyboardScrim
+          // idle — 위로 갈수록 더 투명한 그라데이션이 지배하도록 fade 비중을
+          // 키우고 solid(바닥) 은 최소화. 윗부분 투명 → 아랫부분 peak.
+          solidHeight={composerH * 0.15}
+          fadeHeight={composerH * 0.55}
+          peak={0.55}
+          rightDrop={0}
         />
       )}
 
@@ -2761,7 +2760,7 @@ export default function ChatEntryScreen() {
       {/* 헤더 흰 그라데이션 — 위 반투명 → 아래 투명(얇게). 스크롤 콘텐츠가
           헤더 밑으로 지나가도 타이틀/아이콘이 읽힌다. Explore 메인에서만. */}
       {!chatMode && !resumedFromHistory && headerH > 0 && (
-        <HeaderScrim height={headerH + 48} />
+        <HeaderScrim height={headerH + 64} />
       )}
 
       {/* Floating top bar — sits above the scroll so glass pills can show
@@ -2786,8 +2785,6 @@ export default function ChatEntryScreen() {
             const sid = sessionIdRef.current;
             router.push(sid ? `/sidebar?current=${sid}` : "/sidebar");
           }}
-          showCuration={showJumpTop && !resumedFromHistory && !chatMode}
-          onOpenCuration={scrollToCuration}
           onOpenNotifications={() => router.push("/notifications-inbox")}
           hasUnread={hasUnread}
           onOpenWishlist={() => router.push("/wishlist")}

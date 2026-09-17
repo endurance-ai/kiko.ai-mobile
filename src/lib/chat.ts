@@ -35,6 +35,8 @@ export interface ChatSendOpts {
   attachedImageUrl?: string;
   /** 스테이징에서 이미 항목 선택 후 검색 — 이미지 첨부해도 pick_item 스킵. */
   skipItemPick?: boolean;
+  /** 편집샵 스코프 — 이 platform 상품으로 결과 제한(서버 필터 대기, no-op 가능). */
+  platform?: string;
 }
 
 function buildRequest(message: string, opts?: ChatSendOpts): ChatRequest {
@@ -44,6 +46,7 @@ function buildRequest(message: string, opts?: ChatSendOpts): ChatRequest {
     price_max: opts?.priceMaxKrw && opts.priceMaxKrw > 0 ? opts.priceMaxKrw : null,
     attached_image_url: opts?.attachedImageUrl || null,
     skip_item_pick: opts?.skipItemPick ? true : undefined,
+    platform: opts?.platform || null,
   };
 }
 
