@@ -77,6 +77,14 @@ export interface ChatRequest {
   /** 스테이징에서 이미 항목을 골라 보낼 때 true — 이미지가 붙어도 서버가
    *  pick_item(1,2,3,4) 재선택을 건너뛰고 바로 이미지 검색으로. */
   skip_item_pick?: boolean;
+  /**
+   * 편집샵 스코프 검색 — 이 platform(수집 출처, 예: 'slowsteadyclub')의 상품으로
+   * 결과를 제한한다. 편집샵 화면 하단 컴포저에서 진입할 때만 실린다.
+   * 서버 ChatRequest·검색 RPC 의 platform 필터는 대기 중(재관 요청) — 서버가
+   * 무시하면 전체 검색으로 동작하고, 서버가 필터를 랜딩하면 클라 무변경으로
+   * 스코프가 켜진다(attached_image_url 과 동일한 선(先)배선 패턴).
+   */
+  platform?: string | null;
 }
 
 /**

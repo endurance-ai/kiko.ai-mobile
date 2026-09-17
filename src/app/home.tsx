@@ -481,6 +481,7 @@ export default function ChatEntryScreen() {
     pin_name: pinNameParam,
     pin_price: pinPriceParam,
     chat: chatParam,
+    platform: platformParam,
   } = useLocalSearchParams<{
     session?: string;
     from?: string;
@@ -491,6 +492,7 @@ export default function ChatEntryScreen() {
     pin_name?: string;
     pin_price?: string;
     chat?: string;
+    platform?: string;
   }>();
   // 채팅 모드 — 메인(Explore) 컴포저發 새 검색이 push 한 home 인스턴스. 큐레이션
   // 을 숨겨 "새 세션 채팅 화면"으로 보이게 하고, 대기 중인 첫 검색을 소비한다.
@@ -1659,6 +1661,9 @@ export default function ChatEntryScreen() {
         imagePayload?.serverImageUrl ?? attachment?.imageUrl ?? undefined,
       // 스테이징(이미 항목 선택)發 이미지 검색 — pick_item(1,2,3,4) 스킵 요청.
       skipItemPick: imagePayload?.skipItemPick,
+      // 편집샵 컴포저發 스코프 검색 — ?platform= 로 넘어온 편집샵으로 결과 제한.
+      // 서버 필터 대기 중이라 랜딩 전엔 no-op(전체 검색). (SPEC: 편집샵 스코프)
+      platform: platformParam || undefined,
     };
 
     // 첫 이벤트가 오기 전 서버가 조용히 멈춰버리는 케이스 대비 즉시 착수.
