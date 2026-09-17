@@ -33,6 +33,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FLOATING_HEADER_OFFSET, FloatingHeader } from '@/components/floating-header';
 import { HeaderScrim } from '@/components/keyboard-scrim';
+import { SearchComposer } from '@/components/search-composer';
 import {
   EDIT_SHOP_ALL_CATEGORY,
   getEditShopFilters,
@@ -323,13 +324,22 @@ export default function EditShopScreen() {
         ListHeaderComponent={listHeader}
         contentContainerStyle={{
           paddingTop: insets.top + FLOATING_HEADER_OFFSET,
-          paddingBottom: insets.bottom + 32,
+          // 하단 고정 컴포저(약 insets+80)에 마지막 행이 가리지 않게 여유.
+          paddingBottom: insets.bottom + 96,
         }}
         showsVerticalScrollIndicator={false}
         onEndReached={loadMore}
         onEndReachedThreshold={0.5}
         ListFooterComponent={
           loadingMore ? <ActivityIndicator style={{ paddingVertical: 24 }} /> : null
+        }
+      />
+
+      {/* 하단 검색 컴포저 — 제안 칩 없이 입력창만. 전송 시 새 채팅(home?chat=1)
+          으로 seed 핸드오프. 미포커싱 땐 컴포저 뒤 흰 페이드가 함께 뜬다. */}
+      <SearchComposer
+        onSubmit={(t) =>
+          router.push(`/home?chat=1&seed=${encodeURIComponent(t)}` as never)
         }
       />
 
