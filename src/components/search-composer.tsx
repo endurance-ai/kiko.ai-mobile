@@ -72,7 +72,9 @@ export function SearchComposer({
         <View
           style={[
             styles.wrap,
-            { paddingBottom: insets.bottom + 12 },
+            // 포커스(키보드 오픈) 시엔 홈 인디케이터 인셋이 키보드에 가려 불필요 →
+            // 8 로 좁혀 컴포저-키보드 갭 제거. 닫힘 땐 안전영역 확보(홈 컴포저 동일).
+            { paddingBottom: focused ? 8 : insets.bottom + 12 },
           ]}
           onLayout={(e) => setComposerH(e.nativeEvent.layout.height)}
         >
