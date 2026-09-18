@@ -12,6 +12,7 @@ import {
   Platform,
   Pressable,
   StyleSheet,
+  Text,
   TextInput,
   View,
 } from 'react-native';
@@ -31,9 +32,13 @@ import {
 
 export function SearchComposer({
   placeholder = '무엇이든 물어보세요',
+  scopeLabel,
   onSubmit,
 }: {
   placeholder?: string;
+  /** 검색 범위 표시 칩 라벨(예: 편집샵 이름). 있으면 컴포저 위에 상시 노출 —
+   *  "여기(이 표면)에서 검색됨"을 사용자에게 알린다. */
+  scopeLabel?: string;
   /** 전송 — 공백 제거된 텍스트가 있을 때만 호출. 호출 후 입력창을 비운다. */
   onSubmit: (text: string) => void;
 }) {
@@ -78,6 +83,21 @@ export function SearchComposer({
           ]}
           onLayout={(e) => setComposerH(e.nativeEvent.layout.height)}
         >
+          {/* 검색 범위 칩 — 이 표면(편집샵)에서 검색됨을 상시 표시. */}
+          {scopeLabel ? (
+            <View style={styles.scopeRow}>
+              <View style={styles.scopeChip}>
+                <SymbolView
+                  name="line.3.horizontal.decrease.circle"
+                  size={14}
+                  tintColor={IOSColors.secondaryLabel}
+                />
+                <Text style={styles.scopeChipText} numberOfLines={1}>
+                  {scopeLabel}
+                </Text>
+              </View>
+            </View>
+          ) : null}
           <View style={styles.shadow}>
             <GlassSurface
               variant="composer"
@@ -127,6 +147,28 @@ const styles = StyleSheet.create({
   wrap: {
     paddingHorizontal: 16,
     paddingTop: 12,
+  },
+  scopeRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 4,
+    marginBottom: 8,
+  },
+  scopeChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingLeft: 10,
+    paddingRight: 12,
+    paddingVertical: 6,
+    borderRadius: Radius.pill,
+    backgroundColor: IOSColors.tertiarySystemBackground,
+    maxWidth: '85%',
+  },
+  scopeChipText: {
+    ...IOSText.subhead,
+    color: IOSColors.label,
+    fontFamily: IOSFont.sans,
+    flexShrink: 1,
   },
   shadow: {
     borderRadius: Radius.xxl,

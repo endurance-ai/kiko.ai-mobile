@@ -344,6 +344,7 @@ export default function EditShopScreen() {
             ? `${filters.shop.display_name}에서 검색`
             : '이 편집샵에서 검색'
         }
+        scopeLabel={filters?.shop.display_name ?? '이 편집샵'}
         onSubmit={(t) =>
           router.push(
             `/home?chat=1&seed=${encodeURIComponent(t)}&platform=${encodeURIComponent(platform)}&platform_name=${encodeURIComponent(filters?.shop.display_name ?? '이 편집샵')}` as never,
