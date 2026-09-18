@@ -39,19 +39,22 @@ export function SearchComposer({
   /** 검색 범위 표시 칩 라벨(예: 편집샵 이름). 있으면 컴포저 위에 상시 노출 —
    *  "여기(이 표면)에서 검색됨"을 사용자에게 알린다. */
   scopeLabel?: string;
-  /** 전송 — 공백 제거된 텍스트가 있을 때만 호출. 호출 후 입력창을 비운다. */
-  onSubmit: (text: string) => void;
+  /** 전송 — 공백 제거된 텍스트 + 스코프 유지 여부(칩 ✕ 안 눌렀으면 true). */
+  onSubmit: (text: string, scoped: boolean) => void;
 }) {
   const insets = useSafeAreaInsets();
   const [text, setText] = useState('');
   const [focused, setFocused] = useState(false);
   const [composerH, setComposerH] = useState(0);
+  // 스코프 유지 여부 — scopeLabel 이 있으면 기본 on. 칩 ✕ 로 해제하면 이 컴포저
+  // 에서의 검색이 전체 대상으로 나간다.
+  const [scoped, setScoped] = useState(true);
 
   const canSend = text.trim().length > 0;
   const send = () => {
     const t = text.trim();
     if (!t) return;
-    onSubmit(t);
+    onSubmit(t, !!scopeLabel && scoped);
     setText('');
   };
 
@@ -83,19 +86,24 @@ export function SearchComposer({
           ]}
           onLayout={(e) => setComposerH(e.nativeEvent.layout.height)}
         >
-          {/* 검색 범위 칩 — 이 표면(편집샵)에서 검색됨을 상시 표시. */}
-          {scopeLabel ? (
+          {/* 검색 범위 칩 — 이 편집샵에서 검색됨을 표시. ✕ 로 해제하면 전체 검색. */}
+          {scopeLabel && scoped ? (
             <View style={styles.scopeRow}>
-              <View style={styles.scopeChip}>
-                <SymbolView
-                  name="line.3.horizontal.decrease.circle"
-                  size={14}
-                  tintColor={IOSColors.secondaryLabel}
-                />
+              <Pressable
+                style={styles.scopeChip}
+                onPress={() => setScoped(false)}
+                accessibilityRole="button"
+                accessibilityLabel={`${scopeLabel} 검색 범위 해제`}
+              >
                 <Text style={styles.scopeChipText} numberOfLines={1}>
                   {scopeLabel}
                 </Text>
-              </View>
+                <SymbolView
+                  name="xmark.circle.fill"
+                  size={16}
+                  tintColor={IOSColors.tertiaryLabel}
+                />
+              </Pressable>
             </View>
           ) : null}
           <View style={styles.shadow}>
