@@ -16,6 +16,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SymbolView } from 'expo-symbols';
 
@@ -86,9 +87,14 @@ export function SearchComposer({
           ]}
           onLayout={(e) => setComposerH(e.nativeEvent.layout.height)}
         >
-          {/* 검색 범위 칩 — 이 편집샵에서 검색됨을 표시. ✕ 로 해제하면 전체 검색. */}
+          {/* 검색 범위 칩 — 이 편집샵에서 검색됨을 표시. ✕ 로 해제하면 전체 검색.
+              해제 시 툭 사라지지 않게 페이드 아웃(비터치 요소라 timing). */}
           {scopeLabel && scoped ? (
-            <View style={styles.scopeRow}>
+            <Animated.View
+              style={styles.scopeRow}
+              entering={FadeIn.duration(180)}
+              exiting={FadeOut.duration(220)}
+            >
               <Pressable
                 style={styles.scopeChip}
                 onPress={() => setScoped(false)}
@@ -104,7 +110,7 @@ export function SearchComposer({
                   tintColor={IOSColors.tertiaryLabel}
                 />
               </Pressable>
-            </View>
+            </Animated.View>
           ) : null}
           <View style={styles.shadow}>
             <GlassSurface
