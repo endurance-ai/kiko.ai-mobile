@@ -482,6 +482,7 @@ export default function ChatEntryScreen() {
     pin_price: pinPriceParam,
     chat: chatParam,
     platform: platformParam,
+    platform_name: platformNameParam,
   } = useLocalSearchParams<{
     session?: string;
     from?: string;
@@ -493,10 +494,21 @@ export default function ChatEntryScreen() {
     pin_price?: string;
     chat?: string;
     platform?: string;
+    platform_name?: string;
   }>();
   // 채팅 모드 — 메인(Explore) 컴포저發 새 검색이 push 한 home 인스턴스. 큐레이션
   // 을 숨겨 "새 세션 채팅 화면"으로 보이게 하고, 대기 중인 첫 검색을 소비한다.
   const chatMode = chatParam === "1";
+  // 편집샵 스코프 검색 — ?platform= 로 들어온 편집샵으로 검색 제한. 사용자가 칩
+  // ✕ 로 해제(전체 재검색)할 수 있어 URL(고정) 대신 가변 상태로 들고, 실제 필터
+  // 값은 ref 로 동기 반영해 재검색 시 stale closure 를 피한다.
+  const activePlatformRef = useRef<string | undefined>(platformParam || undefined);
+  const [activePlatform, setActivePlatform] = useState<string | undefined>(
+    platformParam || undefined,
+  );
+  const activePlatformName = platformNameParam;
+  // 스코프 해제(전체 재검색) 시 다시 쏠 마지막 사용자 쿼리.
+  const lastQueryRef = useRef<string>("");
   const { value: filter, setValue: setFilter } = useFilter();
   const { isSaved: isWishlisted, toggle: toggleWishlist } = useWishlist();
   const { status: authStatus } = useAuth();
@@ -1317,6 +1329,8 @@ export default function ChatEntryScreen() {
     // critique / retry) 서버 호출 금지. 새 채팅에서 seed 로 들어오는 케이스
     // 도 여기 방어선 하나로 막힌다.
     if (capLocked) return;
+    // 스코프 해제 재검색용 — 표시 쿼리(trimmed) 기억.
+    lastQueryRef.current = trimmed;
     // 메인(Explore)發 새 검색 → 인라인 확장 대신 "새 세션 채팅 화면"으로 이동.
     // 조건: 아직 세션 없음 + 이 화면이 채팅 모드가 아님 + 유저가 직접 시작한
     // 검색(typed/chip). seed(핸드오프)·critique·retry 나 이어가기(세션 보유)는
@@ -1661,9 +1675,9 @@ export default function ChatEntryScreen() {
         imagePayload?.serverImageUrl ?? attachment?.imageUrl ?? undefined,
       // 스테이징(이미 항목 선택)發 이미지 검색 — pick_item(1,2,3,4) 스킵 요청.
       skipItemPick: imagePayload?.skipItemPick,
-      // 편집샵 컴포저發 스코프 검색 — ?platform= 로 넘어온 편집샵으로 결과 제한.
-      // 서버 필터 대기 중이라 랜딩 전엔 no-op(전체 검색). (SPEC: 편집샵 스코프)
-      platform: platformParam || undefined,
+      // 편집샵 컴포저發 스코프 검색 — 활성 platform 으로 결과 제한. 칩 ✕ 로
+      // 해제하면 ref 가 즉시 undefined 라 이 재검색부터 전체로 넓혀진다.
+      platform: activePlatformRef.current,
     };
 
     // 첫 이벤트가 오기 전 서버가 조용히 멈춰버리는 케이스 대비 즉시 착수.
@@ -2564,6 +2578,41 @@ export default function ChatEntryScreen() {
           ]}
           onLayout={(e) => setComposerH(e.nativeEvent.layout.height)}
         >
+          {/* 편집샵 스코프 칩 — 이 편집샵으로 검색이 제한됨을 알리고, ✕ 로
+              해제하면 마지막 쿼리를 전체 대상으로 다시 검색한다. */}
+          {activePlatform && (
+            <View style={styles.scopeRow}>
+              <Pressable
+                style={styles.scopeChip}
+                onPress={() => {
+                  Haptic.selection();
+                  activePlatformRef.current = undefined;
+                  setActivePlatform(undefined);
+                  if (lastQueryRef.current) {
+                    runStreamingTurn(
+                      lastQueryRef.current,
+                      undefined,
+                      undefined,
+                      undefined,
+                      "retry",
+                    );
+                  }
+                }}
+                accessibilityRole="button"
+                accessibilityLabel={`${activePlatformName ?? "편집샵"} 검색 범위 해제`}
+              >
+                <Text style={styles.scopeChipText} numberOfLines={1}>
+                  {activePlatformName ?? "이 편집샵"}
+                </Text>
+                <SymbolView
+                  name="xmark.circle.fill"
+                  size={16}
+                  tintColor={IOSColors.tertiaryLabel}
+                />
+              </Pressable>
+            </View>
+          )}
+
           {pinnedAttachment && !capLocked && (
             <View style={styles.attachmentRow}>
               <View style={styles.attachmentChip}>
@@ -3175,6 +3224,29 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     color: IOSColors.label,
     fontFamily: IOSFont.sans,
+  },
+
+  // 편집샵 스코프 칩
+  scopeRow: {
+    flexDirection: "row",
+    paddingHorizontal: 4,
+  },
+  scopeChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingLeft: 12,
+    paddingRight: 8,
+    paddingVertical: 6,
+    borderRadius: Radius.pill,
+    backgroundColor: IOSColors.tertiarySystemBackground,
+    maxWidth: "80%",
+  },
+  scopeChipText: {
+    ...IOSText.subhead,
+    color: IOSColors.label,
+    fontFamily: IOSFont.sans,
+    flexShrink: 1,
   },
 
   // Attachment chip

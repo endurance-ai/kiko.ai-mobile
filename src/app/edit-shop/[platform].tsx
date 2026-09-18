@@ -344,11 +344,15 @@ export default function EditShopScreen() {
             ? `${filters.shop.display_name}에서 검색`
             : '이 편집샵에서 검색'
         }
-        onSubmit={(t) =>
-          router.push(
-            `/home?chat=1&seed=${encodeURIComponent(t)}&platform=${encodeURIComponent(platform)}` as never,
-          )
-        }
+        scopeLabel={filters?.shop.display_name}
+        onSubmit={(t, scoped) => {
+          const base = `/home?chat=1&seed=${encodeURIComponent(t)}`;
+          // 칩 ✕ 로 스코프 해제했으면 platform 없이(전체 검색) 넘긴다.
+          const url = scoped
+            ? `${base}&platform=${encodeURIComponent(platform)}&platform_name=${encodeURIComponent(filters?.shop.display_name ?? '이 편집샵')}`
+            : base;
+          router.push(url as never);
+        }}
       />
 
       {/* 설명 전문 시트 — ✕ + 전체 설명 + 공식 홈페이지 링크 (브랜드 페이지 문법). */}
