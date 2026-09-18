@@ -6,7 +6,7 @@
  * 미포커싱(idle) 상태에서는 컴포저 뒤에 흰 페이드(KeyboardScrim)를 깔아 스크롤
  * 콘텐츠가 글래스 아래로 비치는 걸 막는다(홈 랜딩과 동일 문법).
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -16,7 +16,12 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
+import Animated, {
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SymbolView } from 'expo-symbols';
 
@@ -24,6 +29,7 @@ import { GlassSurface } from '@/components/glass-surface';
 import { KeyboardScrim } from '@/components/keyboard-scrim';
 import {
   Elevation,
+  Haptic,
   IOSColors,
   IOSFont,
   IOSText,
@@ -50,6 +56,21 @@ export function SearchComposer({
   // 스코프 유지 여부 — scopeLabel 이 있으면 기본 on. 칩 ✕ 로 해제하면 이 컴포저
   // 에서의 검색이 전체 대상으로 나간다.
   const [scoped, setScoped] = useState(true);
+
+  // 칩 페이드 — layout 애니(entering/exiting)가 환경 따라 안 먹어서 명시적 opacity.
+  const chipOpacity = useSharedValue(0);
+  const chipStyle = useAnimatedStyle(() => ({ opacity: chipOpacity.value }));
+  // 라벨(데이터) 준비되면 페이드 인.
+  useEffect(() => {
+    if (scopeLabel && scoped) chipOpacity.value = withTiming(1, { duration: 180 });
+  }, [scopeLabel, scoped, chipOpacity]);
+  // ✕ — 페이드 아웃 완료 후 언마운트(scoped=false) 해서 툭 사라지지 않게.
+  const dismissScope = () => {
+    Haptic.selection();
+    chipOpacity.value = withTiming(0, { duration: 220 }, (done) => {
+      if (done) runOnJS(setScoped)(false);
+    });
+  };
 
   const canSend = text.trim().length > 0;
   const send = () => {
@@ -88,16 +109,12 @@ export function SearchComposer({
           onLayout={(e) => setComposerH(e.nativeEvent.layout.height)}
         >
           {/* 검색 범위 칩 — 이 편집샵에서 검색됨을 표시. ✕ 로 해제하면 전체 검색.
-              해제 시 툭 사라지지 않게 페이드 아웃(비터치 요소라 timing). */}
+              해제 시 명시적 opacity 페이드 아웃 후 언마운트(툭 사라짐 방지). */}
           {scopeLabel && scoped ? (
-            <Animated.View
-              style={styles.scopeRow}
-              entering={FadeIn.duration(180)}
-              exiting={FadeOut.duration(220)}
-            >
+            <Animated.View style={[styles.scopeRow, chipStyle]}>
               <Pressable
                 style={styles.scopeChip}
-                onPress={() => setScoped(false)}
+                onPress={dismissScope}
                 accessibilityRole="button"
                 accessibilityLabel={`${scopeLabel} 검색 범위 해제`}
               >
