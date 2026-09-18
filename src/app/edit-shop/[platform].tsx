@@ -344,7 +344,7 @@ export default function EditShopScreen() {
             ? `${filters.shop.display_name}에서 검색`
             : '이 편집샵에서 검색'
         }
-        scopeLabel={filters?.shop.display_name ?? '이 편집샵'}
+        scopeLabel={filters?.shop.display_name}
         onSubmit={(t, scoped) => {
           const base = `/home?chat=1&seed=${encodeURIComponent(t)}`;
           // 칩 ✕ 로 스코프 해제했으면 platform 없이(전체 검색) 넘긴다.
