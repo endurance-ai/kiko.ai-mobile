@@ -346,7 +346,7 @@ export default function EditShopScreen() {
         }
         onSubmit={(t) =>
           router.push(
-            `/home?chat=1&seed=${encodeURIComponent(t)}&platform=${encodeURIComponent(platform)}` as never,
+            `/home?chat=1&seed=${encodeURIComponent(t)}&platform=${encodeURIComponent(platform)}&platform_name=${encodeURIComponent(filters?.shop.display_name ?? '이 편집샵')}` as never,
           )
         }
       />
